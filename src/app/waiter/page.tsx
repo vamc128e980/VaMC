@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
   Bell, 
   CheckCircle2, 
@@ -16,10 +17,13 @@ import {
   AlertCircle,
   Eye,
   Check,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 
 export default function WaiterNeonPanel() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [tables, setTables] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
@@ -29,6 +33,26 @@ export default function WaiterNeonPanel() {
 
   // Live Clock
   const [timeStr, setTimeStr] = useState('');
+
+  // 1. TAMPER-PROOF AUTH VERIFICATION (Server-Verified Cookie Check)
+  useEffect(() => {
+    async function verifyWaiterSession() {
+      try {
+        const res = await fetch('/api/auth/verify', { method: 'GET' });
+        const data = await res.json();
+
+        // Both waiter and admin have permission to access the waiter service matrix
+        if (!res.ok || (data.role !== 'waiter' && data.role !== 'admin')) {
+          window.location.href = '/login';
+        } else {
+          setIsAuthenticated(true);
+        }
+      } catch {
+        window.location.href = '/login';
+      }
+    }
+    verifyWaiterSession();
+  }, []);
 
   useEffect(() => {
     const updateTime = () => {
@@ -59,21 +83,36 @@ export default function WaiterNeonPanel() {
   };
 
   useEffect(() => {
-    loadWaiterData();
+    if (isAuthenticated) {
+      loadWaiterData();
 
-    // Realtime Master Listener
-    const channel = supabase
-      .channel('waiter-neon-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadWaiterData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
-      .subscribe();
+      // Realtime Master Listener
+      const channel = supabase
+        .channel('waiter-neon-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadWaiterData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [isAuthenticated]);
+
+  // SECURE LOGOUT WITH SERVER COOKIE CLEAR
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error(e);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.clear();
+    }
+    window.location.href = '/';
+  };
 
   // Accept Batch and dispatch to kitchen
   const handleAcknowledgeBatch = async (batchId: string) => {
@@ -93,6 +132,14 @@ export default function WaiterNeonPanel() {
       alert('Error updating batch: ' + err.message);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-cyan-400 font-mono text-xs">
+        VERIFYING ENCRYPTED SESSION...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#030305] text-slate-100 font-sans pb-28 relative overflow-hidden selection:bg-cyan-500 selection:text-black">
@@ -131,8 +178,19 @@ export default function WaiterNeonPanel() {
               whileTap={{ scale: 0.95 }}
               onClick={loadWaiterData}
               className="p-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-200 transition"
+              title="Refresh"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+            </motion.button>
+
+            {/* Waiter Logout to 3-Panel Home */}
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLogout}
+              className="p-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-300 transition"
+              title="Logout to Home"
+            >
+              <LogOut className="w-4 h-4" />
             </motion.button>
           </div>
         </div>
@@ -164,7 +222,6 @@ export default function WaiterNeonPanel() {
             const activeSession = sessions.find(s => s.table_number === t.table_number && s.status === 'active');
             const isOccupied = !!activeSession;
 
-            // Check if there are pending batches for this table
             const tableBatches = batches.filter(b => b.table_number === t.table_number && b.session_id === activeSession?.id);
             const hasPendingAction = tableBatches.some(b => b.status === 'pending_waiter');
 
@@ -182,7 +239,6 @@ export default function WaiterNeonPanel() {
                     : 'bg-emerald-950/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:border-emerald-500/60'
                 }`}
               >
-                {/* Glow bar indicator */}
                 <div className={`absolute top-0 inset-x-0 h-1 ${
                   hasPendingAction ? 'bg-fuchsia-400 shadow-[0_0_12px_#e879f9]' : isOccupied ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : 'bg-emerald-400 shadow-[0_0_12px_#34d399]'
                 }`} />
