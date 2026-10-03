@@ -3,14 +3,17 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Zap, X, RotateCcw, Calendar } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Zap, X, RotateCcw, Calendar, CheckCircle2 } from 'lucide-react';
+
+const fastSpring = { type: 'spring', stiffness: 480, damping: 28, mass: 0.8 };
+const iosModalSpring = { type: 'spring', stiffness: 420, damping: 26, mass: 0.85 };
 
 export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [crackedList, setCrackedList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  // Today start date (midnight 00:00:00) filter
   const getTodayISOString = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -22,7 +25,6 @@ export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; on
     try {
       const todayStart = getTodayISOString();
 
-      // Only fetch vaults cracked TODAY
       const { data } = await supabase
         .from('daily_pin_vault')
         .select('*')
@@ -43,7 +45,7 @@ export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; on
       fetchFlashData();
 
       const channel = supabase
-        .channel('flash-modal-realtime')
+        .channel(`flash-realtime-${Date.now()}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'daily_pin_vault' },
@@ -57,7 +59,6 @@ export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; on
     }
   }, [isOpen]);
 
-  // Day to Day Complete Reset (Clears Flash & Restores 10 PINs to Uncracked)
   const handleResetDay = async () => {
     if (!confirm('Eeroju crack aina Flash Feed mariyu Vaults anni reset cheyala? (All 10 PINs will become safe/green again)')) return;
 
@@ -94,43 +95,52 @@ export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; on
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-black border border-[#D4AF37]/50 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,1)] relative space-y-4 max-h-[85vh] overflow-y-auto no-scrollbar">
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 15 }}
+        transition={iosModalSpring}
+        className="w-full max-w-xl bg-black border border-[#D4AF37]/50 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,1)] relative space-y-4 max-h-[85vh] overflow-y-auto no-scrollbar will-change-transform"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#D4AF37]/25 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#F3E5AB]">
-              <Zap className="w-5 h-5 text-[#D4AF37]" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] p-0.5 shadow-md">
+              <div className="w-full h-full bg-black rounded-[14px] flex items-center justify-center">
+                <Zap className="w-5 h-5 text-[#F3E5AB]" />
+              </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-white">Today's Flash Cracking Feed</h3>
-                <span className="px-2 py-0.5 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/40 text-[#FCF6BA] font-mono text-[10px] font-bold flex items-center gap-1">
+                <span className="px-2.5 py-0.5 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/40 text-[#FCF6BA] font-mono text-[10px] font-bold flex items-center gap-1">
                   <Calendar className="w-3 h-3 text-[#D4AF37]" /> {todayDateDisplay}
                 </span>
               </div>
               <p className="text-[11px] font-mono text-[#D4AF37]/80">Daily live tracking — Resets every day</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-full text-[#D4AF37] hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-full text-[#D4AF37] hover:text-[#FCF6BA] cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Quick Reset Action Bar */}
-        <div className="flex items-center justify-between bg-[#0a0802] border border-[#D4AF37]/30 p-2.5 rounded-2xl text-xs font-mono">
+        <div className="flex items-center justify-between bg-black border border-[#D4AF37]/30 p-3 rounded-2xl text-xs font-mono">
           <span className="text-[#F3E5AB]">
             Cracked Today: <strong className="text-[#FCF6BA]">{crackedList.length} / 10</strong>
           </span>
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={handleResetDay}
             disabled={resetting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37]/50 hover:bg-[#D4AF37]/30 text-[#FCF6BA] font-bold transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-[11px] transition disabled:opacity-50 cursor-pointer shadow-md"
             title="Reset today's tracking & vaults"
           >
             <RotateCcw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
             <span>{resetting ? 'Resetting...' : 'Reset Day Feed'}</span>
-          </button>
+          </motion.button>
         </div>
 
         {/* Content Feed */}
@@ -145,8 +155,10 @@ export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; on
         ) : (
           <div className="space-y-2.5">
             {crackedList.map((item) => (
-              <div
+              <motion.div
                 key={item.slot_number}
+                whileHover={{ scale: 1.01 }}
+                transition={fastSpring}
                 className="p-4 rounded-2xl bg-black border border-[#D4AF37]/35 flex items-center justify-between text-xs shadow-md"
               >
                 <div className="space-y-1">
@@ -168,13 +180,13 @@ export default function PinFlashModal({ isOpen, onClose }: { isOpen: boolean; on
                   <span className="text-[#FCF6BA] font-mono font-black text-base block">
                     -₹{Number(item.discount_amount).toFixed(2)}
                   </span>
-                  <span className="text-[10px] text-[#D4AF37]/80 font-mono uppercase">Discount Applied</span>
+                  <span className="text-[10px] text-emerald-400 font-mono uppercase font-bold">Discount Applied</span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

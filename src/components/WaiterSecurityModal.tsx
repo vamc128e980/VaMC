@@ -14,10 +14,12 @@ import {
   Eye, 
   EyeOff, 
   Sparkles,
-  Edit2
+  Edit2,
+  Phone,
+  User
 } from 'lucide-react';
 
-const iosSpring = { type: 'spring', stiffness: 420, damping: 30 };
+const fastSpring = { type: 'spring', stiffness: 480, damping: 28, mass: 0.8 };
 
 export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [waiters, setWaiters] = useState<any[]>([]);
@@ -26,11 +28,12 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
 
   // New Waiter Details
   const [newName, setNewName] = useState('');
+  const [newIdentifier, setNewIdentifier] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  // Editing States (Name & Password)
+  // Editing States
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editMode, setEditMode] = useState<'name' | 'password' | null>(null);
+  const [editMode, setEditMode] = useState<'name' | 'identifier' | 'password' | null>(null);
   const [tempValue, setTempValue] = useState('');
   const [showPassMap, setShowPassMap] = useState<Record<number, boolean>>({});
 
@@ -66,32 +69,35 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
 
   if (!isOpen) return null;
 
-  // 1. Add Waiter
+  // 1. Add Waiter with explicit Phone/Username Identifier
   const handleAddWaiter = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = newName.trim();
+    const cleanId = (newIdentifier.trim() || cleanName.toLowerCase().replace(/\s+/g, '')).toLowerCase();
     const cleanPass = newPassword.trim();
 
     if (!cleanName) return alert('Waiter Name enter cheyandi.');
-    if (!cleanPass) return alert('Password enter cheyandi.');
+    if (!cleanId) return alert('Mobile number or Username enter cheyandi.');
+    if (!cleanPass) return alert('Password/PIN enter cheyandi.');
 
     setLoading(true);
     try {
       const { error } = await supabase.from('staff_accounts').insert({
         name: cleanName,
         role: 'waiter',
-        identifier: cleanName.toLowerCase().replace(/\s+/g, '_'),
+        identifier: cleanId,
         password_hash: cleanPass
       });
 
       if (error) {
         if (error.message.includes('unique') || error.code === '23505') {
-          throw new Error(`"${cleanName}" peru tho already waiter unnaru. Vere peru ivvandi!`);
+          throw new Error(`"${cleanId}" ID tho already account undi. Vere phone/username ivvandi!`);
         }
         throw error;
       }
 
       setNewName('');
+      setNewIdentifier('');
       setNewPassword('');
       setShowAddForm(false);
       await fetchWaiters();
@@ -113,18 +119,11 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
         .from('staff_accounts')
         .update({ 
           name: cleanName,
-          identifier: cleanName.toLowerCase().replace(/\s+/g, '_'),
           updated_at: new Date().toISOString()
         })
         .eq('id', waiterId);
 
-      if (error) {
-        if (error.message.includes('unique') || error.code === '23505') {
-          throw new Error(`"${cleanName}" peru already undi! Vere peru ivvandi.`);
-        }
-        throw error;
-      }
-
+      if (error) throw error;
       cancelEdit();
       await fetchWaiters();
     } catch (err: any) {
@@ -134,7 +133,32 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     }
   };
 
-  // 3. Change Password
+  // 3. Change Login ID (Phone / Username)
+  const handleSaveIdentifier = async (waiterId: number) => {
+    const cleanId = tempValue.trim().toLowerCase();
+    if (!cleanId) return alert('Identifier empty ga undakudadhu.');
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('staff_accounts')
+        .update({ 
+          identifier: cleanId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', waiterId);
+
+      if (error) throw error;
+      cancelEdit();
+      await fetchWaiters();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4. Change Password
   const handleSavePassword = async (waiterId: number) => {
     const cleanPass = tempValue.trim();
     if (!cleanPass) return alert('Password empty ga undakudadhu.');
@@ -159,7 +183,7 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     }
   };
 
-  // 4. Delete Waiter
+  // 5. Delete Waiter
   const handleDeleteWaiter = async (waiterId: number, name: string) => {
     if (!confirm(`Are you sure? "${name}" account delete aipothundi.`)) return;
     try {
@@ -177,21 +201,23 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
       <motion.div
-        initial={{ scale: 0.92, opacity: 0 }}
+        initial={{ scale: 0.94, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.92, opacity: 0 }}
-        transition={iosSpring}
+        exit={{ scale: 0.94, opacity: 0 }}
+        transition={fastSpring}
         className="w-full max-w-xl bg-black border border-[#D4AF37]/50 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,1)] relative space-y-4 max-h-[85vh] overflow-y-auto no-scrollbar"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#D4AF37]/25 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/35 flex items-center justify-center text-[#F3E5AB]">
-              <UserCheck className="w-5 h-5 text-[#D4AF37]" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] p-0.5 shadow-md">
+              <div className="w-full h-full bg-black rounded-[14px] flex items-center justify-center">
+                <UserCheck className="w-5 h-5 text-[#F3E5AB]" />
+              </div>
             </div>
             <div>
-              <h3 className="font-black text-white text-base">Waiter Directory</h3>
-              <p className="text-[11px] font-mono text-[#D4AF37]/80">Edit Name, Change Password & Add Waiters</p>
+              <h3 className="font-black text-white text-base">Waiter Directory & Security</h3>
+              <p className="text-[11px] font-mono text-[#D4AF37]/80">Manage Login Credentials & Passwords</p>
             </div>
           </div>
           <button onClick={onClose} className="text-[#D4AF37] hover:text-[#FCF6BA]">
@@ -204,13 +230,15 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
           <span className="text-xs font-mono text-[#F3E5AB]/80 uppercase">
             Active: {waiters.length} Waiters
           </span>
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            transition={fastSpring}
             onClick={() => setShowAddForm(!showAddForm)}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md hover:brightness-110"
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>{showAddForm ? 'Close Form' : '+ Add Waiter'}</span>
-          </button>
+          </motion.button>
         </div>
 
         {/* Add Waiter Form */}
@@ -220,14 +248,15 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
+              transition={fastSpring}
               onSubmit={handleAddWaiter}
-              className="p-4 rounded-2xl bg-black border border-[#D4AF37]/40 space-y-3 text-xs overflow-hidden"
+              className="p-4 rounded-2xl bg-black border border-[#D4AF37]/40 space-y-3 text-xs overflow-hidden shadow-lg"
             >
               <div className="font-bold text-[#FCF6BA] flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-[#D4AF37]" /> Create Waiter Login
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-[#D4AF37]/80 block mb-1">Staff Name *</label>
                   <input
@@ -236,19 +265,31 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                     placeholder="e.g. Ramesh"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3.5 py-2 text-white outline-none focus:border-[#D4AF37]"
+                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[#D4AF37]/80 block mb-1">Password *</label>
+                  <label className="text-[#D4AF37]/80 block mb-1">Login ID (Phone/User) *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. ramesh123"
+                    placeholder="e.g. 9876543210"
+                    value={newIdentifier}
+                    onChange={(e) => setNewIdentifier(e.target.value)}
+                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-[#D4AF37]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[#D4AF37]/80 block mb-1">Password / PIN *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1234"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3.5 py-2 text-white font-mono outline-none focus:border-[#D4AF37]"
+                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-[#D4AF37]"
                   />
                 </div>
               </div>
@@ -256,9 +297,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-md mt-1"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-md mt-1 cursor-pointer"
               >
-                {loading ? 'Creating...' : 'Save Waiter'}
+                {loading ? 'Creating Account...' : 'Save Waiter'}
               </button>
             </motion.form>
           )}
@@ -271,12 +312,15 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
             const isPassVisible = showPassMap[w.id];
 
             return (
-              <div
+              <motion.div
                 key={w.id}
+                whileHover={{ scale: 1.01 }}
+                transition={fastSpring}
                 className="p-4 rounded-2xl bg-black border border-[#D4AF37]/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
               >
-                {/* Staff Name Section */}
-                <div className="space-y-1">
+                {/* Staff Name & ID */}
+                <div className="space-y-1.5">
+                  {/* Name Edit */}
                   {isEditingThis && editMode === 'name' ? (
                     <div className="flex items-center gap-1.5">
                       <input
@@ -307,19 +351,53 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                           setTempValue(w.name);
                         }}
                         className="p-1 rounded bg-[#D4AF37]/10 hover:bg-[#D4AF37]/25 text-[#D4AF37]"
-                        title="Change Name"
+                        title="Edit Name"
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
                     </div>
                   )}
 
-                  <div className="text-[#D4AF37]/70 font-mono text-[11px]">
-                    Role: <span className="text-white font-semibold">Waiter</span>
+                  {/* Identifier (Login User) Edit */}
+                  <div className="flex items-center gap-2 font-mono text-[11px] text-[#D4AF37]/80">
+                    <span>Login ID:</span>
+                    {isEditingThis && editMode === 'identifier' ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={tempValue}
+                          onChange={(e) => setTempValue(e.target.value)}
+                          className="bg-black border border-[#D4AF37] rounded-lg px-2 py-0.5 text-white text-xs outline-none font-mono"
+                        />
+                        <button
+                          onClick={() => handleSaveIdentifier(w.id)}
+                          className="p-1 rounded bg-emerald-500/20 text-emerald-300"
+                        >
+                          <Check className="w-3 h-3 stroke-[3]" />
+                        </button>
+                        <button onClick={cancelEdit} className="p-1 rounded bg-white/10 text-neutral-400">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[#F3E5AB] font-bold bg-[#D4AF37]/10 px-2 py-0.5 rounded flex items-center gap-1">
+                        {w.identifier}
+                        <button
+                          onClick={() => {
+                            setEditingId(w.id);
+                            setEditMode('identifier');
+                            setTempValue(w.identifier);
+                          }}
+                          className="text-[#D4AF37]/70 hover:text-[#FCF6BA]"
+                        >
+                          <Edit2 className="w-2.5 h-2.5 ml-1" />
+                        </button>
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Password & Controls Section */}
+                {/* Password & Delete Section */}
                 <div className="flex items-center gap-2">
                   {isEditingThis && editMode === 'password' ? (
                     <div className="flex items-center gap-1.5">
@@ -343,7 +421,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      {/* Password Pill */}
                       <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black border border-[#D4AF37]/25 font-mono text-xs text-[#F3E5AB]">
                         <KeyRound className="w-3 h-3 text-[#D4AF37]" />
                         <span>{isPassVisible ? w.password_hash : '••••••••'}</span>
@@ -355,7 +432,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                         </button>
                       </div>
 
-                      {/* Change Password Button */}
                       <button
                         onClick={() => {
                           setEditingId(w.id);
@@ -364,10 +440,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                         }}
                         className="px-2.5 py-1 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-[11px] font-bold"
                       >
-                        Change Password
+                        Change Key
                       </button>
 
-                      {/* Delete Account */}
                       <button
                         onClick={() => handleDeleteWaiter(w.id, w.name)}
                         className="p-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300"
@@ -378,7 +453,7 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                     </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
