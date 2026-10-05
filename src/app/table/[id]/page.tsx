@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, PromoBanner, CartItem, Language } from '@/types/restaurant';
@@ -18,22 +18,21 @@ import {
   Receipt, 
   KeyRound, 
   Gift, 
-  Flame,
-  ArrowRight,
+  Flame, 
   Eye, 
-  Sparkles,
-  Utensils,
-  Phone,
-  User,
-  Zap,
-  Tag,
-  ChevronLeft,
-  ChevronRight,
-  PackagePlus,
-  Image as ImgIcon
+  Sparkles, 
+  Utensils, 
+  Phone, 
+  User, 
+  Zap, 
+  Tag, 
+  ChevronLeft, 
+  ChevronRight, 
+  PackagePlus, 
+  Image as ImgIcon, 
+  AlertTriangle 
 } from 'lucide-react';
 
-// Optimized 60FPS Native Springs
 const fps60Spring = {
   type: 'spring',
   stiffness: 320,
@@ -50,7 +49,14 @@ const fps60ModalSpring = {
 
 export default function TableMenuPage() {
   const params = useParams();
-  const tableId = params.id as string;
+  const router = useRouter();
+  const rawTableParam = decodeURIComponent((params.id as string) || '');
+
+  // Resolved Table Identity
+  const [realTableNumber, setRealTableNumber] = useState<number | null>(null);
+  const [displayTableName, setDisplayTableName] = useState<string>('');
+  const [tableResolved, setTableResolved] = useState<boolean>(false);
+  const [tableNotFound, setTableNotFound] = useState<boolean>(false);
 
   const [lang, setLang] = useState<Language>('en');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -99,6 +105,72 @@ export default function TableMenuPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // 1. EXACT TABLE NAME RESOLUTION & URL AUTO-REWRITE
+  const resolveTableIdentity = async () => {
+    if (!rawTableParam) return;
+    try {
+      const isNumeric = /^\d+$/.test(rawTableParam.trim());
+      let matchedRecord = null;
+
+      if (isNumeric) {
+        // Query by numeric table_number OR table_name matching string
+        const { data } = await supabase
+          .from('restaurant_tables')
+          .select('*')
+          .or(`table_number.eq.${parseInt(rawTableParam)},table_name.ilike.${rawTableParam}`)
+          .limit(1)
+          .maybeSingle();
+        matchedRecord = data;
+      } else {
+        // Query case-insensitive by custom table_name
+        const { data } = await supabase
+          .from('restaurant_tables')
+          .select('*')
+          .ilike('table_name', rawTableParam.trim())
+          .limit(1)
+          .maybeSingle();
+        matchedRecord = data;
+      }
+
+      if (matchedRecord) {
+        const tNum = matchedRecord.table_number;
+        const customName = matchedRecord.table_name || `Table-${tNum}`;
+
+        setRealTableNumber(tNum);
+        setDisplayTableName(customName);
+        setTableResolved(true);
+
+        // Auto-rewrite URL to the custom table name if opened with numeric ID (e.g. /table/1 -> /table/krishna)
+        if (isNumeric && customName && typeof window !== 'undefined') {
+          window.history.replaceState(null, '', `/table/${encodeURIComponent(customName)}`);
+        }
+      } else {
+        if (isNumeric) {
+          const fallbackNum = parseInt(rawTableParam);
+          setRealTableNumber(fallbackNum);
+          setDisplayTableName(`Table #${fallbackNum}`);
+          setTableResolved(true);
+        } else {
+          setTableNotFound(true);
+        }
+      }
+    } catch (err) {
+      console.error('Resolve error:', err);
+      if (/^\d+$/.test(rawTableParam)) {
+        const fallbackNum = parseInt(rawTableParam);
+        setRealTableNumber(fallbackNum);
+        setDisplayTableName(`Table #${fallbackNum}`);
+        setTableResolved(true);
+      } else {
+        setTableNotFound(true);
+      }
+    }
+  };
+
+  useEffect(() => {
+    resolveTableIdentity();
+  }, [rawTableParam]);
+
   const fetchSessionItems = async (sessionId: string) => {
     try {
       const { data } = await supabase
@@ -115,10 +187,12 @@ export default function TableMenuPage() {
   };
 
   const syncSessionData = async () => {
+    if (!realTableNumber) return;
+
     const { data: session } = await supabase
       .from('table_sessions')
       .select('*')
-      .eq('table_number', parseInt(tableId))
+      .eq('table_number', realTableNumber)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -168,13 +242,18 @@ export default function TableMenuPage() {
   };
 
   useEffect(() => {
+    if (!tableResolved || !realTableNumber) return;
+
     syncSessionData();
     fetchMenuData();
 
     const channel = supabase
-      .channel(`table-${tableId}-session-sync-${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${parseInt(tableId)}` }, () => syncSessionData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables', filter: `table_number=eq.${parseInt(tableId)}` }, () => syncSessionData())
+      .channel(`table-${realTableNumber}-session-sync-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables', filter: `table_number=eq.${realTableNumber}` }, () => {
+        resolveTableIdentity();
+        syncSessionData();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
@@ -185,7 +264,7 @@ export default function TableMenuPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tableId, activeSessionId]);
+  }, [realTableNumber, tableResolved, activeSessionId]);
 
   const addToCart = (item: any, isCombo = false) => {
     setCart((prev) => {
@@ -219,6 +298,11 @@ export default function TableMenuPage() {
   const finalPayable = Math.max(0, runningGrandTotal - discountAmount);
 
   const handlePlaceOrder = async () => {
+    if (!realTableNumber) {
+      alert('Table number gurthimpu kaledhu. Please re-scan QR code.');
+      return;
+    }
+
     if (!activeSessionId && (customerName.trim().length < 2 || customerPhone.length !== 10)) {
       alert('Dayachesi peru mariyu 10-ankela mobile number enter cheyandi.');
       return;
@@ -238,7 +322,7 @@ export default function TableMenuPage() {
         const { data: newSession, error: sErr } = await supabase
           .from('table_sessions')
           .insert({
-            table_number: parseInt(tableId),
+            table_number: realTableNumber,
             customer_name: customerName.trim(),
             customer_phone: customerPhone.trim(),
             subtotal,
@@ -261,7 +345,7 @@ export default function TableMenuPage() {
         setActiveSessionId(sessionId);
         setActiveSessionTotal(cartGrandTotal);
 
-        await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', parseInt(tableId));
+        await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', realTableNumber);
       } else {
         const subtotal = Math.round((newTotal / 1.05) * 100) / 100;
         const totalTax = Math.round((newTotal - subtotal) * 100) / 100;
@@ -286,7 +370,7 @@ export default function TableMenuPage() {
         .from('order_batches')
         .insert({ 
           session_id: sessionId, 
-          table_number: parseInt(tableId), 
+          table_number: realTableNumber, 
           discount: discountAmount || 0,
           status: 'pending_waiter' 
         })
@@ -351,7 +435,7 @@ export default function TableMenuPage() {
         await supabase.from('daily_pin_vault').update({
           is_cracked: true,
           cracked_session_id: activeSessionId || null,
-          cracked_table_number: parseInt(tableId),
+          cracked_table_number: realTableNumber || 0,
           cracked_by_name: customerName || 'Guest',
           cracked_at: new Date().toISOString()
         }).eq('slot_number', matchedSlot.slot_number);
@@ -471,9 +555,26 @@ export default function TableMenuPage() {
     );
   };
 
+  // Invalid Table Guard
+  if (tableNotFound) {
+    return (
+      <div className="min-h-screen bg-black text-[#FCF6BA] flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="w-16 h-16 rounded-3xl border-[3px] border-rose-500 bg-rose-950/30 flex items-center justify-center text-rose-300">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-black text-white uppercase font-mono tracking-wider">
+          Invalid Dining Table QR
+        </h2>
+        <p className="text-xs text-[#D4AF37]/80 font-mono max-w-xs">
+          Ee dedicated table name ("{rawTableParam}") database lo ledhu. Dayachesi table meedha unna fresh QR code ni re-scan cheyandi.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-[#FCF6BA] pb-36 font-sans selection:bg-[#D4AF37] selection:text-black antialiased">
-      {/* Header */}
+      {/* Header with DEDICATED NAME & TABLE NUMBER */}
       <header className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b-[3px] border-[#D4AF37] px-4 py-3 shadow-[0_10px_35px_rgba(0,0,0,1)]">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div>
@@ -481,8 +582,13 @@ export default function TableMenuPage() {
               <span className="text-[10px] font-black tracking-widest text-black uppercase bg-[#D4AF37] px-2.5 py-0.5 rounded-full">
                 FINE DINE
               </span>
-              <h1 className="text-base font-extrabold text-white">
-                Table <span className="text-[#FCF6BA] font-black">#{tableId}</span>
+              <h1 className="text-base font-extrabold text-white truncate max-w-[220px]">
+                {displayTableName || (realTableNumber ? `Table #${realTableNumber}` : 'Loading...')}
+                {realTableNumber && (
+                  <span className="text-xs text-[#D4AF37] font-mono font-bold ml-1.5 opacity-80">
+                    (Table #{realTableNumber})
+                  </span>
+                )}
               </h1>
             </div>
             <div className="flex items-center gap-2 text-[11px] font-mono text-[#D4AF37] mt-1 font-bold">
@@ -544,12 +650,10 @@ export default function TableMenuPage() {
             </div>
           </div>
 
-          {/* Borderless Smooth Active Pill Sliding Container */}
           <div 
             id="table-category-scroll"
             className="flex gap-1.5 overflow-x-auto custom-gold-scrollbar pb-2 pt-1 scroll-smooth select-none items-center"
           >
-            {/* Combos Special Chip - Borderless */}
             {combos.length > 0 && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -571,7 +675,6 @@ export default function TableMenuPage() {
               </motion.button>
             )}
 
-            {/* Category Chips - Borderless with Glide Animation */}
             {categories.map((cat) => {
               const isSelected = selectedCategory === cat.id;
               return (
@@ -817,7 +920,7 @@ export default function TableMenuPage() {
                         </button>
                         <span className="px-2 font-mono font-bold text-white">{ci.quantity}</span>
                         <button onClick={() => addToCart(ci.menuItem, ci.isCombo)} className="p-1 text-[#D4AF37]">
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -915,8 +1018,8 @@ export default function TableMenuPage() {
                     <User className="w-3.5 h-3.5 text-[#D4AF37]" />
                     {customerName.trim() ? customerName : 'Guest Diner'}
                   </span>
-                  <span className="text-[10px] bg-black text-[#FCF6BA] border-2 border-[#D4AF37] px-2 py-0.5 rounded-md font-bold">
-                    Table #{tableId}
+                  <span className="text-[10px] bg-black text-[#FCF6BA] border-2 border-[#D4AF37] px-2 py-0.5 rounded-md font-bold truncate max-w-[140px]">
+                    {displayTableName || `Table #${realTableNumber}`}
                   </span>
                 </div>
 
@@ -1020,7 +1123,7 @@ export default function TableMenuPage() {
 
               <div className="text-center space-y-1">
                 <div className="w-14 h-14 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center text-[#FCF6BA] mx-auto shadow-[0_0_20px_rgba(212,175,55,0.5)]">
-                  <KeyRound className="w-7 h-7 text-[#D4AF37] animate-pulse" />
+                  <KeyRound className="w-7 h-7 text-[#D4AF37]" />
                 </div>
                 <h3 className="font-black text-white text-base tracking-wide uppercase pt-1">
                   Crack Today's Mystery PIN

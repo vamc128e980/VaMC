@@ -48,10 +48,10 @@ import {
   ShoppingBag,
   UploadCloud,
   PackagePlus,
-  Image as ImgIcon
+  Image as ImgIcon,
+  Link as LinkIcon
 } from 'lucide-react';
 
-// 90FPS High Refresh-Rate Optimized Springs
 const fps90Spring = {
   type: 'spring',
   stiffness: 450,
@@ -101,10 +101,15 @@ export default function LuxuryGoldAdminPanel() {
   const [isPinGameModalOpen, setIsPinGameModalOpen] = useState(false);
   const [isFlashModalOpen, setIsFlashModalOpen] = useState(false);
 
-  // Tables
+  // Dedicated Table Name Edit Modal State
   const [showAddTableModal, setShowAddTableModal] = useState(false);
   const [newTableNumber, setNewTableNumber] = useState('');
   const [newTableCapacity, setNewTableCapacity] = useState('4');
+  const [newTableName, setNewTableName] = useState('');
+
+  const [editingTableObj, setEditingTableObj] = useState<any | null>(null);
+  const [showEditTableNameModal, setShowEditTableNameModal] = useState(false);
+  const [tempCustomTableName, setTempCustomTableName] = useState('');
 
   // Categories
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -312,22 +317,58 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Tables CRUD
+  // TABLES CRUD: Supports Dedicated Table Name
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
     const tNum = parseInt(newTableNumber);
     const tCap = parseInt(newTableCapacity) || 4;
+    const tName = newTableName.trim() || `Table-${tNum}`;
+
     if (!tNum || tNum <= 0) return alert('Valid Table Number ivvandi.');
     if (tables.some(t => t.table_number === tNum)) return alert(`Table #${tNum} already undi!`);
 
     try {
       setLoading(true);
-      await supabase.from('restaurant_tables').insert({ table_number: tNum, capacity: tCap, status: 'available' });
+      await supabase.from('restaurant_tables').insert({ 
+        table_number: tNum, 
+        capacity: tCap, 
+        status: 'available',
+        table_name: tName
+      });
       setNewTableNumber('');
+      setNewTableName('');
       setShowAddTableModal(false);
       await loadAdminData();
     } catch (err: any) {
       alert('Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // UPDATE DEDICATED TABLE NAME INLINE
+  const handleUpdateTableName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTableObj) return;
+    const cleanName = tempCustomTableName.trim();
+    if (!cleanName) return alert('Table Dedicated Name enter cheyandi.');
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('restaurant_tables')
+        .update({ table_name: cleanName })
+        .eq('table_number', editingTableObj.table_number);
+
+      if (error) throw error;
+
+      setTables(prev => prev.map(t => t.table_number === editingTableObj.table_number ? { ...t, table_name: cleanName } : t));
+      setShowEditTableNameModal(false);
+      setEditingTableObj(null);
+      await loadAdminData();
+      alert(`Table #${editingTableObj.table_number} dedicated name updated to "${cleanName}"!`);
+    } catch (err: any) {
+      alert('Name update error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -361,7 +402,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // CATEGORY SAVE FIX: Multi-column Safe Persistence + Instant State Update
+  // CATEGORY SAVE FIX
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = categoryName.trim();
@@ -428,7 +469,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Helper for PC File Upload to Base64
   const readFileToBase64 = (file: File, callback: (base64: string) => void) => {
     if (file.size > 3 * 1024 * 1024) {
       alert('Image file size 3MB kante thakkuva undali.');
@@ -441,7 +481,7 @@ export default function LuxuryGoldAdminPanel() {
     reader.readAsDataURL(file);
   };
 
-  // Menu Items CRUD with PC Image Upload
+  // Menu Items CRUD
   const openAddItemModal = (catId?: number) => {
     setEditingItem(null);
     setItemName('');
@@ -511,7 +551,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Combos CRUD with PC Image Upload
+  // Combos CRUD
   const openAddComboModal = () => {
     setEditingCombo(null);
     setComboName('');
@@ -699,18 +739,20 @@ export default function LuxuryGoldAdminPanel() {
   const filteredMenuItems = selectedCatId === 'all' ? menuItems : menuItems.filter(m => m.category_id === selectedCatId);
 
   const copyToGoogleSheets = () => {
-    const headers = ['Date', 'Time', 'Table #', 'Customer Name', 'Phone', 'Ordered Dishes', 'Subtotal', 'Discount', 'Total Net Paid', 'Payment Status'];
+    const headers = ['Date', 'Time', 'Table #', 'Table Name', 'Customer Name', 'Phone', 'Ordered Dishes', 'Subtotal', 'Discount', 'Total Net Paid', 'Payment Status'];
     const rows = filteredSessions.map(s => {
       const d = new Date(s.created_at);
       const itemsList = getSessionOrderedItems(s.id).map(i => `${i.quantity}x ${i.name}`).join(', ');
       const gross = Number(s.total_amount) || 0;
       const disc = Number(s.discount_amount || s.discount) || 0;
       const netPaid = Math.max(0, gross - disc);
+      const matchingTable = tables.find(t => t.table_number === s.table_number);
 
       return [
         d.toLocaleDateString('en-IN'),
         d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
         s.table_number,
+        matchingTable?.table_name || `Table #${s.table_number}`,
         s.customer_name || 'Guest',
         s.customer_phone || '-',
         `"${itemsList || 'None'}"`,
@@ -801,7 +843,7 @@ export default function LuxuryGoldAdminPanel() {
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-[3px] border-[#D4AF37] bg-black hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold"
             >
               <Store className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span>Edit Name</span>
+              <span>Edit Brand</span>
             </button>
 
             <button
@@ -1005,7 +1047,7 @@ export default function LuxuryGoldAdminPanel() {
 
         {/* View Tabs */}
         <AnimatePresence mode="wait">
-          {/* TAB 1: Tables Operations */}
+          {/* TAB 1: Tables Operations with DEDICATED NAME Support */}
           {activeTab === 'tables' && (
             <motion.div
               key="tables-tab"
@@ -1016,9 +1058,14 @@ export default function LuxuryGoldAdminPanel() {
               className="space-y-4"
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-black text-[#FCF6BA] uppercase tracking-wider flex items-center gap-2 font-mono">
-                  <LayoutGrid className="w-4 h-4 text-[#D4AF37]" /> Live Floor Ops ({tables.length} Tables)
-                </h2>
+                <div>
+                  <h2 className="text-sm font-black text-[#FCF6BA] uppercase tracking-wider flex items-center gap-2 font-mono">
+                    <LayoutGrid className="w-4 h-4 text-[#D4AF37]" /> Live Floor Ops ({tables.length} Tables)
+                  </h2>
+                  <p className="text-[11px] text-[#D4AF37]/80 font-mono">
+                    Prathi table ki dedicated custom name ivvochu. QR code & link lo ee custom name tho sync avthundi.
+                  </p>
+                </div>
 
                 <button
                   onClick={() => setShowAddTableModal(true)}
@@ -1048,10 +1095,30 @@ export default function LuxuryGoldAdminPanel() {
                           : 'border-[#D4AF37]'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base font-black text-[#FCF6BA]">Table #{t.table_number}</span>
-                          <span className="text-xs text-[#D4AF37] font-mono">({t.capacity || 4} Seats)</span>
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-black text-[#FCF6BA]">Table #{t.table_number}</span>
+                            <span className="text-xs text-[#D4AF37] font-mono">({t.capacity || 4} Seats)</span>
+                          </div>
+                          
+                          {/* Dedicated Table Name Highlight & Edit Trigger */}
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] font-mono uppercase tracking-wide">
+                              🏷️ {t.table_name || `Table-${t.table_number}`}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setEditingTableObj(t);
+                                setTempCustomTableName(t.table_name || `Table-${t.table_number}`);
+                                setShowEditTableNameModal(true);
+                              }}
+                              className="p-1 hover:text-[#FCF6BA] text-[#D4AF37] transition"
+                              title="Edit Dedicated Table Name"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-1.5">
@@ -1139,7 +1206,7 @@ export default function LuxuryGoldAdminPanel() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-center py-6 text-xs text-[#D4AF37]/60 font-mono">
+                        <div className="text-center py-5 text-xs text-[#D4AF37]/60 font-mono">
                           Ready for next guest order
                         </div>
                       )}
@@ -1150,7 +1217,7 @@ export default function LuxuryGoldAdminPanel() {
             </motion.div>
           )}
 
-          {/* TAB 2: Menu Edits with Live Images on Cards */}
+          {/* TAB 2: Menu Edits */}
           {activeTab === 'menu' && (
             <motion.div
               key="menu-tab"
@@ -1230,7 +1297,7 @@ export default function LuxuryGoldAdminPanel() {
                           className="p-1 hover:text-rose-400 text-rose-400"
                           title="Delete Category"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     );
@@ -1315,7 +1382,7 @@ export default function LuxuryGoldAdminPanel() {
             </motion.div>
           )}
 
-          {/* TAB 3: Add Combos CRUD with PC Image Support */}
+          {/* TAB 3: Add Combos CRUD */}
           {activeTab === 'combos' && (
             <motion.div
               key="combos-tab"
@@ -1657,6 +1724,7 @@ export default function LuxuryGoldAdminPanel() {
                     const netPaid = Math.max(0, gross - discount);
                     const itemsSubtotal = items.reduce((sum, it) => sum + (it.quantity * it.price), 0);
                     const isPaid = session.payment_status === 'paid' || session.status === 'completed';
+                    const matchingTable = tables.find(t => t.table_number === session.table_number);
 
                     return (
                       <div 
@@ -1666,7 +1734,7 @@ export default function LuxuryGoldAdminPanel() {
                         <div className="flex justify-between border-b-2 border-[#D4AF37]/30 pb-2">
                           <div className="flex items-center gap-2">
                             <span className="bg-[#D4AF37] text-black font-black text-xs px-2.5 py-0.5 rounded-lg">
-                              Table #{session.table_number}
+                              {matchingTable?.table_name || `Table #${session.table_number}`}
                             </span>
                             <button
                               onClick={() => handleTogglePaymentStatus(session.id, session.payment_status)}
@@ -1688,7 +1756,7 @@ export default function LuxuryGoldAdminPanel() {
                             <span className="font-bold text-[#FCF6BA]">{session.customer_name || 'Walk-in Guest'}</span>
                           </div>
                           <div className="flex items-center gap-1.5 font-mono text-[#D4AF37]">
-                            <Phone className="w-3 h-3 text-[#D4AF37]" />
+                            <Phone className="w-3.5 h-3.5 text-[#D4AF37]" />
                             <span>{session.customer_phone || 'No Phone'}</span>
                           </div>
                         </div>
@@ -1737,7 +1805,7 @@ export default function LuxuryGoldAdminPanel() {
         </AnimatePresence>
       </main>
 
-      {/* Modal 1: Add Table */}
+      {/* Modal 1: Add Table with Dedicated Name */}
       <AnimatePresence>
         {showAddTableModal && (
           <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1766,6 +1834,22 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
 
                 <div>
+                  <label className="text-[#F3E5AB] font-bold block mb-1">
+                    Dedicated Table Name / Custom Slug
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. VIP-Royal-1 or Garden-Booth-4"
+                    value={newTableName}
+                    onChange={(e) => setNewTableName(e.target.value)}
+                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                  />
+                  <span className="text-[10px] text-[#D4AF37]/75 font-mono mt-1 block">
+                    Khali unchithe automatic ga "Table-#Number" create avthundi.
+                  </span>
+                </div>
+
+                <div>
                   <label className="text-[#F3E5AB] font-bold block mb-1">Capacity</label>
                   <select
                     value={newTableCapacity}
@@ -1786,6 +1870,60 @@ export default function LuxuryGoldAdminPanel() {
                 >
                   Deploy Table
                 </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal 1.1: Edit Dedicated Table Name Inline */}
+      <AnimatePresence>
+        {showEditTableNameModal && editingTableObj && (
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
+                <h3 className="font-black text-[#FCF6BA] text-sm flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#D4AF37]" /> Edit Name for Table #{editingTableObj.table_number}
+                </h3>
+                <button onClick={() => setShowEditTableNameModal(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateTableName} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="text-[#F3E5AB] font-bold block mb-1">
+                    Dedicated Custom Table Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Royal-Sultana-1"
+                    value={tempCustomTableName}
+                    onChange={(e) => setTempCustomTableName(e.target.value)}
+                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA] font-bold"
+                  />
+                  <span className="text-[10px] text-[#D4AF37]/80 font-mono mt-1 block">
+                    Ee name direct ga customer table website banner meedha appear avthundi.
+                  </span>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditTableNameModal(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-black border-2 border-[#D4AF37]/40 text-[#F3E5AB]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={loading}
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md"
+                  >
+                    Update Name
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -1832,7 +1970,7 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </AnimatePresence>
 
-      {/* Modal 3: Menu Item (With PC Image Upload & Scrollable Category Picker) */}
+      {/* Modal 3: Menu Item (With PC Image Upload) */}
       <AnimatePresence>
         {showItemModal && (
           <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1887,7 +2025,6 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                {/* PC Image Upload for Menu Item */}
                 <div>
                   <label className="text-[#F3E5AB] font-bold block mb-1">Dish Image (From PC)</label>
                   <input 
@@ -1926,7 +2063,6 @@ export default function LuxuryGoldAdminPanel() {
                   )}
                 </div>
 
-                {/* Scrollable Category Selection Bar */}
                 <div>
                   <label className="text-[#F3E5AB] font-bold block mb-1">
                     Select Category * ({categories.length} available)
@@ -1976,7 +2112,7 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </AnimatePresence>
 
-      {/* Modal 4: Add & Edit Combo (With PC Image Support) */}
+      {/* Modal 4: Add & Edit Combo */}
       <AnimatePresence>
         {showComboModal && (
           <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2032,7 +2168,6 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                {/* PC Image Upload for Combo */}
                 <div>
                   <label className="text-[#F3E5AB] font-bold block mb-1">Combo Image (From PC)</label>
                   <input 
