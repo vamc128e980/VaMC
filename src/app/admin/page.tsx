@@ -15,7 +15,7 @@ import {
   Trash2, 
   Plus, 
   RefreshCw, 
-  DollarSign, 
+  IndianRupee, 
   LayoutGrid, 
   Receipt, 
   UtensilsCrossed, 
@@ -49,26 +49,26 @@ import {
   UploadCloud,
   PackagePlus,
   Image as ImgIcon,
-  Link as LinkIcon
+  Printer
 } from 'lucide-react';
 
-const fps90Spring = {
+const fluidSpring = {
   type: 'spring',
-  stiffness: 450,
-  damping: 34,
-  mass: 0.5
+  stiffness: 420,
+  damping: 32,
+  mass: 0.55
 };
 
-const fps90ModalSpring = {
+const tapElasticSpring = {
   type: 'spring',
-  stiffness: 400,
-  damping: 32,
-  mass: 0.6
+  stiffness: 450,
+  damping: 24,
+  mass: 0.5
 };
 
 const tabVariant = {
   initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.22, ease: 'easeOut' } },
   exit: { opacity: 0, y: -6, transition: { duration: 0.14, ease: 'easeIn' } }
 };
 
@@ -317,7 +317,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // TABLES CRUD: Supports Dedicated Table Name
+  // TABLES CRUD
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
     const tNum = parseInt(newTableNumber);
@@ -346,7 +346,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // UPDATE DEDICATED TABLE NAME INLINE
   const handleUpdateTableName = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTableObj) return;
@@ -410,27 +409,25 @@ export default function LuxuryGoldAdminPanel() {
 
     setLoading(true);
     try {
+      const categoryPayload = {
+        name: cleanName,
+        name_en: cleanName
+      };
+
       if (editingCategory) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('categories')
-          .update({ 
-            name_en: cleanName,
-            name: cleanName,
-            name_te: cleanName 
-          })
-          .eq('id', editingCategory.id)
-          .select();
+          .update(categoryPayload)
+          .eq('id', editingCategory.id);
 
         if (error) throw error;
-        setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, name_en: cleanName, name: cleanName } : c));
+        setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...categoryPayload } : c));
       } else {
         const nextSort = (categories.length > 0 ? Math.max(...categories.map(c => Number(c.sort_order || 0))) : 0) + 1;
         const { data, error } = await supabase
           .from('categories')
           .insert({ 
-            name_en: cleanName, 
-            name: cleanName,
-            name_te: cleanName,
+            ...categoryPayload,
             sort_order: nextSort 
           })
           .select();
@@ -475,9 +472,7 @@ export default function LuxuryGoldAdminPanel() {
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => {
-      callback(reader.result as string);
-    };
+    reader.onloadend = () => callback(reader.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -514,8 +509,8 @@ export default function LuxuryGoldAdminPanel() {
     setLoading(true);
     try {
       const payload = {
-        name_en: itemName.trim(),
         name: itemName.trim(),
+        name_en: itemName.trim(),
         price: priceNum,
         description_en: itemDescription.trim(),
         description: itemDescription.trim(),
@@ -589,7 +584,6 @@ export default function LuxuryGoldAdminPanel() {
         price: priceNum,
         original_price: origPriceNum,
         description: comboDescription.trim(),
-        description_en: comboDescription.trim(),
         food_type: comboFoodType,
         image_url: comboImageUrl.trim(),
         is_available: true
@@ -682,17 +676,113 @@ export default function LuxuryGoldAdminPanel() {
   const getSessionOrderedItems = (sessionId: string) => {
     const items = orderItems.filter(oi => oi.session_id === sessionId && oi.item_status !== 'cancelled');
     return items.map(oi => ({
-      name: oi.menu_items?.name_en || 'Item #' + oi.menu_item_id,
+      name: oi.menu_items?.name_en || oi.menu_items?.name || 'Item #' + oi.menu_item_id,
       quantity: oi.quantity || 1,
       price: Number(oi.unit_price || oi.menu_items?.price || 0)
     }));
+  };
+
+  // 80mm ESC/POS Thermal Slip Printer Generator
+  const printThermalSlip = (session: any) => {
+    const items = getSessionOrderedItems(session.id);
+    const discount = Number(session.discount_amount || session.discount || 0);
+    const gross = Number(session.total_amount || 0);
+    const netPaid = Math.max(0, gross - discount);
+    const matchingTable = tables.find(t => t.table_number === session.table_number);
+    const tableName = matchingTable?.table_name || `Table #${session.table_number}`;
+
+    const printWindow = window.open('', '_blank', 'width=350,height=600');
+    if (!printWindow) return alert('Popups allow cheyandi to print receipt.');
+
+    const slipHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Receipt - ${tableName}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body {
+              width: 72mm;
+              margin: 0 auto;
+              padding: 8mm 2mm;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 11px;
+              color: #000;
+              line-height: 1.25;
+            }
+            .text-center { text-align: center; }
+            .bold { font-weight: bold; }
+            .divider { border-top: 1px dashed #000; margin: 5px 0; }
+            .item-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+            .item-name { width: 55%; word-break: break-word; }
+            .item-qty { width: 15%; text-align: center; }
+            .item-total { width: 30%; text-align: right; }
+            .total-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-top: 4px; }
+            .footer { font-size: 9px; text-align: center; margin-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="text-center bold" style="font-size: 13px;">${shopName}</div>
+          <div class="text-center" style="font-size: 9px;">${tagline}</div>
+          <div class="divider"></div>
+          <div>Date: ${new Date(session.created_at).toLocaleDateString('en-IN')} ${new Date(session.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div>Table: <span class="bold">${tableName}</span></div>
+          <div>Guest: ${session.customer_name || 'Walk-in'} (${session.customer_phone || '-'})</div>
+          <div class="divider"></div>
+          <div class="item-row bold">
+            <span class="item-name">ITEM</span>
+            <span class="item-qty">QTY</span>
+            <span class="item-total">AMT</span>
+          </div>
+          <div class="divider"></div>
+          ${items.map(it => `
+            <div class="item-row">
+              <span class="item-name">${it.name}</span>
+              <span class="item-qty">${it.quantity}</span>
+              <span class="item-total">₹${(it.quantity * it.price).toFixed(2)}</span>
+            </div>
+          `).join('')}
+          <div class="divider"></div>
+          <div class="item-row">
+            <span>Subtotal:</span>
+            <span>₹${gross.toFixed(2)}</span>
+          </div>
+          ${discount > 0 ? `
+            <div class="item-row">
+              <span>PIN Discount:</span>
+              <span>- ₹${discount.toFixed(2)}</span>
+            </div>
+          ` : ''}
+          <div class="divider"></div>
+          <div class="total-row">
+            <span>NET TOTAL:</span>
+            <span>₹${netPaid.toFixed(2)}</span>
+          </div>
+          <div class="divider"></div>
+          <div class="footer">
+            <div>GST Included (5%) • Thank you!</div>
+            <div>Visit Us Again!</div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(slipHtml);
+    printWindow.document.close();
   };
 
   // Today's Most Ordered Items
   const todayOrderedDishesMap: Record<number, { name: string; quantity: number; revenue: number; price: number; food_type: string; image_url: string }> = {};
   menuItems.forEach(mi => {
     todayOrderedDishesMap[mi.id] = { 
-      name: mi.name_en || 'Dish #' + mi.id, 
+      name: mi.name_en || mi.name || 'Dish #' + mi.id, 
       quantity: 0, 
       revenue: 0, 
       price: Number(mi.price) || 0,
@@ -708,7 +798,7 @@ export default function LuxuryGoldAdminPanel() {
       const price = Number(oi.unit_price || oi.menu_items?.price) || 0;
       if (!todayOrderedDishesMap[mId]) {
         todayOrderedDishesMap[mId] = { 
-          name: oi.menu_items?.name_en || 'Dish #' + mId, 
+          name: oi.menu_items?.name_en || oi.menu_items?.name || 'Dish #' + mId, 
           quantity: 0, 
           revenue: 0, 
           price, 
@@ -801,8 +891,8 @@ export default function LuxuryGoldAdminPanel() {
 
   if (authChecking || !isAuthenticated) {
     return (
-      <div className="min-h-screen w-full bg-black flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 border-[3px] border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin" />
+      <div className="min-h-screen w-full bg-[#050505] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-2 border-white/10 border-t-[#D4AF37] rounded-full animate-spin" />
         <span className="text-[#D4AF37] font-mono text-xs tracking-widest uppercase font-bold">
           Verifying Master Admin Credentials...
         </span>
@@ -811,21 +901,21 @@ export default function LuxuryGoldAdminPanel() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-black text-[#FCF6BA] font-sans pb-32 relative overflow-x-hidden antialiased">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-black border-b-[3px] border-[#D4AF37] px-4 sm:px-6 py-3.5 shadow-2xl">
+    <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] font-sans pb-32 relative overflow-x-hidden antialiased">
+      {/* Top Glass Ambient Header */}
+      <header className="sticky top-0 z-40 bg-[#050505]/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 sm:px-6 py-3.5 shadow-2xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center shadow-lg shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-white/[0.04] border border-white/[0.12] flex items-center justify-center shadow-lg shrink-0">
               <ShieldCheck className="w-6 h-6 text-[#D4AF37]" />
             </div>
 
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black tracking-widest text-black uppercase bg-[#D4AF37] px-2.5 py-0.5 rounded-full">
+                <span className="text-[9px] font-black tracking-widest text-black uppercase bg-gradient-to-r from-[#FCF6BA] to-[#D4AF37] px-2.5 py-0.5 rounded-full shadow-sm">
                   ROYAL CONSOLE
                 </span>
-                <h1 className="text-sm sm:text-base font-black tracking-wide text-[#FCF6BA] uppercase truncate max-w-[200px] sm:max-w-none">
+                <h1 className="text-sm sm:text-base font-black tracking-wide text-white uppercase truncate max-w-[200px] sm:max-w-none">
                   {shopName}
                 </h1>
               </div>
@@ -833,38 +923,41 @@ export default function LuxuryGoldAdminPanel() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 relative">
-            <button
+          <div className="flex items-center gap-2 relative">
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={() => {
                 setTempBrandName(shopName);
                 setTempTagline(tagline);
                 setIsNameModalOpen(true);
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-[3px] border-[#D4AF37] bg-black hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition"
             >
               <Store className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Edit Brand</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={handleResetFloor}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-[3px] border-[#D4AF37] bg-black hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition"
               title="Reset all tables to vacant"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span className="hidden sm:inline">Reset Floor</span>
               <span>(0/{tables.length})</span>
-            </button>
+            </motion.button>
 
             {/* Calendar */}
             <div className="relative" ref={calRef}>
-              <button
+              <motion.button
+                whileTap={{ scale: 0.94 }}
                 onClick={() => setShowCalendar(!showCalendar)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-[3px] border-[#D4AF37] bg-black text-[#FCF6BA] text-xs font-mono font-black shadow-md"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.04] text-[#FCF6BA] text-xs font-mono font-black shadow-md backdrop-blur-md"
               >
                 <CalendarIcon className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span>{isFilterAllDates ? 'All History' : selectedDate}</span>
-              </button>
+              </motion.button>
 
               <AnimatePresence>
                 {showCalendar && (
@@ -872,10 +965,10 @@ export default function LuxuryGoldAdminPanel() {
                     initial={{ opacity: 0, scale: 0.92, y: 8 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.92, y: 8 }}
-                    transition={fps90ModalSpring}
-                    className="absolute right-0 top-11 w-72 bg-black border-[3px] border-[#D4AF37] rounded-3xl p-4 shadow-2xl z-50 select-none"
+                    transition={fluidSpring}
+                    className="absolute right-0 top-11 w-72 bg-[#0c0c0e] border border-white/[0.12] rounded-3xl p-4 shadow-2xl z-50 select-none backdrop-blur-3xl"
                   >
-                    <div className="flex items-center justify-between pb-3 border-b-2 border-[#D4AF37]/30 mb-3">
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
                       <button onClick={() => setCalViewDate(new Date(calViewDate.getFullYear(), calViewDate.getMonth() - 1, 1))}>
                         <ChevronLeft className="w-4 h-4 text-[#FCF6BA]" />
                       </button>
@@ -891,7 +984,7 @@ export default function LuxuryGoldAdminPanel() {
                       {renderCalendarDays()}
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 mt-3 border-t-2 border-[#D4AF37]/30 text-[11px] font-bold">
+                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-white/10 text-[11px] font-bold">
                       <button onClick={() => { setSelectedDate(getTodayStr()); setIsFilterAllDates(false); setShowCalendar(false); }} className="text-[#FCF6BA] hover:underline font-mono">
                         Today
                       </button>
@@ -904,73 +997,77 @@ export default function LuxuryGoldAdminPanel() {
               </AnimatePresence>
             </div>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={copyToGoogleSheets}
-              className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-[3px] text-xs font-mono font-bold transition ${
-                copySuccess ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-black border-[#D4AF37] text-[#FCF6BA] hover:bg-[#D4AF37]/20'
+              className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition ${
+                copySuccess ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-white/[0.03] border-white/[0.1] text-[#FCF6BA] hover:border-[#D4AF37]/40'
               }`}
             >
               {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <FileSpreadsheet className="w-3.5 h-3.5 text-[#D4AF37]" />}
               <span>{copySuccess ? 'Copied TSV' : 'Sheets'}</span>
-            </button>
+            </motion.button>
 
-            <button 
+            <motion.button 
+              whileTap={{ scale: 0.92 }}
               onClick={loadAdminData} 
-              className="p-2 rounded-xl border-[3px] border-[#D4AF37] bg-black text-[#FCF6BA] hover:bg-[#D4AF37]/20"
+              className="p-2 rounded-xl border border-white/[0.1] bg-white/[0.03] text-[#FCF6BA] hover:border-[#D4AF37]/40"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`} />
-            </button>
+            </motion.button>
 
-            <button 
+            <motion.button 
+              whileTap={{ scale: 0.92 }}
               onClick={handleLogout} 
-              className="p-2 rounded-xl bg-black border-[3px] border-rose-500 text-rose-300 hover:bg-rose-950/40 cursor-pointer" 
+              className="p-2 rounded-xl bg-white/[0.03] border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer" 
               title="Logout to Main Panel"
             >
               <LogOut className="w-3.5 h-3.5" />
-            </button>
+            </motion.button>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
-        {/* Metric Cards */}
+        {/* Metric Glass Bento Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] shadow-xl flex items-center justify-between">
+          <div className="p-5 rounded-3xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-2xl shadow-xl flex items-center justify-between">
             <div>
               <span className="text-[11px] font-mono font-bold text-[#D4AF37] uppercase tracking-wider flex items-center gap-1">
                 Net Sales ({isFilterAllDates ? 'All History' : selectedDate})
               </span>
-              <h3 className="text-3xl font-black font-mono text-[#FCF6BA] mt-1">
+              <h3 className="text-3xl font-black font-mono text-white mt-1">
                 ₹{filteredRevenue.toFixed(2)}
               </h3>
               <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 mt-1 font-mono">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> {paidOrdersCount} Paid Orders Settled
               </span>
             </div>
-            <div className="w-13 h-13 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center shadow-lg">
-              <DollarSign className="w-6 h-6 text-[#D4AF37]" />
+            {/* Indian Rupee Icon */}
+            <div className="w-13 h-13 rounded-2xl bg-white/[0.04] border border-white/[0.12] flex items-center justify-center shadow-lg">
+              <IndianRupee className="w-6 h-6 text-[#D4AF37]" />
             </div>
           </div>
 
-          <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] shadow-xl flex items-center justify-between">
+          <div className="p-5 rounded-3xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-2xl shadow-xl flex items-center justify-between">
             <div>
               <span className="text-[11px] font-mono font-bold text-[#D4AF37] uppercase tracking-wider">Active Tables Now</span>
-              <h3 className="text-3xl font-black font-mono text-[#FCF6BA] mt-1">
+              <h3 className="text-3xl font-black font-mono text-white mt-1">
                 {activeSessions.length} / {tables.length}
               </h3>
               <span className="text-[11px] text-[#FCF6BA] font-semibold flex items-center gap-1 mt-1 font-mono">
                 <Clock className="w-3.5 h-3.5 text-[#D4AF37]" /> Live Seated Customers
               </span>
             </div>
-            <div className="w-13 h-13 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center shadow-lg">
+            <div className="w-13 h-13 rounded-2xl bg-white/[0.04] border border-white/[0.12] flex items-center justify-center shadow-lg">
               <LayoutGrid className="w-6 h-6 text-[#D4AF37]" />
             </div>
           </div>
         </div>
 
-        {/* Action Tabs Bar */}
-        <div className="p-2 rounded-3xl bg-black border-[3px] border-[#D4AF37] w-full shadow-2xl flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-3">
+        {/* Action Tabs Bar - iOS Glass Style */}
+        <div className="p-2 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl w-full shadow-2xl flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-3">
           <div className="flex items-center gap-1.5 shrink-0">
             {[
               { id: 'tables', label: '1. Table Ops', icon: LayoutGrid },
@@ -985,94 +1082,100 @@ export default function LuxuryGoldAdminPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`relative px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 whitespace-nowrap select-none transition ${
-                    isActive ? 'bg-[#D4AF37] text-black font-black shadow-md' : 'text-[#FCF6BA]/80 hover:text-white'
+                  className={`relative px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 whitespace-nowrap select-none transition cursor-pointer ${
+                    isActive ? 'text-black font-black' : 'text-neutral-400 hover:text-white'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="adminGlassPill"
+                      className="absolute inset-0 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] rounded-2xl shadow-[0_2px_15px_rgba(212,175,55,0.4)]"
+                      transition={fluidSpring}
+                    />
+                  )}
+                  <Icon className="w-3.5 h-3.5 relative z-10" />
+                  <span className="relative z-10">{tab.label}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="h-6 w-[2px] bg-[#D4AF37]/40 shrink-0 mx-1" />
+          <div className="h-6 w-[1px] bg-white/10 shrink-0 mx-1" />
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={() => setActiveTab('history')}
-              className={`px-3.5 py-2 rounded-2xl border-[3px] text-xs font-black uppercase font-mono tracking-wider flex items-center gap-2 transition ${
+              className={`px-3.5 py-2 rounded-2xl border text-xs font-black uppercase font-mono tracking-wider flex items-center gap-2 transition cursor-pointer ${
                 activeTab === 'history' 
                   ? 'bg-[#D4AF37] text-black border-transparent shadow-md' 
-                  : 'bg-black border-[#D4AF37] text-[#FCF6BA] hover:bg-[#D4AF37]/20'
+                  : 'bg-white/[0.03] border-white/[0.1] text-[#FCF6BA] hover:border-[#D4AF37]/40'
               }`}
             >
               <Receipt className="w-3.5 h-3.5" />
               <span>Order History</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={() => setIsPinGameModalOpen(true)}
-              className="px-3.5 py-2 rounded-2xl bg-black border-[3px] border-[#D4AF37] text-[#FCF6BA] font-black text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:bg-[#D4AF37]/20 transition"
+              className="px-3.5 py-2 rounded-2xl bg-white/[0.03] border border-white/[0.1] text-[#FCF6BA] font-bold text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:border-[#D4AF37]/40 transition cursor-pointer"
             >
               <KeyRound className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>PIN Game</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={() => setIsFlashModalOpen(true)}
-              className="px-3.5 py-2 rounded-2xl bg-black border-[3px] border-[#D4AF37] text-[#FCF6BA] font-black text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:bg-[#D4AF37]/20 transition"
+              className="px-3.5 py-2 rounded-2xl bg-white/[0.03] border border-white/[0.1] text-[#FCF6BA] font-bold text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:border-[#D4AF37]/40 transition cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Flash</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={() => setIsSecurityOpen(true)}
-              className="px-3.5 py-2 rounded-2xl bg-black border-[3px] border-[#D4AF37] text-[#FCF6BA] font-black text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:bg-[#D4AF37]/20 transition"
+              className="px-3.5 py-2 rounded-2xl bg-white/[0.03] border border-white/[0.1] text-[#FCF6BA] font-bold text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:border-[#D4AF37]/40 transition cursor-pointer"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Security</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               onClick={() => setIsWaiterModalOpen(true)}
-              className="px-3.5 py-2 rounded-2xl bg-black border-[3px] border-[#D4AF37] text-[#FCF6BA] font-bold text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:bg-[#D4AF37]/20 transition"
+              className="px-3.5 py-2 rounded-2xl bg-white/[0.03] border border-white/[0.1] text-[#FCF6BA] font-bold text-xs uppercase font-mono tracking-wider flex items-center gap-2 hover:border-[#D4AF37]/40 transition cursor-pointer"
             >
               <UserCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Waiter</span>
-            </button>
+            </motion.button>
           </div>
         </div>
 
-        {/* View Tabs */}
+        {/* Dynamic Views */}
         <AnimatePresence mode="wait">
-          {/* TAB 1: Tables Operations with DEDICATED NAME Support */}
+          {/* TAB 1: Tables Operations */}
           {activeTab === 'tables' && (
-            <motion.div
-              key="tables-tab"
-              variants={tabVariant}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-4"
-            >
+            <motion.div key="tables-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-black text-[#FCF6BA] uppercase tracking-wider flex items-center gap-2 font-mono">
+                  <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2 font-mono">
                     <LayoutGrid className="w-4 h-4 text-[#D4AF37]" /> Live Floor Ops ({tables.length} Tables)
                   </h2>
-                  <p className="text-[11px] text-[#D4AF37]/80 font-mono">
+                  <p className="text-[11px] text-neutral-400 font-mono">
                     Prathi table ki dedicated custom name ivvochu. QR code & link lo ee custom name tho sync avthundi.
                   </p>
                 </div>
 
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.94 }}
                   onClick={() => setShowAddTableModal(true)}
-                  className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md"
+                  className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" /> Add Table
-                </button>
+                </motion.button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1087,22 +1190,21 @@ export default function LuxuryGoldAdminPanel() {
                   return (
                     <div
                       key={t.id || t.table_number}
-                      className={`p-5 rounded-3xl border-[3px] relative overflow-hidden bg-black ${
+                      className={`p-5 rounded-3xl border backdrop-blur-2xl relative overflow-hidden bg-white/[0.02] ${
                         isOccupied 
                           ? (isPaid 
-                              ? 'border-emerald-500 shadow-md' 
-                              : 'border-rose-500 shadow-md') 
-                          : 'border-[#D4AF37]'
+                              ? 'border-emerald-500/50 shadow-[0_4px_25px_rgba(16,185,129,0.15)]' 
+                              : 'border-rose-500/50 shadow-[0_4px_25px_rgba(244,63,94,0.15)]') 
+                          : 'border-white/[0.08]'
                       }`}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-base font-black text-[#FCF6BA]">Table #{t.table_number}</span>
+                            <span className="text-base font-black text-white">Table #{t.table_number}</span>
                             <span className="text-xs text-[#D4AF37] font-mono">({t.capacity || 4} Seats)</span>
                           </div>
                           
-                          {/* Dedicated Table Name Highlight & Edit Trigger */}
                           <div className="flex items-center gap-1.5 mt-1">
                             <span className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] font-mono uppercase tracking-wide">
                               🏷️ {t.table_name || `Table-${t.table_number}`}
@@ -1113,7 +1215,7 @@ export default function LuxuryGoldAdminPanel() {
                                 setTempCustomTableName(t.table_name || `Table-${t.table_number}`);
                                 setShowEditTableNameModal(true);
                               }}
-                              className="p-1 hover:text-[#FCF6BA] text-[#D4AF37] transition"
+                              className="p-1 hover:text-[#FCF6BA] text-neutral-400 transition"
                               title="Edit Dedicated Table Name"
                             >
                               <Edit3 className="w-3 h-3" />
@@ -1125,29 +1227,28 @@ export default function LuxuryGoldAdminPanel() {
                           {isOccupied && (
                             <button
                               onClick={() => handleTogglePaymentStatus(activeSession.id, activeSession.payment_status)}
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border-2 flex items-center gap-1 ${
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 ${
                                 isPaid 
-                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500' 
-                                  : 'bg-rose-500/20 text-rose-300 border-rose-500 animate-pulse'
+                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/50' 
+                                  : 'bg-rose-500/10 text-rose-300 border-rose-500/50 animate-pulse'
                               }`}
-                              title="Click to toggle payment status"
                             >
                               {isPaid ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                               <span>{isPaid ? 'PAID' : 'NOT PAID'}</span>
                             </button>
                           )}
 
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border-2 ${
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                             isOccupied 
-                              ? 'bg-black text-[#FCF6BA] border-[#D4AF37]' 
-                              : 'bg-black text-[#D4AF37]/50 border-[#D4AF37]/40'
+                              ? 'bg-white/[0.04] text-white border-white/[0.12]' 
+                              : 'bg-white/[0.02] text-neutral-500 border-white/[0.06]'
                           }`}>
                             {isOccupied ? 'Occupied' : 'Vacant'}
                           </span>
 
                           <button
                             onClick={() => handleDeleteTable(t.table_number, isOccupied)}
-                            className="p-1 rounded-lg bg-black border-2 border-rose-500/50 text-rose-300 hover:bg-rose-950/40"
+                            className="p-1 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-950/40"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1156,21 +1257,21 @@ export default function LuxuryGoldAdminPanel() {
 
                       {isOccupied ? (
                         <div className="space-y-3">
-                          <div className="p-3.5 rounded-2xl bg-black border-[3px] border-[#D4AF37]/50 text-xs space-y-1.5 font-mono">
-                            <div className="flex justify-between text-[#D4AF37]">
+                          <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] text-xs space-y-1.5 font-mono">
+                            <div className="flex justify-between text-neutral-400">
                               <span>Guest:</span>
-                              <span className="font-bold text-[#FCF6BA]">{activeSession.customer_name || 'Guest'}</span>
+                              <span className="font-bold text-white">{activeSession.customer_name || 'Guest'}</span>
                             </div>
-                            <div className="flex justify-between text-[#D4AF37]">
+                            <div className="flex justify-between text-neutral-400">
                               <span>Seated At:</span>
-                              <span className="text-[#F3E5AB]">{formatDateTime(activeSession.created_at)}</span>
+                              <span className="text-white">{formatDateTime(activeSession.created_at)}</span>
                             </div>
                             
                             {discount > 0 && (
                               <>
-                                <div className="flex justify-between text-[#D4AF37] pt-1 border-t border-[#D4AF37]/25">
+                                <div className="flex justify-between text-neutral-400 pt-1 border-t border-white/[0.06]">
                                   <span>Gross Total:</span>
-                                  <span className="text-[#F3E5AB]">₹{grossBill.toFixed(2)}</span>
+                                  <span className="text-white">₹{grossBill.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between text-emerald-400 font-bold">
                                   <span>Mystery PIN Discount:</span>
@@ -1179,34 +1280,36 @@ export default function LuxuryGoldAdminPanel() {
                               </>
                             )}
 
-                            <div className="flex justify-between text-[#D4AF37] pt-1.5 border-t border-[#D4AF37]/40">
-                              <span className="font-bold text-[#F3E5AB]">Net Current Bill:</span>
-                              <span className="text-[#FCF6BA] font-black text-sm">₹{finalPayableBill.toFixed(2)}</span>
+                            <div className="flex justify-between text-white pt-1.5 border-t border-white/[0.08]">
+                              <span className="font-bold text-neutral-300">Net Current Bill:</span>
+                              <span className="text-[#D4AF37] font-black text-sm">₹{finalPayableBill.toFixed(2)}</span>
                             </div>
                           </div>
 
                           <div className="flex gap-2">
-                            <button
+                            <motion.button
+                              whileTap={{ scale: 0.95 }}
                               onClick={() => handleTogglePaymentStatus(activeSession.id, activeSession.payment_status)}
-                              className={`flex-1 py-2.5 rounded-xl border-[3px] text-xs font-black uppercase tracking-wider shadow-sm transition ${
+                              className={`flex-1 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wider transition ${
                                 isPaid 
-                                  ? 'bg-black hover:bg-emerald-950/40 border-emerald-500 text-emerald-200' 
-                                  : 'bg-black hover:bg-rose-950/40 border-rose-500 text-rose-200'
+                                  ? 'border-emerald-500/50 text-emerald-200 bg-emerald-950/20' 
+                                  : 'border-rose-500/50 text-rose-200 bg-rose-950/20'
                               }`}
                             >
                               Mark As {isPaid ? 'NOT PAID' : 'PAID'}
-                            </button>
+                            </motion.button>
 
-                            <button
+                            <motion.button
+                              whileTap={{ scale: 0.95 }}
                               onClick={() => handleClearTable(t.table_number)}
-                              className="px-4 py-2.5 rounded-xl bg-black border-[3px] border-[#D4AF37] hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-black uppercase tracking-wider shadow-sm"
+                              className="px-4 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-white/[0.2] text-[#FCF6BA] text-xs font-black uppercase tracking-wider"
                             >
                               Clear
-                            </button>
+                            </motion.button>
                           </div>
                         </div>
                       ) : (
-                        <div className="text-center py-5 text-xs text-[#D4AF37]/60 font-mono">
+                        <div className="text-center py-5 text-xs text-neutral-500 font-mono">
                           Ready for next guest order
                         </div>
                       )}
@@ -1219,42 +1322,36 @@ export default function LuxuryGoldAdminPanel() {
 
           {/* TAB 2: Menu Edits */}
           {activeTab === 'menu' && (
-            <motion.div
-              key="menu-tab"
-              variants={tabVariant}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-6"
-            >
-              <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] space-y-4 shadow-lg">
+            <motion.div key="menu-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="space-y-6">
+              <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl space-y-4 shadow-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Tag className="w-4 h-4 text-[#D4AF37]" />
-                    <h3 className="font-black text-[#FCF6BA] text-sm uppercase tracking-wider font-mono">
+                    <h3 className="font-black text-white text-sm uppercase tracking-wider font-mono">
                       Menu Categories ({categories.length})
                     </h3>
                   </div>
 
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.94 }}
                     onClick={() => {
                       setEditingCategory(null);
                       setCategoryName('');
                       setShowCategoryModal(true);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
                   >
                     <FolderPlus className="w-3.5 h-3.5 stroke-[3]" /> Add Category
-                  </button>
+                  </motion.button>
                 </div>
 
                 <div className="flex gap-2.5 overflow-x-auto custom-gold-scrollbar pb-3 pt-1">
                   <button
                     onClick={() => setSelectedCatId('all')}
-                    className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap border-[3px] shrink-0 ${
+                    className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap border shrink-0 transition ${
                       selectedCatId === 'all'
                         ? 'bg-[#D4AF37] text-black border-transparent font-black shadow-md'
-                        : 'bg-black text-[#FCF6BA] border-[#D4AF37] hover:border-[#FCF6BA]'
+                        : 'bg-white/[0.03] text-neutral-400 border-white/[0.08] hover:text-white'
                     }`}
                   >
                     All Items ({menuItems.length})
@@ -1267,16 +1364,13 @@ export default function LuxuryGoldAdminPanel() {
                     return (
                       <div
                         key={cat.id}
-                        className={`flex items-center rounded-2xl border-[3px] px-3.5 py-1.5 gap-2 bg-black shrink-0 ${
+                        className={`flex items-center rounded-2xl border px-3.5 py-1.5 gap-2 shrink-0 transition ${
                           isSelected 
-                            ? 'border-[#FCF6BA] text-[#FCF6BA]' 
-                            : 'border-[#D4AF37] text-[#F3E5AB]/90 hover:border-[#FCF6BA]'
+                            ? 'border-[#D4AF37] bg-white/[0.06] text-white font-bold' 
+                            : 'border-white/[0.08] bg-white/[0.02] text-neutral-400 hover:text-white'
                         }`}
                       >
-                        <button
-                          onClick={() => setSelectedCatId(cat.id)}
-                          className="text-xs font-bold whitespace-nowrap select-none"
-                        >
+                        <button onClick={() => setSelectedCatId(cat.id)} className="text-xs whitespace-nowrap">
                           {cat.name_en || cat.name} ({count})
                         </button>
 
@@ -1286,8 +1380,7 @@ export default function LuxuryGoldAdminPanel() {
                             setCategoryName(cat.name_en || cat.name);
                             setShowCategoryModal(true);
                           }}
-                          className="p-1 hover:text-[#FCF6BA] text-[#D4AF37]"
-                          title="Edit Category Name"
+                          className="p-1 hover:text-[#FCF6BA] text-neutral-400"
                         >
                           <Edit3 className="w-3 h-3" />
                         </button>
@@ -1295,7 +1388,6 @@ export default function LuxuryGoldAdminPanel() {
                         <button
                           onClick={() => handleDeleteCategory(cat.id, cat.name_en || cat.name)}
                           className="p-1 hover:text-rose-400 text-rose-400"
-                          title="Delete Category"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1307,32 +1399,30 @@ export default function LuxuryGoldAdminPanel() {
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-black text-[#FCF6BA] text-sm uppercase tracking-wider font-mono flex items-center gap-2">
+                  <h3 className="font-black text-white text-sm uppercase tracking-wider font-mono flex items-center gap-2">
                     <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" />
-                    Dishes in {selectedCatId === 'all' ? 'All Categories' : (categories.find(c => c.id === selectedCatId)?.name_en || categories.find(c => c.id === selectedCatId)?.name)} ({filteredMenuItems.length})
+                    Dishes in {selectedCatId === 'all' ? 'All Categories' : (categories.find(c => c.id === selectedCatId)?.name_en || 'Category')} ({filteredMenuItems.length})
                   </h3>
 
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.94 }}
                     onClick={() => openAddItemModal(selectedCatId === 'all' ? undefined : selectedCatId)}
-                    className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
+                    className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" /> Add Menu Item
-                  </button>
+                  </motion.button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredMenuItems.map(item => (
-                    <div 
-                      key={item.id} 
-                      className="p-4 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-between shadow-md gap-3"
-                    >
+                    <div key={item.id} className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between shadow-md gap-3 backdrop-blur-2xl">
                       <div className="flex items-center gap-3 overflow-hidden">
                         {item.image_url ? (
-                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-[#D4AF37]/50 shrink-0 bg-neutral-900">
+                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-neutral-900">
                             <img src={item.image_url} alt={item.name_en} className="w-full h-full object-cover" />
                           </div>
                         ) : (
-                          <div className="w-14 h-14 rounded-xl border border-[#D4AF37]/30 shrink-0 bg-neutral-950 flex items-center justify-center text-neutral-600">
+                          <div className="w-14 h-14 rounded-xl border border-white/5 shrink-0 bg-neutral-950 flex items-center justify-center text-neutral-600">
                             <ImgIcon className="w-6 h-6" />
                           </div>
                         )}
@@ -1340,7 +1430,7 @@ export default function LuxuryGoldAdminPanel() {
                         <div className="truncate">
                           <div className="flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                            <h4 className="font-bold text-[#FCF6BA] text-sm truncate">{item.name_en || item.name}</h4>
+                            <h4 className="font-bold text-white text-sm truncate">{item.name_en || item.name}</h4>
                           </div>
                           <span className="font-mono text-[#D4AF37] font-bold text-xs mt-1 block">₹{Number(item.price).toFixed(2)}</span>
                         </div>
@@ -1352,26 +1442,18 @@ export default function LuxuryGoldAdminPanel() {
                             await supabase.from('menu_items').update({ is_available: !item.is_available }).eq('id', item.id);
                             loadAdminData();
                           }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border-2 ${
-                            item.is_available ? 'bg-black text-[#FCF6BA] border-[#D4AF37]' : 'bg-black text-[#D4AF37]/50 border-[#D4AF37]/40'
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border ${
+                            item.is_available ? 'bg-white/[0.04] text-white border-white/[0.12]' : 'bg-white/[0.01] text-neutral-500 border-white/[0.06]'
                           }`}
                         >
                           {item.is_available ? 'In Stock' : 'Out'}
                         </button>
 
-                        <button 
-                          onClick={() => openEditItemModal(item)} 
-                          className="p-1.5 rounded-lg bg-black border-2 border-[#D4AF37] text-[#FCF6BA] hover:bg-[#D4AF37]/20"
-                          title="Edit Dish"
-                        >
+                        <button onClick={() => openEditItemModal(item)} className="p-1.5 rounded-lg border border-white/[0.1] text-neutral-300 hover:text-white">
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
-                        <button 
-                          onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} 
-                          className="p-1.5 rounded-lg bg-black border-2 border-rose-500 text-rose-300 hover:bg-rose-950/40"
-                          title="Delete Dish"
-                        >
+                        <button onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} className="p-1.5 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-950/40">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -1382,146 +1464,74 @@ export default function LuxuryGoldAdminPanel() {
             </motion.div>
           )}
 
-          {/* TAB 3: Add Combos CRUD */}
+          {/* TAB 3: Combos */}
           {activeTab === 'combos' && (
-            <motion.div
-              key="combos-tab"
-              variants={tabVariant}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-6"
-            >
+            <motion.div key="combos-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-black text-[#FCF6BA] text-sm uppercase tracking-wider font-mono flex items-center gap-2">
-                    <PackagePlus className="w-4 h-4 text-[#D4AF37]" />
-                    Royal Combo Offers ({combos.length})
+                  <h3 className="font-black text-white text-sm uppercase tracking-wider font-mono flex items-center gap-2">
+                    <PackagePlus className="w-4 h-4 text-[#D4AF37]" /> Royal Combo Offers ({combos.length})
                   </h3>
-                  <p className="text-xs text-[#D4AF37]/80 font-mono mt-0.5">
-                    Create meal deals with uploaded images and crossed original pricing.
-                  </p>
                 </div>
 
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.94 }}
                   onClick={openAddComboModal}
-                  className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
+                  className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" /> Add New Combo
-                </button>
+                </motion.button>
               </div>
 
-              {combos.length === 0 ? (
-                <div className="text-center py-16 text-[#D4AF37]/60 text-xs font-mono bg-black rounded-3xl border-[3px] border-[#D4AF37]">
-                  No combos created yet. Click "+ Add New Combo" to deploy your first package!
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {combos.map(combo => (
-                    <div 
-                      key={combo.id} 
-                      className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] flex flex-col justify-between shadow-md space-y-3"
-                    >
-                      <div>
-                        {combo.image_url && (
-                          <div className="h-32 rounded-2xl overflow-hidden border border-[#D4AF37]/40 mb-3 bg-neutral-900">
-                            <img src={combo.image_url} alt={combo.name} className="w-full h-full object-cover" />
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${combo.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                            <h4 className="font-bold text-[#FCF6BA] text-sm">{combo.name || combo.name_en}</h4>
-                          </div>
-                          <span className="text-[9px] uppercase font-mono font-black bg-[#D4AF37]/20 border border-[#D4AF37] text-[#FCF6BA] px-2 py-0.5 rounded-full">
-                            COMBO DEAL
-                          </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {combos.map(combo => (
+                  <div key={combo.id} className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] flex flex-col justify-between shadow-md space-y-3 backdrop-blur-2xl">
+                    <div>
+                      {combo.image_url && (
+                        <div className="h-32 rounded-2xl overflow-hidden border border-white/10 mb-3 bg-neutral-900">
+                          <img src={combo.image_url} alt={combo.name} className="w-full h-full object-cover" />
                         </div>
-
-                        {combo.description && (
-                          <p className="text-xs text-neutral-400 font-mono line-clamp-2">
-                            {combo.description || combo.description_en}
-                          </p>
-                        )}
-
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="font-mono text-[#D4AF37] font-black text-base">
-                            ₹{Number(combo.price).toFixed(2)}
-                          </span>
-                          {combo.original_price && Number(combo.original_price) > Number(combo.price) && (
-                            <span className="font-mono text-neutral-500 line-through text-xs">
-                              ₹{Number(combo.original_price).toFixed(2)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#D4AF37]/25">
-                        <button
-                          onClick={async () => {
-                            await supabase.from('combos').update({ is_available: !combo.is_available }).eq('id', combo.id);
-                            loadAdminData();
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border-2 ${
-                            combo.is_available ? 'bg-black text-[#FCF6BA] border-[#D4AF37]' : 'bg-black text-[#D4AF37]/50 border-[#D4AF37]/40'
-                          }`}
-                        >
-                          {combo.is_available ? 'In Stock' : 'Out'}
-                        </button>
-
-                        <button 
-                          onClick={() => openEditComboModal(combo)} 
-                          className="p-1.5 rounded-lg bg-black border-2 border-[#D4AF37] text-[#FCF6BA] hover:bg-[#D4AF37]/20"
-                          title="Edit Combo"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button 
-                          onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} 
-                          className="p-1.5 rounded-lg bg-black border-2 border-rose-500 text-rose-300 hover:bg-rose-950/40"
-                          title="Delete Combo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      )}
+                      <h4 className="font-bold text-white text-sm">{combo.name || combo.name_en}</h4>
+                      <span className="font-mono text-[#D4AF37] font-black text-base mt-1 block">₹{Number(combo.price).toFixed(2)}</span>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+                      <button onClick={() => openEditComboModal(combo)} className="p-1.5 rounded-lg border border-white/[0.1] text-neutral-300">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} className="p-1.5 rounded-lg border border-rose-500/40 text-rose-300">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </motion.div>
           )}
 
-          {/* TAB 4: Promo Edits */}
+          {/* TAB 4: Promo Banners */}
           {activeTab === 'banners' && (
-            <motion.div
-              key="banners-tab"
-              variants={tabVariant}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-            >
-              <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] space-y-3 shadow-lg">
-                <h3 className="font-bold text-[#FCF6BA] text-sm flex items-center gap-2">
+            <motion.div key="banners-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl space-y-3">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <Plus className="w-4 h-4 text-[#D4AF37]" /> {editingBanner ? 'Edit Promo Banner' : 'Create Promo Banner'}
                 </h3>
                 <form onSubmit={handleSaveBanner} className="space-y-3 text-xs">
                   <div>
-                    <label className="text-[#F3E5AB] block mb-1">Banner Title</label>
+                    <label className="text-neutral-400 block mb-1">Banner Title</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Royal Chef Weekend Special"
+                      placeholder="e.g. Royal Chef Special"
                       value={newBannerTitle}
                       onChange={(e) => setNewBannerTitle(e.target.value)}
-                      className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3 py-2 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                      className="w-full bg-white/[0.03] border border-white/[0.1] rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]/50"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[#F3E5AB] block mb-1">Upload from PC (Local File)</label>
+                    <label className="text-neutral-400 block mb-1">Upload from PC</label>
                     <input 
                       type="file" 
                       accept="image/*"
@@ -1535,67 +1545,29 @@ export default function LuxuryGoldAdminPanel() {
                     <button
                       type="button"
                       onClick={() => bannerFileRef.current?.click()}
-                      className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#D4AF37] bg-black text-[#FCF6BA] hover:bg-[#D4AF37]/15 flex items-center justify-center gap-2 font-mono text-xs cursor-pointer"
+                      className="w-full py-2.5 rounded-xl border border-dashed border-white/20 bg-white/[0.02] text-white hover:border-[#D4AF37]/40 flex items-center justify-center gap-2 font-mono text-xs cursor-pointer"
                     >
                       <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
-                      <span>{newBannerImageUrl ? 'Change Selected PC Image' : 'Choose Image From PC'}</span>
+                      <span>{newBannerImageUrl ? 'Change PC Image' : 'Choose PC Image'}</span>
                     </button>
                   </div>
 
-                  <div>
-                    <label className="text-[#F3E5AB] block mb-1">Or Paste Image URL</label>
-                    <input
-                      type="text"
-                      placeholder="https://images.unsplash.com/... or data:image"
-                      value={newBannerImageUrl}
-                      onChange={(e) => setNewBannerImageUrl(e.target.value)}
-                      className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3 py-2 text-[#FCF6BA] outline-none focus:border-[#FCF6BA] text-[11px]"
-                    />
-                  </div>
-
-                  {newBannerImageUrl && (
-                    <div className="h-28 rounded-xl overflow-hidden border-2 border-[#D4AF37] relative">
-                      <img src={newBannerImageUrl} alt="Preview" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-2.5 bg-[#D4AF37] text-black font-black uppercase rounded-xl shadow-md cursor-pointer"
-                  >
-                    {editingBanner ? 'Update Banner' : 'Deploy Banner to Customers'}
+                  <button type="submit" disabled={loading} className="w-full py-2.5 bg-[#D4AF37] text-black font-black uppercase rounded-xl shadow-md cursor-pointer">
+                    {editingBanner ? 'Update Banner' : 'Deploy Banner'}
                   </button>
                 </form>
               </div>
 
               <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {banners.map(b => (
-                  <div 
-                    key={b.id} 
-                    className="rounded-2xl bg-black border-[3px] border-[#D4AF37] overflow-hidden p-3 flex flex-col justify-between shadow-md"
-                  >
-                    <div className="h-28 rounded-xl overflow-hidden mb-2 bg-black border-2 border-[#D4AF37]">
+                  <div key={b.id} className="rounded-2xl bg-white/[0.02] border border-white/[0.08] overflow-hidden p-3 flex flex-col justify-between backdrop-blur-2xl">
+                    <div className="h-28 rounded-xl overflow-hidden mb-2 bg-neutral-950">
                       <img src={b.image_url} alt={b.title} className="w-full h-full object-cover" />
                     </div>
-                    <h4 className="font-bold text-[#FCF6BA] text-xs mb-2">{b.title}</h4>
+                    <h4 className="font-bold text-white text-xs mb-2">{b.title}</h4>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingBanner(b);
-                          setNewBannerTitle(b.title);
-                          setNewBannerImageUrl(b.image_url);
-                        }}
-                        className="flex-1 py-1.5 bg-black border-[3px] border-[#D4AF37] text-[#FCF6BA] text-xs rounded-lg font-semibold hover:bg-[#D4AF37]/20"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBanner(b.id)}
-                        className="p-1.5 bg-black border-[3px] border-rose-500 text-rose-300 rounded-lg transition hover:bg-rose-950/40"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <button onClick={() => { setEditingBanner(b); setNewBannerTitle(b.title); setNewBannerImageUrl(b.image_url); }} className="flex-1 py-1.5 border border-white/10 text-white text-xs rounded-lg">Edit</button>
+                      <button onClick={() => handleDeleteBanner(b.id)} className="p-1.5 border border-rose-500/40 text-rose-300 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 ))}
@@ -1603,77 +1575,39 @@ export default function LuxuryGoldAdminPanel() {
             </motion.div>
           )}
 
-          {/* TAB 5: Today's Most Ordered Items */}
+          {/* TAB 5: Insights */}
           {activeTab === 'insights' && (
-            <motion.div
-              key="insights-tab"
-              variants={tabVariant}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-6"
-            >
+            <motion.div key="insights-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                    <h4 className="font-black text-[#FCF6BA] text-sm uppercase tracking-wider flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-[#D4AF37]" />
-                      Today's Most Ordered Items ({isFilterAllDates ? 'All-Time' : selectedDate})
-                    </h4>
-                    <span className="text-[10px] font-mono text-[#D4AF37] font-bold">
-                      {todayTopSellers.length} Ranked
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto custom-gold-scrollbar pr-1">
-                    {todayTopSellers.length === 0 ? (
-                      <div className="text-center py-10 text-neutral-500 font-mono text-xs">
-                        No dishes ordered yet today. Orders will rank here live!
-                      </div>
-                    ) : (
-                      todayTopSellers.map((item, idx) => (
-                        <div 
-                          key={item.id} 
-                          className="p-3.5 rounded-2xl bg-black border-2 border-[#D4AF37] flex justify-between items-center"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 rounded-lg bg-[#D4AF37] text-black font-mono font-black text-xs flex items-center justify-center">
-                              #{idx + 1}
-                            </span>
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className={`w-2 h-2 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                                <h5 className="font-bold text-[#FCF6BA] text-xs">{item.name}</h5>
-                              </div>
-                              <span className="text-[11px] font-mono text-[#D4AF37] font-bold">₹{item.price.toFixed(2)} each</span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-mono font-black text-[#FCF6BA] text-xs block">{item.quantity} Ordered</span>
-                            <span className="text-[11px] font-mono text-emerald-400 font-bold">₹{item.revenue.toFixed(2)}</span>
-                          </div>
+                <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl space-y-4">
+                  <h4 className="font-black text-white text-sm uppercase flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-[#D4AF37]" /> Most Ordered Items Today
+                  </h4>
+                  <div className="space-y-2 max-h-[460px] overflow-y-auto custom-gold-scrollbar">
+                    {todayTopSellers.map((item, idx) => (
+                      <div key={item.id} className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex justify-between items-center">
+                        <div>
+                          <h5 className="font-bold text-white text-xs">#{idx + 1} {item.name}</h5>
+                          <span className="text-[11px] font-mono text-[#D4AF37]">₹{item.price.toFixed(2)}</span>
                         </div>
-                      ))
-                    )}
+                        <div className="text-right font-mono">
+                          <span className="text-white text-xs font-bold block">{item.quantity} Ordered</span>
+                          <span className="text-emerald-400 text-xs font-bold">₹{item.revenue.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                    <h4 className="font-black text-[#F3E5AB] text-sm uppercase tracking-wider flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-[#D4AF37]" />
-                      Zero Demand Today (Untouched Items)
-                    </h4>
-                    <span className="text-[10px] font-mono text-neutral-400 font-bold">
-                      {todayZeroOrders.length} Dishes
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 max-h-[460px] overflow-y-auto custom-gold-scrollbar pr-1">
+                <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl space-y-4">
+                  <h4 className="font-black text-neutral-300 text-sm uppercase flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-[#D4AF37]" /> Zero Demand Items Today
+                  </h4>
+                  <div className="space-y-2 max-h-[460px] overflow-y-auto custom-gold-scrollbar">
                     {todayZeroOrders.map((item) => (
-                      <div key={item.id} className="p-3 rounded-2xl bg-black border-2 border-[#D4AF37]/40 flex justify-between text-xs">
-                        <span className="text-[#F3E5AB]/80">{item.name}</span>
-                        <span className="font-mono text-[#D4AF37]">₹{item.price.toFixed(2)}</span>
+                      <div key={item.id} className="p-3 rounded-2xl bg-white/[0.01] border border-white/[0.04] flex justify-between text-xs text-neutral-400 font-mono">
+                        <span>{item.name}</span>
+                        <span>₹{item.price.toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -1682,146 +1616,102 @@ export default function LuxuryGoldAdminPanel() {
             </motion.div>
           )}
 
-          {/* TAB 6: Order History */}
+          {/* TAB 6: Order History with 80mm Print */}
           {activeTab === 'history' && (
-            <motion.div
-              key="history-tab"
-              variants={tabVariant}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-4"
-            >
-              <div className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <motion.div key="history-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="space-y-4">
+              <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
                 <div>
-                  <h3 className="font-black text-[#FCF6BA] text-base flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-[#D4AF37]" />
-                    Customer Dining History ({isFilterAllDates ? 'All History' : selectedDate})
+                  <h3 className="font-black text-white text-base flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> Customer Dining Ledger
                   </h3>
-                  <p className="text-xs text-[#D4AF37] font-mono mt-1">
-                    Customer name, mobile number, ordered items, mystery discounts, and net settlements.
+                  <p className="text-xs text-neutral-400 font-mono mt-0.5">
+                    Receipt print slips, settled bills, and guest details.
                   </p>
                 </div>
-
                 <div className="text-right">
-                  <span className="text-[10px] uppercase font-bold text-[#D4AF37] block">Total Receipts Billed</span>
-                  <span className="font-mono text-base font-black text-[#FCF6BA]">
+                  <span className="font-mono text-base font-black text-[#D4AF37]">
                     {filteredSessions.length} Receipts • ₹{filteredRevenue.toFixed(2)} Net
                   </span>
                 </div>
               </div>
 
-              {filteredSessions.length === 0 ? (
-                <div className="text-center py-16 text-[#D4AF37]/60 text-xs font-mono bg-black rounded-3xl border-[3px] border-[#D4AF37]">
-                  No customer receipts found for this date. Select another date from the Gold Calendar!
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredSessions.map(session => {
-                    const items = getSessionOrderedItems(session.id);
-                    const discount = Number(session.discount_amount || session.discount || 0);
-                    const gross = Number(session.total_amount || 0);
-                    const netPaid = Math.max(0, gross - discount);
-                    const itemsSubtotal = items.reduce((sum, it) => sum + (it.quantity * it.price), 0);
-                    const isPaid = session.payment_status === 'paid' || session.status === 'completed';
-                    const matchingTable = tables.find(t => t.table_number === session.table_number);
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredSessions.map(session => {
+                  const items = getSessionOrderedItems(session.id);
+                  const discount = Number(session.discount_amount || session.discount || 0);
+                  const gross = Number(session.total_amount || 0);
+                  const netPaid = Math.max(0, gross - discount);
+                  const isPaid = session.payment_status === 'paid' || session.status === 'completed';
+                  const matchingTable = tables.find(t => t.table_number === session.table_number);
 
-                    return (
-                      <div 
-                        key={session.id} 
-                        className="p-5 rounded-3xl bg-black border-[3px] border-[#D4AF37] space-y-3.5 shadow-md"
-                      >
-                        <div className="flex justify-between border-b-2 border-[#D4AF37]/30 pb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="bg-[#D4AF37] text-black font-black text-xs px-2.5 py-0.5 rounded-lg">
-                              {matchingTable?.table_name || `Table #${session.table_number}`}
-                            </span>
-                            <button
-                              onClick={() => handleTogglePaymentStatus(session.id, session.payment_status)}
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase font-mono border-2 ${
-                                isPaid ? 'bg-black text-emerald-300 border-emerald-500' : 'bg-black text-rose-300 border-rose-500'
-                              }`}
-                            >
-                              {isPaid ? 'PAID' : 'NOT PAID'}
-                            </button>
-                          </div>
-                          <span className="text-[11px] font-mono text-[#D4AF37] font-bold">
-                            {formatDateTime(session.created_at)}
+                  return (
+                    <div key={session.id} className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl space-y-3.5 shadow-md">
+                      <div className="flex justify-between border-b border-white/[0.06] pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-[#D4AF37] text-black font-black text-xs px-2.5 py-0.5 rounded-lg">
+                            {matchingTable?.table_name || `Table #${session.table_number}`}
                           </span>
+                          <button
+                            onClick={() => handleTogglePaymentStatus(session.id, session.payment_status)}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase font-mono border ${
+                              isPaid ? 'border-emerald-500/50 text-emerald-300' : 'border-rose-500/50 text-rose-300'
+                            }`}
+                          >
+                            {isPaid ? 'PAID' : 'NOT PAID'}
+                          </button>
                         </div>
 
-                        <div className="flex justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <User className="w-3.5 h-3.5 text-[#D4AF37]" />
-                            <span className="font-bold text-[#FCF6BA]">{session.customer_name || 'Walk-in Guest'}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-mono text-[#D4AF37]">
-                            <Phone className="w-3.5 h-3.5 text-[#D4AF37]" />
-                            <span>{session.customer_phone || 'No Phone'}</span>
-                          </div>
-                        </div>
-
-                        <div className="p-3 rounded-2xl bg-black border-2 border-[#D4AF37]/50 space-y-1 text-xs font-mono">
-                          <span className="text-[10px] uppercase font-bold text-[#D4AF37] flex items-center gap-1 mb-1">
-                            <ShoppingBag className="w-3 h-3 text-[#D4AF37]" /> Ordered Items ({items.length})
-                          </span>
-                          {items.length === 0 ? (
-                            <div className="text-[11px] text-neutral-500 italic">No items recorded.</div>
-                          ) : (
-                            items.map((it, idx) => (
-                              <div key={idx} className="flex justify-between text-[#F3E5AB]">
-                                <span>{it.quantity}x {it.name}</span>
-                                <span>₹{(it.quantity * it.price).toFixed(2)}</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-
-                        <div className="pt-2 border-t-2 border-dashed border-[#D4AF37]/30 space-y-1 text-xs font-mono">
-                          {discount > 0 && (
-                            <>
-                              <div className="flex justify-between text-[#D4AF37]">
-                                <span>Items Gross Total:</span>
-                                <span>₹{itemsSubtotal > 0 ? itemsSubtotal.toFixed(2) : gross.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-emerald-400 font-bold">
-                                <span>Mystery PIN Discount:</span>
-                                <span>- ₹{discount.toFixed(2)}</span>
-                              </div>
-                            </>
-                          )}
-                          <div className="flex justify-between items-center text-[#F3E5AB] font-black text-sm pt-1">
-                            <span>Net Total Settled:</span>
-                            <span className="text-base text-[#FCF6BA]">₹{netPaid.toFixed(2)}</span>
-                          </div>
-                        </div>
+                        {/* 80mm Print Action */}
+                        <motion.button
+                          whileTap={{ scale: 0.92 }}
+                          onClick={() => printThermalSlip(session)}
+                          className="px-2.5 py-1 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/50 text-white font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Printer className="w-3 h-3 text-[#D4AF37]" />
+                          <span>80mm Slip</span>
+                        </motion.button>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+
+                      <div className="flex justify-between text-xs text-neutral-300">
+                        <span>Guest: <strong className="text-white">{session.customer_name || 'Walk-in'}</strong></span>
+                        <span className="font-mono text-neutral-400">{session.customer_phone || '-'}</span>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] space-y-1 text-xs font-mono">
+                        {items.map((it, idx) => (
+                          <div key={idx} className="flex justify-between text-neutral-300">
+                            <span>{it.quantity}x {it.name}</span>
+                            <span>₹{(it.quantity * it.price).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="pt-2 border-t border-white/[0.06] flex justify-between items-center text-xs font-mono">
+                        <span className="text-neutral-400">Net Settled:</span>
+                        <span className="text-base font-black text-[#D4AF37]">₹{netPaid.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      {/* Modal 1: Add Table with Dedicated Name */}
+      {/* Modal 1: Add Table */}
       <AnimatePresence>
         {showAddTableModal && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                <h3 className="font-black text-[#FCF6BA] text-base flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-[#D4AF37]" /> Add New Dining Table
-                </h3>
-                <button onClick={() => setShowAddTableModal(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/[0.12] rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">Add New Dining Table</h3>
+                <button onClick={() => setShowAddTableModal(false)} className="text-neutral-400"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleAddTable} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Table Number *</label>
+                  <label className="text-neutral-300 block mb-1">Table Number *</label>
                   <input
                     type="number"
                     required
@@ -1829,45 +1719,22 @@ export default function LuxuryGoldAdminPanel() {
                     placeholder="e.g. 11"
                     value={newTableNumber}
                     onChange={(e) => setNewTableNumber(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] font-mono outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white font-mono outline-none focus:border-[#D4AF37]/50"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">
-                    Dedicated Table Name / Custom Slug
-                  </label>
+                  <label className="text-neutral-300 block mb-1">Dedicated Table Name</label>
                   <input
                     type="text"
-                    placeholder="e.g. VIP-Royal-1 or Garden-Booth-4"
+                    placeholder="e.g. VIP-Royal-1"
                     value={newTableName}
                     onChange={(e) => setNewTableName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37]/50"
                   />
-                  <span className="text-[10px] text-[#D4AF37]/75 font-mono mt-1 block">
-                    Khali unchithe automatic ga "Table-#Number" create avthundi.
-                  </span>
                 </div>
 
-                <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Capacity</label>
-                  <select
-                    value={newTableCapacity}
-                    onChange={(e) => setNewTableCapacity(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none"
-                  >
-                    <option value="2">2 Persons</option>
-                    <option value="4">4 Persons (Standard)</option>
-                    <option value="6">6 Persons (Family)</option>
-                    <option value="8">8 Persons (Party)</option>
-                  </select>
-                </div>
-
-                <button
-                  disabled={loading}
-                  type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer"
-                >
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs">
                   Deploy Table
                 </button>
               </form>
@@ -1876,92 +1743,61 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </AnimatePresence>
 
-      {/* Modal 1.1: Edit Dedicated Table Name Inline */}
+      {/* Modal 1.1: Edit Table Name */}
       <AnimatePresence>
         {showEditTableNameModal && editingTableObj && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                <h3 className="font-black text-[#FCF6BA] text-sm flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-[#D4AF37]" /> Edit Name for Table #{editingTableObj.table_number}
-                </h3>
-                <button onClick={() => setShowEditTableNameModal(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/[0.12] rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-sm">Edit Table #{editingTableObj.table_number}</h3>
+                <button onClick={() => setShowEditTableNameModal(false)} className="text-neutral-400"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleUpdateTableName} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">
-                    Dedicated Custom Table Name *
-                  </label>
+                  <label className="text-neutral-300 block mb-1">Dedicated Custom Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Royal-Sultana-1"
                     value={tempCustomTableName}
                     onChange={(e) => setTempCustomTableName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA] font-bold"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white font-bold outline-none focus:border-[#D4AF37]/50"
                   />
-                  <span className="text-[10px] text-[#D4AF37]/80 font-mono mt-1 block">
-                    Ee name direct ga customer table website banner meedha appear avthundi.
-                  </span>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowEditTableNameModal(false)}
-                    className="flex-1 py-2.5 rounded-xl bg-black border-2 border-[#D4AF37]/40 text-[#F3E5AB]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    disabled={loading}
-                    type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md"
-                  >
-                    Update Name
-                  </button>
-                </div>
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs">
+                  Update Name
+                </button>
               </form>
             </div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Modal 2: Category (Add & Edit) */}
+      {/* Modal 2: Category */}
       <AnimatePresence>
         {showCategoryModal && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                <h3 className="font-black text-[#FCF6BA] text-base flex items-center gap-2">
-                  <FolderPlus className="w-4 h-4 text-[#D4AF37]" /> {editingCategory ? 'Edit Category' : 'Add New Category'}
-                </h3>
-                <button onClick={() => setShowCategoryModal(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/[0.12] rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">{editingCategory ? 'Edit Category' : 'Add Category'}</h3>
+                <button onClick={() => setShowCategoryModal(false)} className="text-neutral-400"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleSaveCategory} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Category Name *</label>
+                  <label className="text-neutral-300 block mb-1">Category Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Dry Fruit Juices, Thick Shakes"
+                    placeholder="e.g. Dry Fruit Juices"
                     value={categoryName}
                     onChange={(e) => setCategoryName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] font-bold outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white font-bold outline-none focus:border-[#D4AF37]/50"
                   />
                 </div>
 
-                <button
-                  disabled={loading}
-                  type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md"
-                >
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md">
                   {editingCategory ? 'Update Category' : 'Save Category'}
                 </button>
               </form>
@@ -1970,54 +1806,48 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </AnimatePresence>
 
-      {/* Modal 3: Menu Item (With PC Image Upload) */}
+      {/* Modal 3: Menu Item */}
       <AnimatePresence>
         {showItemModal && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar">
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                <h3 className="font-black text-[#FCF6BA] text-base flex items-center gap-2">
-                  <UtensilsCrossed className="w-4 h-4 text-[#D4AF37]" /> {editingItem ? 'Edit Dish Details' : 'Add New Menu Item'}
-                </h3>
-                <button onClick={() => setShowItemModal(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-[#0d0d0f] border border-white/[0.12] rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">{editingItem ? 'Edit Dish' : 'Add Menu Item'}</h3>
+                <button onClick={() => setShowItemModal(false)} className="text-neutral-400"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleSaveItem} className="space-y-3 text-xs">
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Dish Name *</label>
+                  <label className="text-neutral-300 block mb-1">Dish Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Royal Anjeer & Badam Thickshake"
                     value={itemName}
                     onChange={(e) => setItemName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37]/50"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[#F3E5AB] font-bold block mb-1">Price (₹) *</label>
+                    <label className="text-neutral-300 block mb-1">Price (₹) *</label>
                     <input
                       type="number"
                       required
                       min="1"
                       step="0.01"
-                      placeholder="e.g. 180"
                       value={itemPrice}
                       onChange={(e) => setItemPrice(e.target.value)}
-                      className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] font-mono outline-none focus:border-[#FCF6BA]"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white font-mono outline-none focus:border-[#D4AF37]/50"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[#F3E5AB] font-bold block mb-1">Food Type</label>
+                    <label className="text-neutral-300 block mb-1">Food Type</label>
                     <select
                       value={itemFoodType}
                       onChange={(e) => setItemFoodType(e.target.value as any)}
-                      className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none"
+                      className="w-full bg-[#141416] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none"
                     >
                       <option value="veg">Veg</option>
                       <option value="non_veg">Non-Veg</option>
@@ -2026,7 +1856,7 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
 
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Dish Image (From PC)</label>
+                  <label className="text-neutral-300 block mb-1">Upload Image from PC</label>
                   <input 
                     type="file" 
                     accept="image/*"
@@ -2037,74 +1867,41 @@ export default function LuxuryGoldAdminPanel() {
                     }}
                     className="hidden"
                   />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => itemFileRef.current?.click()}
-                      className="flex-1 py-2.5 rounded-xl border-2 border-dashed border-[#D4AF37] bg-black text-[#FCF6BA] hover:bg-[#D4AF37]/15 flex items-center justify-center gap-2 font-mono text-xs cursor-pointer"
-                    >
-                      <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
-                      <span>{itemImageUrl ? 'Change PC Image' : 'Select Image From PC'}</span>
-                    </button>
-                    {itemImageUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setItemImageUrl('')}
-                        className="px-2 rounded-xl border border-rose-500/50 text-rose-400 text-xs"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => itemFileRef.current?.click()}
+                    className="w-full py-2.5 rounded-xl border border-dashed border-white/20 bg-white/[0.02] text-white hover:border-[#D4AF37]/40 flex items-center justify-center gap-2 font-mono text-xs cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
+                    <span>{itemImageUrl ? 'Change Selected PC Image' : 'Choose PC Image'}</span>
+                  </button>
                   {itemImageUrl && (
-                    <div className="h-20 w-24 rounded-xl overflow-hidden border-2 border-[#D4AF37] mt-2 relative">
+                    <div className="h-20 w-24 rounded-xl overflow-hidden border border-white/10 mt-2">
                       <img src={itemImageUrl} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">
-                    Select Category * ({categories.length} available)
-                  </label>
-                  <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar p-1.5 border-2 border-[#D4AF37]/50 rounded-xl">
-                    {categories.map((c) => {
-                      const isSelected = itemCategoryId === c.id;
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setItemCategoryId(c.id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition border ${
-                            isSelected
-                              ? 'bg-[#D4AF37] text-black border-transparent font-black shadow-sm'
-                              : 'bg-black text-[#FCF6BA] border-[#D4AF37]/40 hover:border-[#D4AF37]'
-                          }`}
-                        >
-                          {c.name_en || c.name}
-                        </button>
-                      );
-                    })}
+                  <label className="text-neutral-300 block mb-1">Category *</label>
+                  <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar p-1.5 border border-white/10 rounded-xl">
+                    {categories.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setItemCategoryId(c.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition border ${
+                          itemCategoryId === c.id ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/5'
+                        }`}
+                      >
+                        {c.name_en || c.name}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Description (Optional)</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Short ingredients or highlight..."
-                    value={itemDescription}
-                    onChange={(e) => setItemDescription(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
-                  />
-                </div>
-
-                <button
-                  disabled={loading}
-                  type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer mt-1"
-                >
-                  {editingItem ? 'Update Dish' : 'Publish Dish to Menu'}
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1">
+                  {editingItem ? 'Update Dish' : 'Publish Dish'}
                 </button>
               </form>
             </div>
@@ -2112,64 +1909,56 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </AnimatePresence>
 
-      {/* Modal 4: Add & Edit Combo */}
+      {/* Modal 4: Combo */}
       <AnimatePresence>
         {showComboModal && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar">
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                <h3 className="font-black text-[#FCF6BA] text-base flex items-center gap-2">
-                  <PackagePlus className="w-4 h-4 text-[#D4AF37]" /> {editingCombo ? 'Edit Royal Combo' : 'Create New Combo Deal'}
-                </h3>
-                <button onClick={() => setShowComboModal(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-[#0d0d0f] border border-white/[0.12] rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">{editingCombo ? 'Edit Combo' : 'New Combo'}</h3>
+                <button onClick={() => setShowComboModal(false)} className="text-neutral-400"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleSaveCombo} className="space-y-3 text-xs">
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Combo Name *</label>
+                  <label className="text-neutral-300 block mb-1">Combo Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Royal Dryfruit Feast + Shake"
                     value={comboName}
                     onChange={(e) => setComboName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37]/50"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[#F3E5AB] font-bold block mb-1">Offer Price (₹) *</label>
+                    <label className="text-neutral-300 block mb-1">Price (₹) *</label>
                     <input
                       type="number"
                       required
                       min="1"
                       step="0.01"
-                      placeholder="e.g. 299"
                       value={comboPrice}
                       onChange={(e) => setComboPrice(e.target.value)}
-                      className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] font-mono outline-none focus:border-[#FCF6BA]"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white font-mono outline-none focus:border-[#D4AF37]/50"
                     />
                   </div>
-
                   <div>
-                    <label className="text-[#F3E5AB] font-bold block mb-1">Original Price (₹)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      placeholder="e.g. 399 (Crossed)"
-                      value={comboOriginalPrice}
-                      onChange={(e) => setComboOriginalPrice(e.target.value)}
-                      className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] font-mono outline-none focus:border-[#FCF6BA]"
-                    />
+                    <label className="text-neutral-300 block mb-1">Food Type</label>
+                    <select
+                      value={comboFoodType}
+                      onChange={(e) => setComboFoodType(e.target.value as any)}
+                      className="w-full bg-[#141416] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none"
+                    >
+                      <option value="veg">Veg</option>
+                      <option value="non_veg">Non-Veg</option>
+                    </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Combo Image (From PC)</label>
+                  <label className="text-neutral-300 block mb-1">Upload Combo Image from PC</label>
                   <input 
                     type="file" 
                     accept="image/*"
@@ -2180,61 +1969,23 @@ export default function LuxuryGoldAdminPanel() {
                     }}
                     className="hidden"
                   />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => comboFileRef.current?.click()}
-                      className="flex-1 py-2.5 rounded-xl border-2 border-dashed border-[#D4AF37] bg-black text-[#FCF6BA] hover:bg-[#D4AF37]/15 flex items-center justify-center gap-2 font-mono text-xs cursor-pointer"
-                    >
-                      <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
-                      <span>{comboImageUrl ? 'Change Combo PC Image' : 'Select Combo Image From PC'}</span>
-                    </button>
-                    {comboImageUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setComboImageUrl('')}
-                        className="px-2 rounded-xl border border-rose-500/50 text-rose-400 text-xs"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => comboFileRef.current?.click()}
+                    className="w-full py-2.5 rounded-xl border border-dashed border-white/20 bg-white/[0.02] text-white hover:border-[#D4AF37]/40 flex items-center justify-center gap-2 font-mono text-xs cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
+                    <span>{comboImageUrl ? 'Change Combo Image' : 'Choose PC Image'}</span>
+                  </button>
                   {comboImageUrl && (
-                    <div className="h-20 w-24 rounded-xl overflow-hidden border-2 border-[#D4AF37] mt-2 relative">
+                    <div className="h-20 w-24 rounded-xl overflow-hidden border border-white/10 mt-2">
                       <img src={comboImageUrl} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Food Type</label>
-                  <select
-                    value={comboFoodType}
-                    onChange={(e) => setComboFoodType(e.target.value as any)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none"
-                  >
-                    <option value="veg">Veg Combo</option>
-                    <option value="non_veg">Non-Veg Combo</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1">Included Items Description</label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. 1x Badam Shake + 1x Anjeer Bowl + Dry Fruit Tart..."
-                    value={comboDescription}
-                    onChange={(e) => setComboDescription(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
-                  />
-                </div>
-
-                <button
-                  disabled={loading}
-                  type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer mt-1"
-                >
-                  {editingCombo ? 'Update Combo' : 'Publish Combo Deal'}
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1">
+                  {editingCombo ? 'Update Combo' : 'Publish Combo'}
                 </button>
               </form>
             </div>
@@ -2245,60 +1996,38 @@ export default function LuxuryGoldAdminPanel() {
       {/* Modal 5: Brand Settings */}
       <AnimatePresence>
         {isNameModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
-                <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-[#D4AF37]" />
-                  <h3 className="font-black text-[#FCF6BA] text-base">Edit Restaurant Name</h3>
-                </div>
-                <button onClick={() => setIsNameModalOpen(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-[#0d0d0f] border border-white/[0.12] rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">Edit Restaurant Name</h3>
+                <button onClick={() => setIsNameModalOpen(false)} className="text-neutral-400"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleSaveBrand} className="space-y-4 text-xs">
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1 uppercase font-mono text-[10px]">
-                    Restaurant Title *
-                  </label>
+                  <label className="text-neutral-400 block mb-1">Restaurant Title *</label>
                   <input
                     type="text"
                     required
                     value={tempBrandName}
                     onChange={(e) => setTempBrandName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] font-bold outline-none uppercase focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white font-bold outline-none uppercase focus:border-[#D4AF37]/50"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[#F3E5AB] font-bold block mb-1 uppercase font-mono text-[10px]">
-                    Sub-Tagline / Operations
-                  </label>
+                  <label className="text-neutral-400 block mb-1">Sub-Tagline</label>
                   <input
                     type="text"
                     value={tempTagline}
                     onChange={(e) => setTempTagline(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37]/50"
                   />
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsNameModalOpen(false)}
-                    className="flex-1 py-2.5 rounded-xl bg-black border-[3px] border-[#D4AF37]/50 text-[#F3E5AB] font-bold hover:bg-[#D4AF37]/20"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    disabled={loading}
-                    type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md"
-                  >
-                    Save & Publish
-                  </button>
-                </div>
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md">
+                  Save Brand
+                </button>
               </form>
             </div>
           </div>

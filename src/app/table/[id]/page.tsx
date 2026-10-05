@@ -6,45 +6,59 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, PromoBanner, CartItem, Language } from '@/types/restaurant';
-import { UI_TEXT, getLocalizedName } from '@/lib/translations';
 import { 
   Plus, 
   Minus, 
   CheckCircle2, 
   Clock, 
-  Calendar, 
   ShoppingBag, 
   X, 
   Receipt, 
   KeyRound, 
   Gift, 
-  Flame, 
-  Eye, 
   Sparkles, 
-  Utensils, 
   Phone, 
   User, 
-  Zap, 
   Tag, 
-  ChevronLeft, 
-  ChevronRight, 
   PackagePlus, 
   Image as ImgIcon, 
-  AlertTriangle 
+  AlertTriangle,
+  Users,
+  Search,
+  ChevronRight,
+  Flame,
+  ChevronLeft
 } from 'lucide-react';
 
-const fps60Spring = {
+// iOS-26 Spec Liquid Elastic Springs
+const liquidPillSpring = {
   type: 'spring',
-  stiffness: 320,
-  damping: 26,
-  mass: 0.8
+  stiffness: 430,
+  damping: 32,
+  mass: 0.55
 };
 
-const fps60ModalSpring = {
+const tapElasticSpring = {
   type: 'spring',
-  stiffness: 300,
+  stiffness: 450,
   damping: 24,
-  mass: 0.85
+  mass: 0.5
+};
+
+const drawerModalSpring = {
+  type: 'spring',
+  stiffness: 340,
+  damping: 28,
+  mass: 0.75
+};
+
+// Natural Mobile Haptic Tick
+const triggerHaptic = (ms = 12) => {
+  if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate(ms);
+    } catch (e) {}
+  }
 };
 
 export default function TableMenuPage() {
@@ -52,21 +66,19 @@ export default function TableMenuPage() {
   const router = useRouter();
   const rawTableParam = decodeURIComponent((params.id as string) || '');
 
-  // Resolved Table Identity
+  // Resolved Table Identity States
   const [realTableNumber, setRealTableNumber] = useState<number | null>(null);
   const [displayTableName, setDisplayTableName] = useState<string>('');
   const [tableResolved, setTableResolved] = useState<boolean>(false);
   const [tableNotFound, setTableNotFound] = useState<boolean>(false);
 
-  const [lang, setLang] = useState<Language>('en');
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   const [banners, setBanners] = useState<PromoBanner[]>([]);
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
-  const [formattedDate, setFormattedDate] = useState<string>('');
-  const [formattedTime, setFormattedTime] = useState<string>('');
-
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'combos' | null>(null);
   const [foodFilter, setFoodFilter] = useState<'all' | 'veg' | 'non_veg'>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -81,7 +93,10 @@ export default function TableMenuPage() {
   const [pinGameWon, setPinGameWon] = useState(false);
   const [pinAttempts, setPinAttempts] = useState(0);
 
-  // Session Past Ordered Items for Total Bill Modal
+  // Bill Splitter State
+  const [splitCount, setSplitCount] = useState<number>(2);
+
+  // Past Ordered Items for Total Bill Modal
   const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
   const [isTotalBillModalOpen, setIsTotalBillModalOpen] = useState(false);
 
@@ -91,19 +106,7 @@ export default function TableMenuPage() {
   const [pinFeedback, setPinFeedback] = useState<{ msg: string; success: boolean } | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
 
-  const [orderPlaced, setOrderPlaced] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setFormattedDate(now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }));
-      setFormattedTime(now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   // 1. EXACT TABLE NAME RESOLUTION & URL AUTO-REWRITE
   const resolveTableIdentity = async () => {
@@ -113,7 +116,6 @@ export default function TableMenuPage() {
       let matchedRecord = null;
 
       if (isNumeric) {
-        // Query by numeric table_number OR table_name matching string
         const { data } = await supabase
           .from('restaurant_tables')
           .select('*')
@@ -122,7 +124,6 @@ export default function TableMenuPage() {
           .maybeSingle();
         matchedRecord = data;
       } else {
-        // Query case-insensitive by custom table_name
         const { data } = await supabase
           .from('restaurant_tables')
           .select('*')
@@ -140,7 +141,6 @@ export default function TableMenuPage() {
         setDisplayTableName(customName);
         setTableResolved(true);
 
-        // Auto-rewrite URL to the custom table name if opened with numeric ID (e.g. /table/1 -> /table/krishna)
         if (isNumeric && customName && typeof window !== 'undefined') {
           window.history.replaceState(null, '', `/table/${encodeURIComponent(customName)}`);
         }
@@ -178,9 +178,7 @@ export default function TableMenuPage() {
         .select('*, menu_items(name_en, price)')
         .eq('session_id', sessionId)
         .neq('item_status', 'cancelled');
-      if (data) {
-        setSessionOrderedItems(data);
-      }
+      if (data) setSessionOrderedItems(data);
     } catch (err) {
       console.error('Session items error:', err);
     }
@@ -208,19 +206,15 @@ export default function TableMenuPage() {
       setCustomerPhone(session.customer_phone || '');
       fetchSessionItems(session.id);
     } else {
-      resetSessionLocally();
+      setActiveSessionId(null);
+      setActiveSessionTotal(0);
+      setDiscountAmount(0);
+      setPinGameWon(false);
+      setPinAttempts(0);
+      setCustomerName('');
+      setCustomerPhone('');
+      setSessionOrderedItems([]);
     }
-  };
-
-  const resetSessionLocally = () => {
-    setActiveSessionId(null);
-    setActiveSessionTotal(0);
-    setDiscountAmount(0);
-    setPinGameWon(false);
-    setPinAttempts(0);
-    setCustomerName('');
-    setCustomerPhone('');
-    setSessionOrderedItems([]);
   };
 
   const fetchMenuData = async () => {
@@ -230,15 +224,11 @@ export default function TableMenuPage() {
       setSelectedCategory((prev) => prev || cats[0].id);
     }
     const { data: items } = await supabase.from('menu_items').select('*').eq('is_available', true);
-    if (items) {
-      setMenuItems(items);
-    }
+    if (items) setMenuItems(items);
     const { data: cmbs } = await supabase.from('combos').select('*').eq('is_available', true);
-    if (cmbs) {
-      setCombos(cmbs);
-    }
-    const { data: promo } = await supabase.from('promo_banners').select('*').eq('is_active', true);
-    if (promo) setBanners(promo);
+    if (cmbs) setCombos(cmbs);
+    const { data: bns } = await supabase.from('promo_banners').select('*').eq('is_active', true);
+    if (bns) setBanners(bns);
   };
 
   useEffect(() => {
@@ -248,17 +238,12 @@ export default function TableMenuPage() {
     fetchMenuData();
 
     const channel = supabase
-      .channel(`table-${realTableNumber}-session-sync-${Date.now()}`)
+      .channel(`glass-style-sync-${realTableNumber}-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables', filter: `table_number=eq.${realTableNumber}` }, () => {
-        resolveTableIdentity();
-        syncSessionData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
         if (activeSessionId) fetchSessionItems(activeSessionId);
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
       .subscribe();
 
     return () => {
@@ -266,7 +251,17 @@ export default function TableMenuPage() {
     };
   }, [realTableNumber, tableResolved, activeSessionId]);
 
+  // Promo Banners Auto Rotator
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentBannerIndex(prev => (prev + 1) % banners.length);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [banners.length]);
+
   const addToCart = (item: any, isCombo = false) => {
+    triggerHaptic(18);
     setCart((prev) => {
       const existing = prev.find((ci) => ci.menuItem.id === item.id && ci.isCombo === isCombo);
       if (existing) {
@@ -277,6 +272,7 @@ export default function TableMenuPage() {
   };
 
   const removeFromCart = (itemId: number, isCombo = false) => {
+    triggerHaptic(14);
     setCart((prev) => {
       const existing = prev.find((ci) => ci.menuItem.id === itemId && ci.isCombo === isCombo);
       if (existing && existing.quantity > 1) {
@@ -296,16 +292,13 @@ export default function TableMenuPage() {
   const liveSessionBaseTotal = activeSessionTotal > 0 ? activeSessionTotal : orderedItemsComputedTotal;
   const runningGrandTotal = liveSessionBaseTotal + cartGrandTotal;
   const finalPayable = Math.max(0, runningGrandTotal - discountAmount);
+  const splitAmountPerPerson = splitCount > 0 ? (finalPayable / splitCount).toFixed(2) : finalPayable.toFixed(2);
 
   const handlePlaceOrder = async () => {
-    if (!realTableNumber) {
-      alert('Table number gurthimpu kaledhu. Please re-scan QR code.');
-      return;
-    }
-
+    triggerHaptic(30);
+    if (!realTableNumber) return alert('Invalid table. Please re-scan QR.');
     if (!activeSessionId && (customerName.trim().length < 2 || customerPhone.length !== 10)) {
-      alert('Dayachesi peru mariyu 10-ankela mobile number enter cheyandi.');
-      return;
+      return alert('Enter your Name and 10-digit mobile number.');
     }
 
     setLoading(true);
@@ -344,7 +337,6 @@ export default function TableMenuPage() {
         sessionId = newSession.id;
         setActiveSessionId(sessionId);
         setActiveSessionTotal(cartGrandTotal);
-
         await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', realTableNumber);
       } else {
         const subtotal = Math.round((newTotal / 1.05) * 100) / 100;
@@ -368,18 +360,18 @@ export default function TableMenuPage() {
 
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
-        .insert({ 
-          session_id: sessionId, 
-          table_number: realTableNumber, 
+        .insert({
+          session_id: sessionId,
+          table_number: realTableNumber,
           discount: discountAmount || 0,
-          status: 'pending_waiter' 
+          status: 'pending_waiter'
         })
         .select()
         .single();
 
       if (bErr) throw bErr;
 
-      const orderItemsPayload = cart.map((ci) => ({
+      const orderPayload = cart.map((ci) => ({
         batch_id: batch.id,
         session_id: sessionId,
         menu_item_id: ci.menuItem.id,
@@ -389,11 +381,10 @@ export default function TableMenuPage() {
         item_status: 'ordered',
       }));
 
-      await supabase.from('order_items').insert(orderItemsPayload);
+      await supabase.from('order_items').insert(orderPayload);
 
       setCart([]);
       setIsCartOpen(false);
-      setOrderPlaced(true);
       fetchSessionItems(sessionId);
     } catch (err: any) {
       alert('Order error: ' + err.message);
@@ -402,596 +393,493 @@ export default function TableMenuPage() {
     }
   };
 
+  // 2. SECURE SERVER-SIDE PIN VALIDATION VIA SUPABASE RPC
   const handleCrackPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (enteredPin.length !== 4) {
-      setPinFeedback({ msg: 'Please enter a 4-digit PIN.', success: false });
-      return;
-    }
-
-    if (pinAttempts >= 3) {
-      setPinFeedback({ msg: 'All 3 attempts used! Pay regular bill at counter.', success: false });
-      return;
-    }
+    triggerHaptic(20);
+    if (enteredPin.length !== 4) return setPinFeedback({ msg: 'Please enter a 4-digit PIN.', success: false });
+    if (pinAttempts >= 3) return setPinFeedback({ msg: 'All 3 attempts used! Pay regular bill.', success: false });
 
     setPinLoading(true);
     setPinFeedback(null);
-
     try {
-      const nextAttemptCount = pinAttempts + 1;
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('verify_and_crack_pin', {
+        p_pin: enteredPin.trim(),
+        p_table_number: realTableNumber || 0,
+        p_session_id: activeSessionId || null,
+        p_customer_name: customerName || 'Guest'
+      });
 
-      const { data: matchedSlot } = await supabase
-        .from('daily_pin_vault')
-        .select('*')
-        .eq('secret_pin', enteredPin.trim())
-        .eq('is_cracked', false)
-        .maybeSingle();
+      if (rpcErr) throw rpcErr;
+      const nextAttempts = pinAttempts + 1;
+      setPinAttempts(nextAttempts);
 
-      if (matchedSlot) {
-        const winDiscount = Number(matchedSlot.discount_amount) || 25;
-        const currentTotal = liveSessionBaseTotal + cartGrandTotal;
-        const updatedFinal = Math.max(0, currentTotal - winDiscount);
-
-        await supabase.from('daily_pin_vault').update({
-          is_cracked: true,
-          cracked_session_id: activeSessionId || null,
-          cracked_table_number: realTableNumber || 0,
-          cracked_by_name: customerName || 'Guest',
-          cracked_at: new Date().toISOString()
-        }).eq('slot_number', matchedSlot.slot_number);
-
-        if (activeSessionId) {
-          await supabase.from('table_sessions').update({
-            pin_attempts: nextAttemptCount,
-            pin_game_won: true,
-            discount_amount: winDiscount,
-            final_payable: updatedFinal
-          }).eq('id', activeSessionId);
-        }
-
-        setDiscountAmount(winDiscount);
+      if (rpcRes?.success) {
+        triggerHaptic(50);
+        setDiscountAmount(Number(rpcRes.discount));
         setPinGameWon(true);
-        setPinAttempts(nextAttemptCount);
-        setPinFeedback({ msg: `🎉 BINGO! Mystery PIN Cracked! You won ₹${winDiscount} Cash Discount!`, success: true });
+        setPinFeedback({ msg: `🎉 BINGO! You won ₹${rpcRes.discount} Cash Discount!`, success: true });
         setTimeout(() => setIsPinModalOpen(false), 2200);
       } else {
-        if (activeSessionId) {
-          await supabase.from('table_sessions').update({
-            pin_attempts: nextAttemptCount
-          }).eq('id', activeSessionId);
-        }
-
-        setPinAttempts(nextAttemptCount);
-        const remaining = 3 - nextAttemptCount;
-        setPinFeedback({
-          msg: remaining > 0 
-            ? `❌ Incorrect PIN. ${remaining} chance(s) left!`
-            : `❌ Wrong PIN. All 3 chances used!`,
-          success: false
-        });
+        triggerHaptic(30);
+        const rem = 3 - nextAttempts;
+        setPinFeedback({ msg: rem > 0 ? `❌ Wrong PIN. ${rem} try left!` : `❌ Wrong PIN. All tries used!`, success: false });
       }
       setEnteredPin('');
     } catch (err: any) {
-      setPinFeedback({ msg: 'Verification failed: ' + err.message, success: false });
+      setPinFeedback({ msg: 'Failed: ' + err.message, success: false });
     } finally {
       setPinLoading(false);
     }
   };
 
   const filteredMenuItems = menuItems.filter((item) => {
+    if (searchQuery.trim()) {
+      return item.name_en?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+             item.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    }
     if (selectedCategory === 'combos') return false;
-    if (item.category_id !== selectedCategory) return false;
-    if (foodFilter === 'all') return true;
     if (foodFilter === 'veg') return item.food_type === 'veg';
     if (foodFilter === 'non_veg') return item.food_type === 'non_veg';
-    return true;
+    return item.category_id === selectedCategory;
   });
 
-  const renderShakingCuriosityBanner = () => {
-    if (pinGameWon) {
-      return (
-        <div className="p-3.5 rounded-2xl bg-black border-[3px] border-emerald-500 flex items-center justify-between text-xs font-mono text-emerald-300 shadow-md">
-          <span className="flex items-center gap-2 font-bold">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> ₹{discountAmount} Instant Cash Discount Applied!
-          </span>
-          <span className="text-[10px] uppercase font-black bg-emerald-500/25 px-2.5 py-0.5 rounded-md border border-emerald-400">
-            UNLOCKED
-          </span>
-        </div>
-      );
-    }
-
-    if (pinAttempts >= 3) {
-      return null;
-    }
-
-    return (
-      <motion.div
-        animate={{
-          x: [0, -2, 2, -1, 1, 0],
-          rotate: [0, -0.6, 0.6, -0.4, 0.4, 0]
-        }}
-        transition={{
-          duration: 2.2,
-          repeat: Infinity,
-          repeatType: 'loop',
-          ease: 'easeInOut'
-        }}
-        whileHover={{ scale: 1.015 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={() => setIsPinModalOpen(true)}
-        className="relative overflow-hidden p-4 rounded-3xl cursor-pointer border-[3px] border-[#D4AF37] bg-black shadow-[0_0_30px_rgba(212,175,55,0.3)] transition-all"
-      >
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center text-[#FCF6BA] shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-              <Gift className="w-6 h-6 animate-bounce text-[#D4AF37]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black uppercase font-mono tracking-widest bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black px-2 py-0.5 rounded-full">
-                  INSTANT DISCOUNT
-                </span>
-                <span className="text-[10px] text-[#FCF6BA] font-mono font-bold">
-                  {3 - pinAttempts} Left
-                </span>
-              </div>
-              <h4 className="text-sm font-black text-white tracking-wide mt-1">
-                Crack 4-Digit Mystery PIN!
-              </h4>
-              <p className="text-[11px] text-[#F3E5AB]/80 font-mono">
-                Tap to unlock secret instant cashback on your bill!
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end">
-            <span className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black text-xs uppercase tracking-wider shadow-md">
-              PLAY ➔
-            </span>
-          </div>
-        </div>
-      </motion.div>
-    );
-  };
-
-  // Invalid Table Guard
   if (tableNotFound) {
     return (
-      <div className="min-h-screen bg-black text-[#FCF6BA] flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <div className="w-16 h-16 rounded-3xl border-[3px] border-rose-500 bg-rose-950/30 flex items-center justify-center text-rose-300">
-          <AlertTriangle className="w-8 h-8" />
-        </div>
-        <h2 className="text-xl font-black text-white uppercase font-mono tracking-wider">
-          Invalid Dining Table QR
-        </h2>
-        <p className="text-xs text-[#D4AF37]/80 font-mono max-w-xs">
-          Ee dedicated table name ("{rawTableParam}") database lo ledhu. Dayachesi table meedha unna fresh QR code ni re-scan cheyandi.
-        </p>
+      <div className="min-h-screen bg-[#050505] text-[#FCF6BA] flex flex-col items-center justify-center p-6 text-center">
+        <AlertTriangle className="w-12 h-12 text-[#D4AF37] mb-3" />
+        <h2 className="text-xl font-bold uppercase tracking-wider text-white">Table QR Invalid</h2>
+        <p className="text-xs text-neutral-400 mt-1">Please scan the physical table QR code again.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-[#FCF6BA] pb-36 font-sans selection:bg-[#D4AF37] selection:text-black antialiased">
-      {/* Header with DEDICATED NAME & TABLE NUMBER */}
-      <header className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b-[3px] border-[#D4AF37] px-4 py-3 shadow-[0_10px_35px_rgba(0,0,0,1)]">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
+    <div className="min-h-screen bg-[#050505] text-[#FCF6BA] pb-32 font-sans selection:bg-[#D4AF37] selection:text-black antialiased relative overflow-x-hidden">
+      
+      {/* Ambient iOS Background Glass Lights */}
+      <div className="fixed -top-24 left-1/2 -translate-x-1/2 w-80 h-80 bg-[radial-gradient(circle,rgba(212,175,55,0.08)_0%,transparent_70%)] blur-3xl pointer-events-none -z-10" />
+
+      {/* 1. TOP FROSTED GLASS HEADER */}
+      <header className="sticky top-0 z-40 bg-[#050505]/75 backdrop-blur-2xl px-5 pt-4 pb-3 border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <div className="max-w-md mx-auto flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black tracking-widest text-black uppercase bg-[#D4AF37] px-2.5 py-0.5 rounded-full">
-                FINE DINE
-              </span>
-              <h1 className="text-base font-extrabold text-white truncate max-w-[220px]">
-                {displayTableName || (realTableNumber ? `Table #${realTableNumber}` : 'Loading...')}
-                {realTableNumber && (
-                  <span className="text-xs text-[#D4AF37] font-mono font-bold ml-1.5 opacity-80">
-                    (Table #{realTableNumber})
-                  </span>
-                )}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] font-mono text-[#D4AF37] mt-1 font-bold">
-              <span>{formattedDate}</span> • <span>{formattedTime}</span>
-            </div>
+            <span className="text-[9px] tracking-[0.25em] font-mono uppercase text-[#D4AF37]/90 block font-bold">
+              ROYAL SEATING
+            </span>
+            <h1 className="text-base font-black text-white flex items-center gap-2 mt-0.5">
+              <span>{displayTableName || `Table #${realTableNumber || '...'}`}</span>
+              {realTableNumber && (
+                <span className="text-[10px] font-mono text-[#D4AF37] font-semibold bg-[#D4AF37]/10 px-2 py-0.5 rounded-full border border-[#D4AF37]/25 backdrop-blur-md">
+                  T-{realTableNumber}
+                </span>
+              )}
+            </h1>
           </div>
 
-          <div className="flex items-center gap-2">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.94 }}
-              transition={fps60Spring}
-              onClick={() => setIsTotalBillModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-black border-[3px] border-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.3)] cursor-pointer text-left"
-              title="Click to view ordered items and total bill breakdown"
-            >
-              <Receipt className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <div>
-                <span className="text-[8px] block uppercase font-mono text-[#D4AF37] font-bold">Total Bill</span>
-                <span className="text-xs font-mono font-black text-[#FCF6BA]">
-                  ₹{Math.max(0, liveSessionBaseTotal - discountAmount).toFixed(2)}
-                </span>
-              </div>
-            </motion.button>
-          </div>
+          {/* iOS Specular Glass Ledger Button */}
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            transition={tapElasticSpring}
+            onClick={() => {
+              triggerHaptic(15);
+              setIsTotalBillModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/[0.04] border border-white/[0.12] hover:border-[#D4AF37]/40 shadow-[0_8px_25px_rgba(0,0,0,0.4)] backdrop-blur-xl text-left transition"
+          >
+            <Receipt className="w-4 h-4 text-[#D4AF37]" />
+            <div>
+              <span className="text-[8px] block uppercase font-mono text-neutral-400 font-semibold">Ledger</span>
+              <span className="text-xs font-mono font-black text-[#FCF6BA]">
+                ₹{Math.max(0, liveSessionBaseTotal - discountAmount).toFixed(2)}
+              </span>
+            </div>
+          </motion.button>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="max-w-lg mx-auto p-4 space-y-4">
-        
-        {/* BORDERLESS SMOOTH-SHIFT CATEGORY SELECTION CAROUSEL */}
-        <div className="p-3.5 rounded-3xl bg-black border-[3px] border-[#D4AF37] shadow-xl space-y-2.5">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-mono font-black text-[#D4AF37] uppercase tracking-wider flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-[#D4AF37]" /> Menu Categories ({categories.length + (combos.length > 0 ? 1 : 0)})
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById('table-category-scroll');
-                  if (el) el.scrollBy({ left: -200, behavior: 'smooth' });
-                }}
-                className="p-1 rounded-lg text-[#D4AF37] hover:text-[#FCF6BA] hover:bg-[#D4AF37]/15 transition"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById('table-category-scroll');
-                  if (el) el.scrollBy({ left: 200, behavior: 'smooth' });
-                }}
-                className="p-1 rounded-lg text-[#D4AF37] hover:text-[#FCF6BA] hover:bg-[#D4AF37]/15 transition"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+      {/* 2. MAIN CONTAINER */}
+      <main className="max-w-md mx-auto px-5 pt-4 space-y-4">
 
-          <div 
-            id="table-category-scroll"
-            className="flex gap-1.5 overflow-x-auto custom-gold-scrollbar pb-2 pt-1 scroll-smooth select-none items-center"
+        {/* Liquid Glass Pill Search Bar */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-[#D4AF37]/80 absolute left-4 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search our handcrafted delights..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-3 text-xs outline-none border border-white/[0.08] focus:border-[#D4AF37]/50 backdrop-blur-xl transition shadow-inner font-sans"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* 2.1 PROMO BANNERS CAROUSEL (Clean Auto & Swipe Glass Strip) */}
+        {banners.length > 0 && (
+          <div className="relative rounded-[28px] overflow-hidden bg-white/[0.02] border border-white/[0.08] p-1.5 backdrop-blur-2xl shadow-xl">
+            <div className="relative h-36 w-full rounded-[22px] overflow-hidden bg-neutral-950">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={banners[currentBannerIndex]?.id || currentBannerIndex}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.02 }}
+                  transition={{ duration: 0.45, ease: 'easeOut' }}
+                  className="absolute inset-0"
+                >
+                  <img
+                    src={banners[currentBannerIndex]?.image_url}
+                    alt={banners[currentBannerIndex]?.title || 'Promo'}
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Subtle dark gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex items-end p-3.5">
+                    <span className="text-xs font-bold text-[#FCF6BA] drop-shadow-md line-clamp-1">
+                      {banners[currentBannerIndex]?.title}
+                    </span>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Micro Navigation Dots */}
+            {banners.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
+                {banners.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      setCurrentBannerIndex(idx);
+                    }}
+                    className={`h-1.5 rounded-full transition-all ${
+                      currentBannerIndex === idx
+                        ? 'w-5 bg-[#D4AF37]'
+                        : 'w-1.5 bg-white/20 hover:bg-white/40'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2.2 Mystery PIN Interactive Capsule */}
+        {!pinGameWon && pinAttempts < 3 && (
+          <motion.div
+            whileTap={{ scale: 0.96 }}
+            transition={tapElasticSpring}
+            onClick={() => {
+              triggerHaptic(15);
+              setIsPinModalOpen(true);
+            }}
+            className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.1] hover:border-[#D4AF37]/40 backdrop-blur-xl flex items-center justify-between shadow-lg cursor-pointer transition"
           >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] shadow-inner">
+                <Gift className="w-4 h-4 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[9px] font-black tracking-widest text-[#D4AF37] uppercase font-mono">
+                  SECRET DAILY VAULT
+                </span>
+                <h4 className="text-xs font-bold text-white">Crack 4-Digit Mystery PIN For Discount</h4>
+              </div>
+            </div>
+            <span className="text-xs text-[#D4AF37] font-black px-2">➔</span>
+          </motion.div>
+        )}
+
+        {/* 3. iOS-26 GLASS PILL NAVIGATION TABS (Liquid Sliding Pill) */}
+        <div className="space-y-2">
+          <div className="p-1 rounded-[22px] bg-white/[0.03] border border-white/[0.08] backdrop-blur-2xl flex gap-1.5 overflow-x-auto custom-gold-scrollbar select-none items-center scroll-smooth">
             {combos.length > 0 && (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                transition={fps60Spring}
-                onClick={() => setSelectedCategory('combos')}
-                className={`relative px-4 py-2 rounded-2xl text-xs font-black whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
-                  selectedCategory === 'combos' ? 'text-black' : 'text-[#FCF6BA]/75 hover:text-[#FCF6BA]'
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(15);
+                  setSelectedCategory('combos');
+                }}
+                className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  selectedCategory === 'combos' ? 'text-black font-black' : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 {selectedCategory === 'combos' && (
                   <motion.div
-                    layoutId="activeCategoryPill"
-                    className="absolute inset-0 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] rounded-2xl shadow-[0_2px_15px_rgba(212,175,55,0.4)]"
-                    transition={fps60Spring}
+                    layoutId="iosLiquidPill"
+                    className="absolute inset-0 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] rounded-2xl shadow-[0_2px_15px_rgba(212,175,55,0.4)]"
+                    transition={liquidPillSpring}
                   />
                 )}
                 <Sparkles className="w-3.5 h-3.5 relative z-10" />
-                <span className="relative z-10">Royal Combos ({combos.length})</span>
-              </motion.button>
+                <span className="relative z-10">Combos ({combos.length})</span>
+              </button>
             )}
 
             {categories.map((cat) => {
-              const isSelected = selectedCategory === cat.id;
+              const isSelected = selectedCategory === cat.id && selectedCategory !== 'combos';
               return (
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  transition={fps60Spring}
+                <button
+                  type="button"
                   key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition-colors ${
-                    isSelected ? 'text-black font-black' : 'text-[#FCF6BA]/75 hover:text-[#FCF6BA]'
+                  onClick={() => {
+                    triggerHaptic(15);
+                    setSelectedCategory(cat.id);
+                  }}
+                  className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    isSelected ? 'text-black font-black' : 'text-neutral-400 hover:text-white'
                   }`}
                 >
                   {isSelected && (
                     <motion.div
-                      layoutId="activeCategoryPill"
-                      className="absolute inset-0 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] rounded-2xl shadow-[0_2px_15px_rgba(212,175,55,0.4)]"
-                      transition={fps60Spring}
+                      layoutId="iosLiquidPill"
+                      className="absolute inset-0 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] rounded-2xl shadow-[0_2px_15px_rgba(212,175,55,0.4)]"
+                      transition={liquidPillSpring}
                     />
                   )}
                   <span className="relative z-10">{cat.name_en || cat.name}</span>
-                </motion.button>
+                </button>
               );
             })}
           </div>
+
+          {/* Sub Veg / Non-Veg Liquid Capsule Selector */}
+          {selectedCategory !== 'combos' && (
+            <div className="flex gap-1.5 text-[10px] font-mono">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'veg', label: 'Veg Only', dot: 'bg-emerald-400' },
+                { id: 'non_veg', label: 'Non-Veg', dot: 'bg-rose-400' }
+              ].map(f => {
+                const isActive = foodFilter === f.id;
+                return (
+                  <motion.button
+                    whileTap={{ scale: 0.93 }}
+                    key={f.id}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      setFoodFilter(f.id as any);
+                    }}
+                    className={`px-3 py-1 rounded-xl border backdrop-blur-md transition flex items-center gap-1.5 cursor-pointer ${
+                      isActive 
+                        ? 'bg-[#D4AF37]/20 border-[#D4AF37]/60 text-[#FCF6BA] font-bold' 
+                        : 'bg-white/[0.02] border-white/[0.06] text-neutral-400'
+                    }`}
+                  >
+                    {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`} />}
+                    <span>{f.label}</span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* COMBOS SPECIAL VIEW */}
-        {selectedCategory === 'combos' && (
-          <motion.div 
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={fps60Spring}
-            className="space-y-3"
-          >
-            <h3 className="font-black text-sm uppercase font-mono tracking-wider text-[#FCF6BA] flex items-center gap-1.5">
-              <PackagePlus className="w-4 h-4 text-[#D4AF37]" /> Special Combo Deals
-            </h3>
+        {/* 4. DISHES BENTO GRID WITH LIQUID BUTTON PRESS PHYSICS */}
+        {selectedCategory === 'combos' ? (
+          <div className="space-y-3.5">
             {combos.map((combo) => {
               const inCart = cart.find((ci) => ci.menuItem.id === combo.id && ci.isCombo);
               return (
-                <motion.div
-                  key={'combo-' + combo.id}
-                  whileHover={{ y: -2 }}
-                  transition={fps60Spring}
-                  className="p-4 rounded-3xl bg-black border-[3px] border-[#D4AF37] shadow-[0_8px_25px_rgba(0,0,0,0.8)] space-y-3"
-                >
+                <div key={'cmb-' + combo.id} className="bg-white/[0.03] border border-white/[0.08] rounded-[26px] overflow-hidden p-3 shadow-xl backdrop-blur-2xl space-y-2.5">
                   {combo.image_url && (
-                    <div className="h-36 rounded-2xl overflow-hidden border border-[#D4AF37]/40 relative bg-neutral-900">
+                    <div className="h-40 w-full rounded-2xl overflow-hidden relative bg-neutral-950">
                       <img src={combo.image_url} alt={combo.name} className="w-full h-full object-cover" />
-                      <span className="absolute top-2 right-2 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-[#D4AF37] text-black">
-                        COMBO DEAL
-                      </span>
                     </div>
                   )}
-
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between pt-0.5">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${combo.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                        <h4 className="font-bold text-white text-sm">{combo.name || combo.name_en}</h4>
-                      </div>
-                      {combo.description && (
-                        <p className="text-[11px] text-neutral-400 font-mono mt-0.5 line-clamp-2">
-                          {combo.description || combo.description_en}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="font-mono text-sm font-black text-[#D4AF37]">
-                          ₹{Number(combo.price).toFixed(2)}
-                        </span>
-                        {combo.original_price && Number(combo.original_price) > Number(combo.price) && (
-                          <span className="font-mono text-xs text-neutral-500 line-through">
-                            ₹{Number(combo.original_price).toFixed(2)}
-                          </span>
-                        )}
-                      </div>
+                      <h4 className="text-sm font-black text-white">{combo.name || combo.name_en}</h4>
+                      <span className="font-mono text-sm font-black text-[#D4AF37] block mt-0.5">₹{Number(combo.price).toFixed(2)}</span>
                     </div>
 
-                    <div>
-                      {inCart ? (
-                        <div className="flex items-center bg-black border-[3px] border-[#D4AF37] rounded-xl px-2 py-1 shadow-inner">
-                          <button onClick={() => removeFromCart(combo.id, true)} className="p-1 text-[#FCF6BA]">
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="font-mono font-bold text-xs text-white px-2">{inCart.quantity}</span>
-                          <button onClick={() => addToCart(combo, true)} className="p-1 text-[#FCF6BA]">
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <motion.button
-                          whileTap={{ scale: 0.93 }}
-                          transition={fps60Spring}
-                          onClick={() => addToCart(combo, true)}
-                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black text-xs font-black uppercase shadow-md cursor-pointer"
-                        >
-                          + Add Combo
-                        </motion.button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
-
-        {/* Regular Menu Items Cards */}
-        {selectedCategory !== 'combos' && (
-          <motion.div 
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={fps60Spring}
-            className="space-y-3"
-          >
-            {filteredMenuItems.map((item) => {
-              const inCart = cart.find((ci) => ci.menuItem.id === item.id && !ci.isCombo);
-              return (
-                <motion.div
-                  key={item.id}
-                  whileHover={{ y: -2 }}
-                  transition={fps60Spring}
-                  className="p-4 rounded-3xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-between gap-3 shadow-[0_8px_25px_rgba(0,0,0,0.8)]"
-                >
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    {item.image_url ? (
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden border border-[#D4AF37]/50 shrink-0 bg-neutral-900">
-                        <img src={item.image_url} alt={item.name_en} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="w-16 h-16 rounded-2xl border border-[#D4AF37]/30 shrink-0 bg-neutral-950 flex items-center justify-center text-neutral-600">
-                        <ImgIcon className="w-6 h-6" />
-                      </div>
-                    )}
-
-                    <div className="truncate">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                        <h4 className="font-bold text-white text-sm truncate">{item.name_en || item.name}</h4>
-                      </div>
-                      {item.description_en && (
-                        <p className="text-[11px] text-neutral-400 font-mono truncate max-w-[180px]">
-                          {item.description_en || item.description}
-                        </p>
-                      )}
-                      <span className="font-mono text-xs font-bold text-[#D4AF37] mt-1 block">
-                        ₹{Number(item.price).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0">
                     {inCart ? (
-                      <div className="flex items-center bg-black border-[3px] border-[#D4AF37] rounded-xl px-2 py-1 shadow-inner">
-                        <button onClick={() => removeFromCart(item.id, false)} className="p-1 text-[#FCF6BA]">
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-mono font-bold text-xs text-white px-2">{inCart.quantity}</span>
-                        <button onClick={() => addToCart(item, false)} className="p-1 text-[#FCF6BA]">
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="flex items-center bg-white/[0.06] border border-[#D4AF37]/60 rounded-2xl p-1 backdrop-blur-xl">
+                        <button onClick={() => removeFromCart(combo.id, true)} className="p-1.5 text-[#FCF6BA]"><Minus className="w-3.5 h-3.5" /></button>
+                        <span className="font-mono font-bold text-xs text-white px-2.5">{inCart.quantity}</span>
+                        <button onClick={() => addToCart(combo, true)} className="p-1.5 text-[#FCF6BA]"><Plus className="w-3.5 h-3.5" /></button>
                       </div>
                     ) : (
                       <motion.button
-                        whileTap={{ scale: 0.93 }}
-                        transition={fps60Spring}
-                        onClick={() => addToCart(item, false)}
-                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black text-xs font-black uppercase shadow-md cursor-pointer"
+                        whileTap={{ scale: 0.88 }}
+                        transition={tapElasticSpring}
+                        onClick={() => addToCart(combo, true)}
+                        className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black flex items-center justify-center font-black shadow-lg cursor-pointer"
                       >
-                        + Add
+                        <Plus className="w-5 h-5 stroke-[2.8]" />
                       </motion.button>
                     )}
                   </div>
-                </motion.div>
+                </div>
               );
             })}
-          </motion.div>
-        )}
-      </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {filteredMenuItems.map((item) => {
+              const inCart = cart.find((ci) => ci.menuItem.id === item.id && !ci.isCombo);
+              return (
+                <div 
+                  key={item.id} 
+                  className="bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.16] rounded-[24px] p-2.5 flex flex-col justify-between shadow-xl backdrop-blur-2xl relative transition"
+                >
+                  <div>
+                    {/* Dish Image */}
+                    <div className="h-32 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2 relative">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name_en} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                          <ImgIcon className="w-6 h-6" />
+                        </div>
+                      )}
+                      <span className={`absolute top-2 left-2 w-2 h-2 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'}`} />
+                    </div>
 
-      {/* Floating Cart Trigger Button */}
+                    <h4 className="text-xs font-bold text-white line-clamp-1">{item.name_en || item.name}</h4>
+                    {item.description_en && (
+                      <p className="text-[10px] text-neutral-400 font-sans line-clamp-1 mt-0.5">{item.description_en}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
+                    <span className="font-mono text-xs font-black text-[#D4AF37]">₹{Number(item.price).toFixed(2)}</span>
+
+                    {inCart ? (
+                      <div className="flex items-center bg-white/[0.06] border border-[#D4AF37]/60 rounded-xl p-0.5 backdrop-blur-md">
+                        <button onClick={() => removeFromCart(item.id, false)} className="p-1 text-[#FCF6BA]"><Minus className="w-3 h-3" /></button>
+                        <span className="font-mono font-bold text-[11px] text-white px-1.5">{inCart.quantity}</span>
+                        <button onClick={() => addToCart(item, false)} className="p-1 text-[#FCF6BA]"><Plus className="w-3 h-3" /></button>
+                      </div>
+                    ) : (
+                      <motion.button
+                        whileTap={{ scale: 0.86 }}
+                        transition={tapElasticSpring}
+                        onClick={() => addToCart(item, false)}
+                        className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black flex items-center justify-center font-black shadow-md cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4 stroke-[3]" />
+                      </motion.button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* 5. FLOATING LIQUID GLASS ORDER DOCK */}
       {cartItemCount > 0 && !isCartOpen && (
-        <div className="fixed bottom-5 inset-x-4 max-w-lg mx-auto z-40">
+        <div className="fixed bottom-6 inset-x-5 max-w-md mx-auto z-40">
           <motion.button
-            whileTap={{ scale: 0.96 }}
-            transition={fps60Spring}
-            onClick={() => setIsCartOpen(true)}
-            className="w-full bg-black text-white p-4 rounded-3xl border-[3px] border-[#D4AF37] shadow-[0_15px_45px_rgba(0,0,0,1)] flex items-center justify-between font-bold"
+            whileTap={{ scale: 0.94 }}
+            transition={tapElasticSpring}
+            onClick={() => {
+              triggerHaptic(20);
+              setIsCartOpen(true);
+            }}
+            className="w-full bg-[#121214]/85 border border-[#D4AF37]/50 text-white p-3.5 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] backdrop-blur-2xl flex items-center justify-between"
           >
             <div className="flex items-center gap-3">
-              <span className="bg-[#D4AF37] text-black px-2.5 py-1 rounded-xl text-xs font-black shadow-md">
+              <span className="bg-[#D4AF37] text-black px-2.5 py-1 rounded-xl text-xs font-black font-mono">
                 {cartItemCount}
               </span>
-              <span className="text-sm font-semibold">View Order Basket</span>
+              <span className="text-xs font-bold tracking-wide">View Dining Basket</span>
             </div>
-            <span className="text-[#FCF6BA] font-mono font-black text-base">₹{cartGrandTotal.toFixed(2)} ➔</span>
+            <span className="text-[#FCF6BA] font-mono font-black text-sm">₹{cartGrandTotal.toFixed(2)} ➔</span>
           </motion.button>
         </div>
       )}
 
-      {/* Cart Drawer / Basket */}
+      {/* 6. CART DRAWER WITH FROSTED BACKDROP */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
-            <div onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-black/85 backdrop-blur-sm" />
+            <div onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-black/85 backdrop-blur-md" />
             <motion.div 
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={fps60ModalSpring}
-              className="relative w-full max-w-lg mx-auto bg-black border-t-[3px] border-x-[3px] border-[#D4AF37] rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-[0_-15px_50px_rgba(0,0,0,1)]"
+              transition={drawerModalSpring}
+              className="relative w-full max-w-md mx-auto bg-[#0a0a0c] border-t border-x border-white/[0.12] rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl backdrop-blur-3xl"
             >
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
                   <ShoppingBag className="w-5 h-5 text-[#D4AF37]" />
-                  <h3 className="font-black text-white text-base">Your Order Basket</h3>
+                  <h3 className="font-black text-white text-base">Your Dining Cart</h3>
                 </div>
-                <button onClick={() => setIsCartOpen(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+                <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* Items List */}
-              <div className="space-y-2 divide-y divide-white/10">
+              <div className="space-y-2 divide-y divide-white/5">
                 {cart.map((ci) => (
-                  <div key={(ci.isCombo ? 'combo-' : 'item-') + ci.menuItem.id} className="pt-2 flex justify-between items-center text-xs">
+                  <div key={(ci.isCombo ? 'c-' : 'i-') + ci.menuItem.id} className="pt-2 flex justify-between items-center text-xs">
                     <div>
-                      <div className="font-bold text-white flex items-center gap-1.5">
-                        {ci.isCombo && (
-                          <span className="text-[9px] bg-[#D4AF37] text-black px-1.5 py-0.2 rounded font-black">
-                            COMBO
-                          </span>
-                        )}
-                        <span>{ci.menuItem.name || ci.menuItem.name_en}</span>
-                      </div>
-                      <span className="font-mono text-[#D4AF37]/80">₹{ci.menuItem.price} each</span>
+                      <div className="font-bold text-white">{ci.menuItem.name || ci.menuItem.name_en}</div>
+                      <span className="font-mono text-[#D4AF37]">₹{ci.menuItem.price} each</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-[#FCF6BA]">₹{(ci.menuItem.price * ci.quantity).toFixed(2)}</span>
-                      <div className="flex items-center bg-black border-[3px] border-[#D4AF37] rounded-xl p-0.5">
-                        <button onClick={() => removeFromCart(ci.menuItem.id, ci.isCombo)} className="p-1 text-[#D4AF37]">
-                          <Minus className="w-3 h-3" />
-                        </button>
+                      <span className="font-mono font-bold text-white">₹{(ci.menuItem.price * ci.quantity).toFixed(2)}</span>
+                      <div className="flex items-center bg-white/[0.05] border border-white/[0.1] rounded-xl p-0.5">
+                        <button onClick={() => removeFromCart(ci.menuItem.id, ci.isCombo)} className="p-1 text-[#D4AF37]"><Minus className="w-3 h-3" /></button>
                         <span className="px-2 font-mono font-bold text-white">{ci.quantity}</span>
-                        <button onClick={() => addToCart(ci.menuItem, ci.isCombo)} className="p-1 text-[#D4AF37]">
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
+                        <button onClick={() => addToCart(ci.menuItem, ci.isCombo)} className="p-1 text-[#D4AF37]"><Plus className="w-3 h-3" /></button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {renderShakingCuriosityBanner()}
-
               {!activeSessionId && (
-                <div className="space-y-2 pt-2 border-t-2 border-[#D4AF37]/20 text-xs">
-                  <span className="font-bold text-[#FCF6BA] block">Guest Details (First Time Only)</span>
+                <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
+                  <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
                   <input
                     type="text"
                     required
-                    placeholder="Your Name *"
+                    placeholder="Guest Name *"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full bg-black border-[3px] border-[#D4AF37]/60 rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA]"
+                    className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-white outline-none"
                   />
                   <input
                     type="tel"
                     maxLength={10}
                     required
-                    placeholder="10-digit Mobile Number *"
+                    placeholder="10-digit Phone *"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full bg-black border-[3px] border-[#D4AF37]/60 rounded-xl px-3.5 py-2.5 text-[#FCF6BA] outline-none focus:border-[#FCF6BA] font-mono"
+                    className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-white outline-none font-mono"
                   />
                 </div>
               )}
 
-              {/* Bill Breakdown */}
-              <div className="p-4 rounded-2xl bg-black border-[3px] border-[#D4AF37]/50 space-y-1.5 text-xs font-mono">
-                {liveSessionBaseTotal > 0 && (
-                  <div className="flex justify-between text-[#D4AF37]">
-                    <span>Previous Items Total:</span>
-                    <span>₹{liveSessionBaseTotal.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-[#D4AF37]">
-                  <span>Current Cart Total:</span>
-                  <span>₹{cartGrandTotal.toFixed(2)}</span>
-                </div>
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-400 font-bold">
-                    <span>Mystery PIN Discount:</span>
-                    <span>- ₹{discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-white font-black text-sm pt-2 border-t-2 border-dashed border-[#D4AF37]/35">
-                  <span>Pay at Counter Total:</span>
-                  <span className="text-[#FCF6BA]">₹{finalPayable.toFixed(2)}</span>
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-1 text-xs font-mono">
+                <div className="flex justify-between text-white font-black text-sm">
+                  <span>Payable at Counter:</span>
+                  <span className="text-[#D4AF37]">₹{finalPayable.toFixed(2)}</span>
                 </div>
               </div>
 
               <motion.button
-                whileTap={{ scale: 0.96 }}
-                transition={fps60Spring}
+                whileTap={{ scale: 0.95 }}
+                transition={tapElasticSpring}
                 disabled={loading}
                 onClick={handlePlaceOrder}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-[0_0_25px_rgba(212,175,55,0.4)] cursor-pointer"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
               >
-                {loading ? 'Submitting to Kitchen...' : 'Confirm Order & Send to Kitchen'}
+                {loading ? 'Sending to Kitchen...' : 'Confirm & Dispatch to Kitchen'}
               </motion.button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* POPUP MODAL: Detailed Total Bill */}
+      {/* 7. DETAILED TOTAL BILL MODAL & FAIR SHARE SPLITTER */}
       <AnimatePresence>
         {isTotalBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
@@ -999,111 +887,72 @@ export default function TableMenuPage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 15 }}
-              transition={fps60ModalSpring}
-              className="w-full max-w-sm bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,1)] relative space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar"
+              transition={drawerModalSpring}
+              className="w-full max-w-sm bg-[#0a0a0c] border border-white/[0.12] rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar backdrop-blur-3xl"
             >
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
                   <Receipt className="w-5 h-5 text-[#D4AF37]" />
-                  <h3 className="font-black text-[#FCF6BA] text-base uppercase font-mono tracking-wider">Table Bill Ledger</h3>
+                  <h3 className="font-black text-white text-base font-mono">Table Ledger</h3>
                 </div>
-                <button onClick={() => setIsTotalBillModalOpen(false)} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-                  <X className="w-5 h-5" />
-                </button>
+                <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 hover:text-white"><X className="w-5 h-5" /></button>
               </div>
 
-              <div className="bg-black p-3 rounded-2xl border-[3px] border-[#D4AF37]/40 space-y-1 text-xs font-mono">
-                <div className="flex justify-between items-center text-white">
-                  <span className="font-bold flex items-center gap-1.5 text-sm text-[#FCF6BA]">
-                    <User className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    {customerName.trim() ? customerName : 'Guest Diner'}
-                  </span>
-                  <span className="text-[10px] bg-black text-[#FCF6BA] border-2 border-[#D4AF37] px-2 py-0.5 rounded-md font-bold truncate max-w-[140px]">
-                    {displayTableName || `Table #${realTableNumber}`}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-[11px] text-[#D4AF37] font-bold pt-1 border-t border-[#D4AF37]/25">
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3 h-3" />
-                    {customerPhone.trim() ? customerPhone : 'No Mobile Added'}
-                  </span>
-                  <span>{formattedTime}</span>
+              <div className="bg-white/[0.03] p-3 rounded-2xl border border-white/[0.08] text-xs font-mono space-y-1">
+                <div className="flex justify-between text-white font-bold">
+                  <span>{customerName || 'Walk-in Guest'}</span>
+                  <span className="text-[#D4AF37]">{displayTableName || `Table #${realTableNumber}`}</span>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#D4AF37] font-mono block">
-                  Ordered Dishes
-                </span>
-
-                <div className="space-y-2 max-h-44 overflow-y-auto custom-gold-scrollbar p-3 rounded-2xl bg-black border-2 border-[#D4AF37]/30 text-xs font-mono divide-y divide-white/5">
-                  {sessionOrderedItems.length === 0 ? (
-                    <div className="text-center py-6 text-neutral-500 flex flex-col items-center justify-center space-y-1">
-                      <Utensils className="w-5 h-5 text-neutral-600 mb-1" />
-                      <span>No confirmed kitchen orders yet.</span>
-                      <span className="text-[10px] text-neutral-600">Dishes will display here once sent to kitchen.</span>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto custom-gold-scrollbar p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-xs font-mono divide-y divide-white/5">
+                {sessionOrderedItems.length === 0 ? (
+                  <div className="text-center py-4 text-neutral-500">No active kitchen orders placed yet.</div>
+                ) : (
+                  sessionOrderedItems.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center pt-1.5 first:pt-0">
+                      <span>{item.quantity}x {item.menu_items?.name_en || 'Dish'}</span>
+                      <span className="font-black text-white">₹{(item.quantity * Number(item.unit_price || item.menu_items?.price || 0)).toFixed(2)}</span>
                     </div>
-                  ) : (
-                    sessionOrderedItems.map((item, idx) => {
-                      const dishPrice = Number(item.unit_price || item.menu_items?.price || 0);
-                      const totalItemPrice = item.quantity * dishPrice;
-
-                      return (
-                        <div key={idx} className="flex justify-between items-center pt-2 first:pt-0">
-                          <div>
-                            <span className="font-bold text-white block">
-                              {item.menu_items?.name_en || 'Dish #' + item.menu_item_id}
-                            </span>
-                            <span className="text-[10px] text-[#D4AF37]">
-                              {item.quantity} x ₹{dishPrice.toFixed(2)}
-                            </span>
-                          </div>
-                          <span className="font-black text-[#FCF6BA]">
-                            ₹{totalItemPrice.toFixed(2)}
-                          </span>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                  ))
+                )}
               </div>
 
-              {renderShakingCuriosityBanner()}
+              <div className="p-3 rounded-2xl bg-white/[0.03] border border-[#D4AF37]/30 text-xs font-mono flex justify-between font-black text-white">
+                <span>Net Total:</span>
+                <span className="text-[#D4AF37]">₹{finalPayable.toFixed(2)}</span>
+              </div>
 
-              <div className="space-y-1.5 text-xs font-mono p-3 rounded-2xl bg-black border-2 border-[#D4AF37]/35">
-                <div className="flex justify-between text-[#D4AF37]">
-                  <span>Gross Orders Total:</span>
-                  <span className="font-bold text-white">₹{liveSessionBaseTotal.toFixed(2)}</span>
-                </div>
-
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-400 font-bold">
-                    <span>Mystery PIN Discount:</span>
-                    <span>- ₹{discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center text-white font-black text-sm pt-2 border-t-2 border-dashed border-[#D4AF37]/35">
-                  <span>Current Bill Payable:</span>
-                  <span className="text-base text-[#FCF6BA]">
-                    ₹{Math.max(0, liveSessionBaseTotal - discountAmount).toFixed(2)}
+              {/* FAIR SHARE BILL SPLITTER WIDGET */}
+              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2 font-mono">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#D4AF37] font-bold flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" /> Fair Share Splitter
                   </span>
+                  <div className="flex items-center gap-1.5 bg-black/60 border border-white/[0.1] rounded-lg px-2 py-0.5">
+                    <button onClick={() => setSplitCount(Math.max(1, splitCount - 1))} className="text-[#D4AF37] font-bold px-1">-</button>
+                    <span className="text-white font-bold text-xs">{splitCount} Person{splitCount > 1 ? 's' : ''}</span>
+                    <button onClick={() => setSplitCount(splitCount + 1)} className="text-[#D4AF37] font-bold px-1">+</button>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-1.5 border-t border-white/[0.06] text-xs">
+                  <span className="text-neutral-400">Each Person Shares:</span>
+                  <span className="text-sm font-black text-emerald-400">₹{splitAmountPerPerson}</span>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsTotalBillModalOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-black border-[3px] border-[#D4AF37] hover:bg-[#D4AF37]/20 text-[#FCF6BA] font-bold text-xs uppercase cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.1] text-[#D4AF37] font-bold text-xs uppercase"
               >
-                Close Bill View
+                Close View
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Mystery PIN Guess Modal */}
+      {/* 8. MYSTERY PIN RPC VERIFY MODAL */}
       <AnimatePresence>
         {isPinModalOpen && (
           <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
@@ -1111,37 +960,18 @@ export default function TableMenuPage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 15 }}
-              transition={fps60Spring}
-              className="w-full max-w-sm bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-[0_0_50px_rgba(212,175,55,0.4)] relative space-y-4"
+              transition={drawerModalSpring}
+              className="w-full max-w-sm bg-[#0a0a0c] border border-white/[0.12] rounded-3xl p-6 shadow-2xl relative space-y-4 backdrop-blur-3xl"
             >
-              <button 
-                onClick={() => setIsPinModalOpen(false)} 
-                className="absolute top-4 right-4 text-[#D4AF37] hover:text-[#FCF6BA] p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
+              <button onClick={() => setIsPinModalOpen(false)} className="absolute top-4 right-4 text-neutral-400"><X className="w-5 h-5" /></button>
               <div className="text-center space-y-1">
-                <div className="w-14 h-14 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center text-[#FCF6BA] mx-auto shadow-[0_0_20px_rgba(212,175,55,0.5)]">
-                  <KeyRound className="w-7 h-7 text-[#D4AF37]" />
-                </div>
-                <h3 className="font-black text-white text-base tracking-wide uppercase pt-1">
-                  Crack Today's Mystery PIN
-                </h3>
-                <p className="text-xs text-[#F3E5AB]/80 font-mono">
-                  Guess today's 4-digit code to slash instant cash discount from your bill!
-                </p>
-                <div className="text-[11px] font-mono text-[#D4AF37] font-bold pt-1">
-                  Chances Remaining: {3 - pinAttempts} / 3
-                </div>
+                <KeyRound className="w-8 h-8 text-[#D4AF37] mx-auto animate-pulse" />
+                <h3 className="font-black text-white text-base uppercase">Verify Secret PIN</h3>
+                <span className="text-[11px] font-mono text-[#D4AF37] font-bold">Chances: {3 - pinAttempts} / 3</span>
               </div>
 
               {pinFeedback && (
-                <div className={`p-3 rounded-xl text-xs font-mono border-2 ${
-                  pinFeedback.success 
-                    ? 'bg-black border-emerald-400 text-emerald-200' 
-                    : 'bg-black border-rose-500 text-rose-200'
-                }`}>
+                <div className={`p-3 rounded-xl text-xs font-mono border ${pinFeedback.success ? 'border-emerald-500 bg-emerald-950/20 text-emerald-200' : 'border-rose-500 bg-rose-950/20 text-rose-200'}`}>
                   {pinFeedback.msg}
                 </div>
               )}
@@ -1155,24 +985,21 @@ export default function TableMenuPage() {
                     placeholder="0000"
                     value={enteredPin}
                     onChange={(e) => setEnteredPin(e.target.value.replace(/\D/g, ''))}
-                    className="w-full bg-black border-[3px] border-[#D4AF37] rounded-xl px-4 py-3 text-center text-[#FCF6BA] font-mono font-black text-2xl tracking-[0.35em] outline-none focus:border-[#FCF6BA] shadow-inner"
+                    className="w-full bg-white/[0.04] border border-white/[0.12] rounded-xl px-4 py-3 text-center text-white font-mono font-black text-2xl tracking-[0.35em] outline-none"
                   />
-
                   <motion.button
-                    whileTap={{ scale: 0.96 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={tapElasticSpring}
                     type="submit"
                     disabled={pinLoading || enteredPin.length !== 4}
-                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-[0_0_25px_rgba(212,175,55,0.6)] disabled:opacity-50 cursor-pointer"
+                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs cursor-pointer disabled:opacity-50"
                   >
-                    {pinLoading ? 'Verifying PIN...' : 'Slash My Bill Discount'}
+                    {pinLoading ? 'Checking Vault...' : 'Claim Secret Discount'}
                   </motion.button>
                 </form>
               ) : (
-                <button
-                  onClick={() => setIsPinModalOpen(false)}
-                  className="w-full py-3 rounded-2xl bg-black border-[3px] border-[#D4AF37] hover:bg-[#D4AF37]/20 text-[#FCF6BA] font-bold text-xs uppercase cursor-pointer"
-                >
-                  Close & Proceed to Order
+                <button onClick={() => setIsPinModalOpen(false)} className="w-full py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.1] text-[#D4AF37] font-bold text-xs uppercase">
+                  Close
                 </button>
               )}
             </motion.div>
