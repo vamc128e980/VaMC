@@ -14,12 +14,12 @@ import {
   ShieldCheck, 
   Trash2, 
   Plus, 
+  Minus,
   RefreshCw, 
   IndianRupee, 
   LayoutGrid, 
   Receipt, 
   UtensilsCrossed, 
-  BarChart3, 
   Check, 
   X, 
   Edit3, 
@@ -30,7 +30,6 @@ import {
   ChevronRight, 
   Flame, 
   AlertTriangle, 
-  User, 
   KeyRound, 
   LogOut, 
   RotateCcw, 
@@ -44,12 +43,12 @@ import {
   XCircle,
   Tag,
   FileSpreadsheet,
-  Phone,
-  ShoppingBag,
   UploadCloud,
   PackagePlus,
   Image as ImgIcon,
-  Printer
+  Printer,
+  Calculator,
+  Crown
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -57,13 +56,6 @@ const fluidSpring = {
   stiffness: 420,
   damping: 32,
   mass: 0.55
-};
-
-const tapElasticSpring = {
-  type: 'spring',
-  stiffness: 450,
-  damping: 24,
-  mass: 0.5
 };
 
 const tabVariant = {
@@ -79,7 +71,7 @@ export default function LuxuryGoldAdminPanel() {
   
   const [activeTab, setActiveTab] = useState<'tables' | 'menu' | 'combos' | 'banners' | 'insights' | 'history'>('tables');
 
-  const [shopName, setShopName] = useState('VUJWALA SIMHA DRY FRUITS & JUICE POINT');
+  const [shopName, setShopName] = useState('VUJWALA SIMHA DRY FRUITS & NUTS');
   const [tagline, setTagline] = useState('ROYAL FINE-DINE OPERATIONS');
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [tempBrandName, setTempBrandName] = useState('');
@@ -92,6 +84,7 @@ export default function LuxuryGoldAdminPanel() {
   const [combos, setCombos] = useState<any[]>([]);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
+  const [loyaltyData, setLoyaltyData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
@@ -100,6 +93,11 @@ export default function LuxuryGoldAdminPanel() {
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [isPinGameModalOpen, setIsPinGameModalOpen] = useState(false);
   const [isFlashModalOpen, setIsFlashModalOpen] = useState(false);
+
+  // Live Running Orders Header Modal & Cash Change Calculator State
+  const [isLiveRunningOrdersOpen, setIsLiveRunningOrdersOpen] = useState(false);
+  const [selectedRunningTableNum, setSelectedRunningTableNum] = useState<number | null>(null);
+  const [customerHandedAmounts, setCustomerHandedAmounts] = useState<Record<string, string>>({});
 
   // Dedicated Table Name Edit Modal State
   const [showAddTableModal, setShowAddTableModal] = useState(false);
@@ -204,9 +202,18 @@ export default function LuxuryGoldAdminPanel() {
       const { data: sess } = await supabase.from('table_sessions').select('*').order('created_at', { ascending: false });
       const { data: cats } = await supabase.from('categories').select('*').order('sort_order', { ascending: true });
       const { data: itms } = await supabase.from('menu_items').select('*').order('id', { ascending: true });
-      const { data: oitms } = await supabase.from('order_items').select('*, menu_items(name_en, price, category_id, image_url)');
+      const { data: oitms } = await supabase.from('order_items').select('*, menu_items(name_en, name, price, category_id, image_url)');
       const { data: bnrs } = await supabase.from('promo_banners').select('*');
       const { data: cmbs } = await supabase.from('combos').select('*').order('id', { ascending: true });
+
+      try {
+        const { data: loyalties } = await supabase.from('customer_loyalty').select('*');
+        if (loyalties) {
+          const map: Record<string, any> = {};
+          loyalties.forEach((l: any) => { map[l.phone] = l; });
+          setLoyaltyData(map);
+        }
+      } catch (e) {}
 
       if (tbls) setTables(tbls);
       if (sess) setSessions(sess);
@@ -254,6 +261,71 @@ export default function LuxuryGoldAdminPanel() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // RECALCULATE SESSION BILL WHEN ITEM IS EDITED OR CANCELLED
+  const recalculateSessionBill = async (sessionId: string) => {
+    try {
+      const { data: liveItems } = await supabase
+        .from('order_items')
+        .select('*, menu_items(price)')
+        .eq('session_id', sessionId)
+        .neq('item_status', 'cancelled');
+
+      const newGross = (liveItems || []).reduce((sum, it) => {
+        const pr = Number(it.unit_price || it.menu_items?.price || 0);
+        return sum + (it.quantity * pr);
+      }, 0);
+
+      const { data: sess } = await supabase.from('table_sessions').select('*').eq('id', sessionId).single();
+      const disc = Number(sess?.discount_amount || sess?.discount || 0);
+
+      const subtotal = Math.round((newGross / 1.05) * 100) / 100;
+      const totalTax = Math.round((newGross - subtotal) * 100) / 100;
+      const cgst = Math.round((totalTax / 2) * 100) / 100;
+      const sgst = Math.round((totalTax - cgst) * 100) / 100;
+
+      await supabase.from('table_sessions').update({
+        subtotal,
+        cgst_amount: cgst,
+        sgst_amount: sgst,
+        total_amount: newGross,
+        final_payable: Math.max(0, newGross - disc)
+      }).eq('id', sessionId);
+
+      await loadAdminData();
+    } catch (err) {
+      console.error('Recalculate error:', err);
+    }
+  };
+
+  // CANCEL SINGLE ORDER ITEM
+  const handleCancelOrderItem = async (orderItemId: number, sessionId: string, dishName: string) => {
+    if (!confirm(`"${dishName}" item ni CANCEL cheyala? Ee item total bill nunchi minus aipothundi.`)) return;
+    try {
+      setLoading(true);
+      await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      await recalculateSessionBill(sessionId);
+    } catch (err: any) {
+      alert('Cancel failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // UPDATE ORDER ITEM QUANTITY (+ / -)
+  const handleUpdateItemQuantity = async (orderItemId: number, currentQty: number, delta: number, sessionId: string) => {
+    const nextQty = currentQty + delta;
+    if (nextQty <= 0) return alert('Quantity 0 cheyalante "Cancel Item" button press cheyandi.');
+    try {
+      setLoading(true);
+      await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      await recalculateSessionBill(sessionId);
+    } catch (err: any) {
+      alert('Qty update error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSaveBrand = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -391,6 +463,16 @@ export default function LuxuryGoldAdminPanel() {
     if (!confirm(`Table #${tableNum} ni CLEAR cheyala? Active bill settle aipothundi.`)) return;
     try {
       setLoading(true);
+      const activeSess = sessions.find(s => s.table_number === tableNum && s.status === 'active');
+      if (activeSess && activeSess.customer_phone && activeSess.customer_phone.length === 10) {
+        try {
+          await supabase.rpc('record_customer_visit', {
+            p_phone: activeSess.customer_phone,
+            p_name: activeSess.customer_name || 'Guest',
+            p_bill_amount: Number(activeSess.total_amount || 0)
+          });
+        } catch (e) {}
+      }
       await supabase.from('table_sessions').update({ status: 'completed', payment_status: 'paid' }).eq('table_number', tableNum).eq('status', 'active');
       await supabase.from('restaurant_tables').update({ status: 'available' }).eq('table_number', tableNum);
       await loadAdminData();
@@ -401,7 +483,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // CATEGORY SAVE FIX
+  // CATEGORY CRUD
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = categoryName.trim();
@@ -682,6 +764,10 @@ export default function LuxuryGoldAdminPanel() {
     }));
   };
 
+  const getSessionItemsDetailed = (sessionId: string) => {
+    return orderItems.filter(oi => oi.session_id === sessionId);
+  };
+
   // 80mm ESC/POS Thermal Slip Printer Generator
   const printThermalSlip = (session: any) => {
     const items = getSessionOrderedItems(session.id);
@@ -902,28 +988,51 @@ export default function LuxuryGoldAdminPanel() {
 
   return (
     <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] font-sans pb-32 relative overflow-x-hidden antialiased">
+      {/* Hide White Browser Number Spinners Globally */}
+      <style jsx global>{`
+        input[type='number']::-webkit-inner-spin-button,
+        input[type='number']::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type='number'] {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+      `}</style>
+
       {/* Top Glass Ambient Header */}
-      <header className="sticky top-0 z-40 bg-[#050505]/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 sm:px-6 py-3.5 shadow-2xl">
+      <header className="sticky top-0 z-40 bg-[#050505]/90 backdrop-blur-2xl border-b border-white/[0.08] px-4 sm:px-6 py-3.5 shadow-2xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white/[0.04] border border-white/[0.12] flex items-center justify-center shadow-lg shrink-0">
-              <ShieldCheck className="w-6 h-6 text-[#D4AF37]" />
+            <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/40 flex items-center justify-center shadow-lg shrink-0">
+              <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black tracking-widest text-black uppercase bg-gradient-to-r from-[#FCF6BA] to-[#D4AF37] px-2.5 py-0.5 rounded-full shadow-sm">
-                  ROYAL CONSOLE
-                </span>
-                <h1 className="text-sm sm:text-base font-black tracking-wide text-white uppercase truncate max-w-[200px] sm:max-w-none">
-                  {shopName}
-                </h1>
-              </div>
-              <p className="text-[10px] font-mono text-[#D4AF37] mt-0.5 font-bold">{tagline}</p>
+              <h1 className="text-sm sm:text-base font-black tracking-wide text-white uppercase truncate max-w-[200px] sm:max-w-none">
+                {shopName}
+              </h1>
+              <p className="text-[10px] font-mono text-neutral-400 mt-0.5">{tagline}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 relative">
+          <div className="flex items-center gap-2 relative flex-wrap justify-end">
+            {/* LIVE ORDERS BUTTON */}
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => {
+                if (activeSessions.length > 0 && !selectedRunningTableNum) {
+                  setSelectedRunningTableNum(activeSessions[0].table_number);
+                }
+                setIsLiveRunningOrdersOpen(true);
+              }}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase font-mono tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.35)] cursor-pointer"
+            >
+              <Calculator className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Live Orders ({activeSessions.length})</span>
+            </motion.button>
+
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={() => {
@@ -931,7 +1040,7 @@ export default function LuxuryGoldAdminPanel() {
                 setTempTagline(tagline);
                 setIsNameModalOpen(true);
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
             >
               <Store className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Edit Brand</span>
@@ -940,12 +1049,12 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={handleResetFloor}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
               title="Reset all tables to vacant"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span className="hidden sm:inline">Reset Floor</span>
-              <span>(0/{tables.length})</span>
+              <span>({activeSessions.length}/{tables.length})</span>
             </motion.button>
 
             {/* Calendar */}
@@ -953,7 +1062,7 @@ export default function LuxuryGoldAdminPanel() {
               <motion.button
                 whileTap={{ scale: 0.94 }}
                 onClick={() => setShowCalendar(!showCalendar)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.04] text-[#FCF6BA] text-xs font-mono font-black shadow-md backdrop-blur-md"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.04] text-[#FCF6BA] text-xs font-mono font-black shadow-md backdrop-blur-md cursor-pointer"
               >
                 <CalendarIcon className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span>{isFilterAllDates ? 'All History' : selectedDate}</span>
@@ -1000,7 +1109,7 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={copyToGoogleSheets}
-              className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition ${
+              className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition cursor-pointer ${
                 copySuccess ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-white/[0.03] border-white/[0.1] text-[#FCF6BA] hover:border-[#D4AF37]/40'
               }`}
             >
@@ -1011,7 +1120,7 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button 
               whileTap={{ scale: 0.92 }}
               onClick={loadAdminData} 
-              className="p-2 rounded-xl border border-white/[0.1] bg-white/[0.03] text-[#FCF6BA] hover:border-[#D4AF37]/40"
+              className="p-2 rounded-xl border border-white/[0.1] bg-white/[0.03] text-[#FCF6BA] hover:border-[#D4AF37]/40 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`} />
             </motion.button>
@@ -1044,7 +1153,6 @@ export default function LuxuryGoldAdminPanel() {
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> {paidOrdersCount} Paid Orders Settled
               </span>
             </div>
-            {/* Indian Rupee Icon */}
             <div className="w-13 h-13 rounded-2xl bg-white/[0.04] border border-white/[0.12] flex items-center justify-center shadow-lg">
               <IndianRupee className="w-6 h-6 text-[#D4AF37]" />
             </div>
@@ -1066,7 +1174,7 @@ export default function LuxuryGoldAdminPanel() {
           </div>
         </div>
 
-        {/* Action Tabs Bar - iOS Glass Style */}
+        {/* Action Tabs Bar */}
         <div className="p-2 rounded-3xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-2xl w-full shadow-2xl flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-3">
           <div className="flex items-center gap-1.5 shrink-0">
             {[
@@ -1156,7 +1264,7 @@ export default function LuxuryGoldAdminPanel() {
 
         {/* Dynamic Views */}
         <AnimatePresence mode="wait">
-          {/* TAB 1: Tables Operations */}
+          {/* TAB 1: Clean Table Cards */}
           {activeTab === 'tables' && (
             <motion.div key="tables-tab" variants={tabVariant} initial="initial" animate="animate" exit="exit" className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1187,6 +1295,9 @@ export default function LuxuryGoldAdminPanel() {
                   const grossBill = Number(activeSession?.total_amount || 0);
                   const finalPayableBill = Math.max(0, grossBill - discount);
 
+                  const customerLoyalty = activeSession?.customer_phone ? loyaltyData[activeSession.customer_phone] : null;
+                  const isVipMilestone = customerLoyalty && (customerLoyalty.successful_visits >= 10 || customerLoyalty.total_orders_count >= 10);
+
                   return (
                     <div
                       key={t.id || t.table_number}
@@ -1215,7 +1326,7 @@ export default function LuxuryGoldAdminPanel() {
                                 setTempCustomTableName(t.table_name || `Table-${t.table_number}`);
                                 setShowEditTableNameModal(true);
                               }}
-                              className="p-1 hover:text-[#FCF6BA] text-neutral-400 transition"
+                              className="p-1 hover:text-[#FCF6BA] text-neutral-400 transition cursor-pointer"
                               title="Edit Dedicated Table Name"
                             >
                               <Edit3 className="w-3 h-3" />
@@ -1227,7 +1338,7 @@ export default function LuxuryGoldAdminPanel() {
                           {isOccupied && (
                             <button
                               onClick={() => handleTogglePaymentStatus(activeSession.id, activeSession.payment_status)}
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 ${
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 cursor-pointer ${
                                 isPaid 
                                   ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/50' 
                                   : 'bg-rose-500/10 text-rose-300 border-rose-500/50 animate-pulse'
@@ -1248,7 +1359,7 @@ export default function LuxuryGoldAdminPanel() {
 
                           <button
                             onClick={() => handleDeleteTable(t.table_number, isOccupied)}
-                            className="p-1 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-950/40"
+                            className="p-1 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1266,6 +1377,13 @@ export default function LuxuryGoldAdminPanel() {
                               <span>Seated At:</span>
                               <span className="text-white">{formatDateTime(activeSession.created_at)}</span>
                             </div>
+
+                            {isVipMilestone && (
+                              <div className="p-2 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#FCF6BA] text-[10px] font-bold flex items-center gap-1.5">
+                                <Crown className="w-3.5 h-3.5 text-[#D4AF37] animate-pulse" />
+                                <span>10th Visit Milestone! Free Reward</span>
+                              </div>
+                            )}
                             
                             {discount > 0 && (
                               <>
@@ -1290,7 +1408,7 @@ export default function LuxuryGoldAdminPanel() {
                             <motion.button
                               whileTap={{ scale: 0.95 }}
                               onClick={() => handleTogglePaymentStatus(activeSession.id, activeSession.payment_status)}
-                              className={`flex-1 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wider transition ${
+                              className={`flex-1 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wider transition cursor-pointer ${
                                 isPaid 
                                   ? 'border-emerald-500/50 text-emerald-200 bg-emerald-950/20' 
                                   : 'border-rose-500/50 text-rose-200 bg-rose-950/20'
@@ -1302,7 +1420,7 @@ export default function LuxuryGoldAdminPanel() {
                             <motion.button
                               whileTap={{ scale: 0.95 }}
                               onClick={() => handleClearTable(t.table_number)}
-                              className="px-4 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-white/[0.2] text-[#FCF6BA] text-xs font-black uppercase tracking-wider"
+                              className="px-4 py-2.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-white/[0.2] text-[#FCF6BA] text-xs font-black uppercase tracking-wider cursor-pointer"
                             >
                               Clear
                             </motion.button>
@@ -1339,7 +1457,7 @@ export default function LuxuryGoldAdminPanel() {
                       setCategoryName('');
                       setShowCategoryModal(true);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
                     <FolderPlus className="w-3.5 h-3.5 stroke-[3]" /> Add Category
                   </motion.button>
@@ -1348,7 +1466,7 @@ export default function LuxuryGoldAdminPanel() {
                 <div className="flex gap-2.5 overflow-x-auto custom-gold-scrollbar pb-3 pt-1">
                   <button
                     onClick={() => setSelectedCatId('all')}
-                    className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap border shrink-0 transition ${
+                    className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap border shrink-0 transition cursor-pointer ${
                       selectedCatId === 'all'
                         ? 'bg-[#D4AF37] text-black border-transparent font-black shadow-md'
                         : 'bg-white/[0.03] text-neutral-400 border-white/[0.08] hover:text-white'
@@ -1370,7 +1488,7 @@ export default function LuxuryGoldAdminPanel() {
                             : 'border-white/[0.08] bg-white/[0.02] text-neutral-400 hover:text-white'
                         }`}
                       >
-                        <button onClick={() => setSelectedCatId(cat.id)} className="text-xs whitespace-nowrap">
+                        <button onClick={() => setSelectedCatId(cat.id)} className="text-xs whitespace-nowrap cursor-pointer">
                           {cat.name_en || cat.name} ({count})
                         </button>
 
@@ -1380,14 +1498,14 @@ export default function LuxuryGoldAdminPanel() {
                             setCategoryName(cat.name_en || cat.name);
                             setShowCategoryModal(true);
                           }}
-                          className="p-1 hover:text-[#FCF6BA] text-neutral-400"
+                          className="p-1 hover:text-[#FCF6BA] text-neutral-400 cursor-pointer"
                         >
                           <Edit3 className="w-3 h-3" />
                         </button>
 
                         <button
                           onClick={() => handleDeleteCategory(cat.id, cat.name_en || cat.name)}
-                          className="p-1 hover:text-rose-400 text-rose-400"
+                          className="p-1 hover:text-rose-400 text-rose-400 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1407,7 +1525,7 @@ export default function LuxuryGoldAdminPanel() {
                   <motion.button
                     whileTap={{ scale: 0.94 }}
                     onClick={() => openAddItemModal(selectedCatId === 'all' ? undefined : selectedCatId)}
-                    className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
+                    className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" /> Add Menu Item
                   </motion.button>
@@ -1442,18 +1560,18 @@ export default function LuxuryGoldAdminPanel() {
                             await supabase.from('menu_items').update({ is_available: !item.is_available }).eq('id', item.id);
                             loadAdminData();
                           }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border ${
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border cursor-pointer ${
                             item.is_available ? 'bg-white/[0.04] text-white border-white/[0.12]' : 'bg-white/[0.01] text-neutral-500 border-white/[0.06]'
                           }`}
                         >
                           {item.is_available ? 'In Stock' : 'Out'}
                         </button>
 
-                        <button onClick={() => openEditItemModal(item)} className="p-1.5 rounded-lg border border-white/[0.1] text-neutral-300 hover:text-white">
+                        <button onClick={() => openEditItemModal(item)} className="p-1.5 rounded-lg border border-white/[0.1] text-neutral-300 hover:text-white cursor-pointer">
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
-                        <button onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} className="p-1.5 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-950/40">
+                        <button onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} className="p-1.5 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -1477,7 +1595,7 @@ export default function LuxuryGoldAdminPanel() {
                 <motion.button
                   whileTap={{ scale: 0.94 }}
                   onClick={openAddComboModal}
-                  className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
+                  className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md cursor-pointer"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" /> Add New Combo
                 </motion.button>
@@ -1497,10 +1615,10 @@ export default function LuxuryGoldAdminPanel() {
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
-                      <button onClick={() => openEditComboModal(combo)} className="p-1.5 rounded-lg border border-white/[0.1] text-neutral-300">
+                      <button onClick={() => openEditComboModal(combo)} className="p-1.5 rounded-lg border border-white/[0.1] text-neutral-300 cursor-pointer">
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} className="p-1.5 rounded-lg border border-rose-500/40 text-rose-300">
+                      <button onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} className="p-1.5 rounded-lg border border-rose-500/40 text-rose-300 cursor-pointer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1566,8 +1684,8 @@ export default function LuxuryGoldAdminPanel() {
                     </div>
                     <h4 className="font-bold text-white text-xs mb-2">{b.title}</h4>
                     <div className="flex gap-2">
-                      <button onClick={() => { setEditingBanner(b); setNewBannerTitle(b.title); setNewBannerImageUrl(b.image_url); }} className="flex-1 py-1.5 border border-white/10 text-white text-xs rounded-lg">Edit</button>
-                      <button onClick={() => handleDeleteBanner(b.id)} className="p-1.5 border border-rose-500/40 text-rose-300 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { setEditingBanner(b); setNewBannerTitle(b.title); setNewBannerImageUrl(b.image_url); }} className="flex-1 py-1.5 border border-white/10 text-white text-xs rounded-lg cursor-pointer">Edit</button>
+                      <button onClick={() => handleDeleteBanner(b.id)} className="p-1.5 border border-rose-500/40 text-rose-300 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 ))}
@@ -1653,7 +1771,7 @@ export default function LuxuryGoldAdminPanel() {
                           </span>
                           <button
                             onClick={() => handleTogglePaymentStatus(session.id, session.payment_status)}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase font-mono border ${
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase font-mono border cursor-pointer ${
                               isPaid ? 'border-emerald-500/50 text-emerald-300' : 'border-rose-500/50 text-rose-300'
                             }`}
                           >
@@ -1661,7 +1779,6 @@ export default function LuxuryGoldAdminPanel() {
                           </button>
                         </div>
 
-                        {/* 80mm Print Action */}
                         <motion.button
                           whileTap={{ scale: 0.92 }}
                           onClick={() => printThermalSlip(session)}
@@ -1699,6 +1816,250 @@ export default function LuxuryGoldAdminPanel() {
         </AnimatePresence>
       </main>
 
+      {/* =========================================================================
+          LIVE RUNNING ORDERS MODAL & CASH HANDOVER CHANGE CALCULATOR
+         ========================================================================= */}
+      <AnimatePresence>
+        {isLiveRunningOrdersOpen && (
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-4xl max-h-[92vh] bg-[#09090b] border border-[#D4AF37]/50 rounded-[32px] p-6 shadow-2xl flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
+                    <Calculator className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-black text-white text-base uppercase font-mono tracking-wider">
+                    Live Running Orders & Cash Handover
+                  </h3>
+                </div>
+
+                <button onClick={() => setIsLiveRunningOrdersOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {activeSessions.length === 0 ? (
+                <div className="py-24 text-center text-neutral-500 font-mono text-xs">
+                  Currently no active dining orders on the floor!
+                </div>
+              ) : (
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-white/10 overflow-hidden pt-4">
+                  {/* Left Column: Active Tables List */}
+                  <div className="md:col-span-4 pr-0 md:pr-4 overflow-y-auto custom-gold-scrollbar space-y-2">
+                    <span className="text-[10px] font-mono text-[#D4AF37] font-bold block uppercase mb-1">
+                      Active Tables ({activeSessions.length}):
+                    </span>
+                    {activeSessions.map((sess) => {
+                      const isSelected = selectedRunningTableNum === sess.table_number;
+                      const disc = Number(sess.discount_amount || sess.discount || 0);
+                      const finalAmt = Math.max(0, Number(sess.total_amount || 0) - disc);
+                      const matchingTbl = tables.find(t => t.table_number === sess.table_number);
+
+                      return (
+                        <div
+                          key={sess.id}
+                          onClick={() => setSelectedRunningTableNum(sess.table_number)}
+                          className={`p-3.5 rounded-2xl border text-xs font-mono transition cursor-pointer flex justify-between items-center ${
+                            isSelected
+                              ? 'bg-[#D4AF37] text-black font-black border-transparent shadow-lg'
+                              : 'bg-white/[0.02] border-white/10 text-white hover:border-[#D4AF37]/40'
+                          }`}
+                        >
+                          <div>
+                            <span className="font-bold block text-sm">
+                              {matchingTbl?.table_name || `Table #${sess.table_number}`}
+                            </span>
+                            <span className="text-[10px] opacity-75">{sess.customer_name || 'Guest'}</span>
+                          </div>
+                          <span className="text-sm font-black">₹{finalAmt.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right Column: Selected Table Order Ledger & Cash Calculator */}
+                  <div className="md:col-span-8 pl-0 md:pl-5 overflow-y-auto custom-gold-scrollbar space-y-4 pt-3 md:pt-0">
+                    {(() => {
+                      const curSession = activeSessions.find(s => s.table_number === selectedRunningTableNum) || activeSessions[0];
+                      if (!curSession) return null;
+
+                      const items = getSessionItemsDetailed(curSession.id);
+                      const grossTotal = Number(curSession.total_amount || 0);
+                      const discount = Number(curSession.discount_amount || curSession.discount || 0);
+                      const finalPayable = Math.max(0, grossTotal - discount);
+
+                      const handedInput = customerHandedAmounts[curSession.id] || '';
+                      const handedNum = parseFloat(handedInput) || 0;
+                      const balanceToReturn = handedNum >= finalPayable ? (handedNum - finalPayable).toFixed(2) : '0.00';
+                      const remainingDue = handedNum < finalPayable ? (finalPayable - handedNum).toFixed(2) : '0.00';
+
+                      return (
+                        <div className="space-y-4 font-mono">
+                          <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex justify-between items-center text-xs">
+                            <div>
+                              <span className="text-base font-bold text-white block">Table #{curSession.table_number}</span>
+                              <span className="text-[11px] text-neutral-400">Customer: {curSession.customer_name || 'Guest'} ({curSession.customer_phone || '-'})</span>
+                            </div>
+                            <span className="text-[11px] text-[#D4AF37] font-bold">
+                              Seated: {new Date(curSession.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          {/* Ordered & Cancelled Items List */}
+                          <div className="space-y-2">
+                            <span className="text-[11px] text-neutral-400 uppercase font-bold block">
+                              Ordered Items (Edit Qty or Cancel):
+                            </span>
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-gold-scrollbar p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs">
+                              {items.map((it) => {
+                                const isCancelled = it.item_status === 'cancelled';
+                                const dName = it.menu_items?.name_en || it.menu_items?.name || 'Dish #' + it.menu_item_id;
+                                const dPrice = Number(it.unit_price || it.menu_items?.price || 0);
+
+                                return (
+                                  <div key={it.id} className={`flex justify-between items-center p-2 rounded-xl border ${isCancelled ? 'bg-rose-950/20 border-rose-500/30' : 'bg-black/50 border-white/5'}`}>
+                                    <div>
+                                      <span className={`font-bold block ${isCancelled ? 'line-through text-rose-300' : 'text-white'}`}>
+                                        {it.quantity}x {dName}
+                                      </span>
+                                      <span className="text-[10px] text-neutral-400">₹{(it.quantity * dPrice).toFixed(2)}</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5">
+                                      {!isCancelled ? (
+                                        <>
+                                          <button
+                                            onClick={() => handleUpdateItemQuantity(it.id, it.quantity, -1, curSession.id)}
+                                            className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer"
+                                          >
+                                            <Minus className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleUpdateItemQuantity(it.id, it.quantity, 1, curSession.id)}
+                                            className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleCancelOrderItem(it.id, curSession.id, dName)}
+                                            className="px-2 py-1 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-300 font-bold text-[10px] cursor-pointer"
+                                          >
+                                            Cancel Item
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-rose-400 uppercase bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-500/30">
+                                          Item Cancelled
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Bill Summary */}
+                          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1.5 text-xs">
+                            <div className="flex justify-between text-neutral-400">
+                              <span>Orders Subtotal:</span>
+                              <span className="text-white font-bold">₹{grossTotal.toFixed(2)}</span>
+                            </div>
+                            {discount > 0 && (
+                              <div className="flex justify-between text-emerald-400 font-bold">
+                                <span>Mystery PIN Discount:</span>
+                                <span>- ₹{discount.toFixed(2)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-white font-black text-sm pt-1.5 border-t border-white/10">
+                              <span>Total Bill (Payable):</span>
+                              <span className="text-base text-[#D4AF37]">₹{finalPayable.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* CASH HANDED & BALANCE CHANGE CALCULATOR */}
+                          <div className="p-4 rounded-2xl bg-gradient-to-br from-black via-[#111114] to-black border-2 border-[#D4AF37] space-y-3">
+                            <span className="text-xs font-bold text-[#FCF6BA] uppercase flex items-center gap-1.5">
+                              <Calculator className="w-4 h-4 text-[#D4AF37]" /> Cash Handover & Change Calculator
+                            </span>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                              <div>
+                                <label className="text-[11px] text-neutral-300 block mb-1">
+                                  Handed Amount (కస్టమర్ ఇచ్చిన మొత్తం) *
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#D4AF37] font-bold">₹</span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="e.g. 1000"
+                                    value={handedInput}
+                                    onChange={(e) => {
+                                      const val = e.target.value.replace(/[^0-9.]/g, '');
+                                      setCustomerHandedAmounts({
+                                        ...customerHandedAmounts,
+                                        [curSession.id]: val
+                                      });
+                                    }}
+                                    className="w-full bg-[#161619] border border-[#D4AF37]/50 rounded-xl pl-8 pr-3 py-2 text-white font-black text-base outline-none focus:border-[#D4AF37]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="p-3 rounded-xl bg-white/[0.04] border border-white/10 flex flex-col justify-center text-right">
+                                <span className="text-[10px] uppercase text-neutral-400">
+                                  Change (ఇవ్వాల్సిన చిల్లర):
+                                </span>
+                                <span className={`text-xl font-black mt-0.5 ${handedNum >= finalPayable && handedNum > 0 ? 'text-emerald-400' : 'text-neutral-500'}`}>
+                                  ₹{balanceToReturn}
+                                </span>
+                                {handedNum > 0 && handedNum < finalPayable && (
+                                  <span className="text-[10px] text-rose-400 font-bold">
+                                    Still Short: ₹{remainingDue}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => handleTogglePaymentStatus(curSession.id, curSession.payment_status)}
+                              className="flex-1 py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer"
+                            >
+                              Settle & Mark as PAID
+                            </button>
+                            <button
+                              onClick={() => printThermalSlip(curSession)}
+                              className="px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white font-bold text-xs uppercase flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Printer className="w-4 h-4 text-[#D4AF37]" /> Print
+                            </button>
+                            <button
+                              onClick={() => handleClearTable(curSession.table_number)}
+                              className="px-4 py-3 rounded-xl bg-rose-950/30 border border-rose-500/40 text-rose-300 font-bold text-xs uppercase cursor-pointer"
+                            >
+                              Clear Table
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Modal 1: Add Table */}
       <AnimatePresence>
         {showAddTableModal && (
@@ -1734,7 +2095,7 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer">
                   Deploy Table
                 </button>
               </form>
@@ -1765,7 +2126,7 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer">
                   Update Name
                 </button>
               </form>
@@ -1797,7 +2158,7 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer">
                   {editingCategory ? 'Update Category' : 'Save Category'}
                 </button>
               </form>
@@ -1890,7 +2251,7 @@ export default function LuxuryGoldAdminPanel() {
                         key={c.id}
                         type="button"
                         onClick={() => setItemCategoryId(c.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition border ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition border cursor-pointer ${
                           itemCategoryId === c.id ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/5'
                         }`}
                       >
@@ -1900,7 +2261,7 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1 cursor-pointer">
                   {editingItem ? 'Update Dish' : 'Publish Dish'}
                 </button>
               </form>
@@ -1984,7 +2345,7 @@ export default function LuxuryGoldAdminPanel() {
                   )}
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1 cursor-pointer">
                   {editingCombo ? 'Update Combo' : 'Publish Combo'}
                 </button>
               </form>
@@ -2025,7 +2386,7 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md">
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer">
                   Save Brand
                 </button>
               </form>
