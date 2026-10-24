@@ -4,7 +4,6 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Shield, KeyRound, User, ArrowRight, AlertCircle, ChefHat } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 export default function LoginPage() {
   const [loginRole, setLoginRole] = useState<'admin' | 'waiter'>('admin');
@@ -22,7 +21,7 @@ export default function LoginPage() {
     const cleanPass = (password || '').trim();
 
     try {
-      // 1. Supabase staff_accounts direct lookup tawa ina reeni role cuɓaaɗo oo
+      // 1. Supabase staff_accounts verify
       const { data: user, error } = await supabase
         .from('staff_accounts')
         .select('*')
@@ -30,32 +29,45 @@ export default function LoginPage() {
         .eq('role', loginRole)
         .maybeSingle();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
 
       if (!user) {
         setErrorMsg(
           loginRole === 'admin' 
-            ? 'Admin account alaa e nder doosgal ngal (check email).' 
-            : 'Waiter account alaa e nder doosgal ngal (check ID/Mobile).'
+            ? 'Admin account not found. Please check your email.' 
+            : 'Waiter account not found. Please check Staff ID / Mobile.'
         );
         setLoading(false);
         return;
       }
 
       if (user.password_hash !== cleanPass) {
-        setErrorMsg('Finnde (Security Key) ndee fawaaki no haanirta.');
+        setErrorMsg('Incorrect Security Password. Please try again.');
         setLoading(false);
         return;
       }
 
-      // 2. Resde Cookies & LocalStorage
-      const token = `${user.role}_verified_${Date.now()}`;
-      document.cookie = `staff_role=${user.role}; path=/; max-age=86400; SameSite=Lax`;
+      const verifiedToken = `${user.role}_verified_${Date.now()}`;
+
+      // 2. Set Cookies through Server Route API (Guaranteed Vercel Sync)
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: user.role,
+          token: verifiedToken,
+          user: user
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to set secure session on server.');
+      }
+
+      // Also set client-side localStorage fallback
       if (typeof window !== 'undefined') {
         localStorage.setItem('staff_role', user.role);
-        localStorage.setItem('session_token', token);
+        localStorage.setItem('session_token', verifiedToken);
         if (user.role === 'admin') {
           localStorage.setItem('admin_session', JSON.stringify(user));
         } else {
@@ -63,22 +75,20 @@ export default function LoginPage() {
         }
       }
 
-      // 3. Jahgol laawol
-      if (user.role === 'admin') {
-        window.location.href = '/admin';
-      } else {
-        window.location.href = '/waiter';
-      }
+      const targetPath = user.role === 'admin' ? '/admin' : '/waiter';
+
+      // 3. Guaranteed Hard Navigation
+      window.location.replace(targetPath);
+
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'Juumre heɓiima e naatgol ngol.');
+      setErrorMsg(err.message || 'Authentication error.');
       setLoading(false);
     }
   };
 
   return (
     <main className="min-h-screen bg-black text-white flex items-center justify-center p-4 relative overflow-hidden select-none font-mono">
-      {/* Jayngol seraaji */}
       <div 
         className={`absolute top-1/3 w-[360px] h-[360px] rounded-full blur-[110px] pointer-events-none transition-colors duration-500 ${
           loginRole === 'admin' ? 'bg-amber-500/10' : 'bg-cyan-500/10'
@@ -86,7 +96,6 @@ export default function LoginPage() {
       />
 
       <div className="w-full max-w-sm p-6 rounded-3xl bg-neutral-900/90 border border-neutral-800 backdrop-blur-2xl relative z-10 shadow-2xl">
-        {/* Butoŋaaji ceertuɗi hakkunde Admin e Waiter */}
         <div className="flex p-1 bg-black/60 border border-white/10 rounded-2xl mb-6">
           <button
             type="button"
@@ -94,7 +103,7 @@ export default function LoginPage() {
               setLoginRole('admin');
               setErrorMsg('');
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               loginRole === 'admin'
                 ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black shadow-md'
                 : 'text-neutral-400 hover:text-white'
@@ -110,7 +119,7 @@ export default function LoginPage() {
               setLoginRole('waiter');
               setErrorMsg('');
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               loginRole === 'waiter'
                 ? 'bg-gradient-to-r from-cyan-400 to-teal-500 text-black shadow-md'
                 : 'text-neutral-400 hover:text-white'
@@ -121,7 +130,6 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Hoore portal oo */}
         <div className="flex flex-col items-center text-center space-y-2 mb-6">
           <div 
             className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-lg transition-colors ${
@@ -137,8 +145,8 @@ export default function LoginPage() {
           </h1>
           <p className="text-[11px] text-neutral-400 font-sans">
             {loginRole === 'admin' 
-              ? 'Naatnu Email maa e Finnde ngam heɓde console oo' 
-              : 'Naatnu Staff ID walla Mobile maa ngam heɓde terminal oo'}
+              ? 'Enter Admin Email & Security Password' 
+              : 'Enter Staff ID or Mobile Number'}
           </p>
         </div>
 
@@ -169,7 +177,7 @@ export default function LoginPage() {
 
           <div className="space-y-1.5">
             <label className="text-xs text-neutral-400 uppercase tracking-wider block">
-              Finnde (Security Password)
+              Security Password
             </label>
             <div className="relative flex items-center">
               <KeyRound className="w-4 h-4 absolute left-3.5 text-neutral-500" />
@@ -195,10 +203,10 @@ export default function LoginPage() {
           >
             <span>
               {loading 
-                ? 'Ina huɓɓoo...' 
+                ? 'Authenticating...' 
                 : loginRole === 'admin' 
-                ? 'Naatu e Admin Console' 
-                : 'Naatu e Waiter Terminal'}
+                ? 'Sign In to Admin Console' 
+                : 'Sign In to Waiter Terminal'}
             </span>
             <ArrowRight className="w-4 h-4 stroke-[3]" />
           </button>
