@@ -13,82 +13,69 @@ import {
   RefreshCw, 
   ChefHat, 
   Receipt, 
-  Sparkles, 
-  AlertCircle,
-  Eye, 
+  Sparkles,
   Check, 
   X, 
-  LogOut, 
-  User, 
-  Phone,
-  Tag
+  LogOut,
+  Lock,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 
-// 90FPS GPU-Accelerated Springs
-const fps90Spring = {
-  type: 'spring',
-  stiffness: 420,
-  damping: 32,
-  mass: 0.55
-};
-
-const fps90ModalSpring = {
-  type: 'spring',
-  stiffness: 380,
-  damping: 30,
-  mass: 0.65
-};
-
-export default function WaiterPanel() {
+export default function WaiterTerminalPage() {
   const router = useRouter();
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
-  const [staffName, setStaffName] = useState('Floor Steward');
+  const [currentStaff, setCurrentStaff] = useState<any>(null);
+
+  // Login Form States
+  const [identifierInput, setIdentifierInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // Terminal Live Floor Data
   const [tables, setTables] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [selectedTable, setSelectedTable] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
-  const [actionLoadingBatchId, setActionLoadingBatchId] = useState<string | null>(null);
-
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. Solid Auth Guard
+  // 1. Session Verification
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    function verifySession() {
+      if (typeof window === 'undefined') return;
 
-    const rawCookies = document.cookie || '';
-    const cookies = rawCookies.split(';').map(c => c.trim());
-    const roleCookie = cookies.find(c => c.startsWith('staff_role='));
-    const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
-    const localRole = localStorage.getItem('staff_role')?.toLowerCase();
-    const token = localStorage.getItem('session_token');
-    const storedName = localStorage.getItem('staff_name');
+      const rawCookies = document.cookie || '';
+      const cookies = rawCookies.split(';').map(c => c.trim());
+      const roleCookie = cookies.find(c => c.startsWith('staff_role='));
+      const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
 
-    if (storedName) setStaffName(storedName);
+      const localRole = localStorage.getItem('staff_role')?.toLowerCase();
+      const localWaiter = localStorage.getItem('waiter_session');
+      const localAdmin = localStorage.getItem('admin_session');
 
-    const activeRole = cookieRole || localRole;
-    const hasValidToken = token && (token.startsWith('waiter_verified_') || token.startsWith('admin_verified_'));
-
-    if ((activeRole === 'waiter' || activeRole === 'admin') && hasValidToken) {
-      if (!cookieRole) {
-        document.cookie = `staff_role=${activeRole}; path=/; max-age=86400; SameSite=Lax`;
+      if (cookieRole === 'waiter' || localRole === 'waiter' || localWaiter) {
+        if (localWaiter) {
+          try { setCurrentStaff(JSON.parse(localWaiter)); } catch {}
+        }
+        setIsAuthenticated(true);
+      } else if (cookieRole === 'admin' || localRole === 'admin' || localAdmin) {
+        // Admin also has full permission to monitor waiter terminal
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
       }
-      setIsAuthenticated(true);
       setAuthChecking(false);
-    } else {
-      localStorage.removeItem('staff_role');
-      localStorage.removeItem('staff_name');
-      localStorage.removeItem('session_token');
-      document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-      document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-      setIsAuthenticated(false);
-      setAuthChecking(false);
-      window.location.replace('/login');
     }
+
+    verifySession();
   }, []);
 
+  // Live Clock
   useEffect(() => {
     const updateTime = () => {
       setTimeStr(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
@@ -98,18 +85,64 @@ export default function WaiterPanel() {
     return () => clearInterval(interval);
   }, []);
 
+  // Handle Waiter Credentials Login
+  const handleWaiterLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+
+    const cleanId = identifierInput.trim().toLowerCase();
+    const cleanPass = passwordInput.trim();
+
+    try {
+      const { data: staff, error } = await supabase
+        .from('staff_accounts')
+        .select('*')
+        .eq('identifier', cleanId)
+        .maybeSingle();
+
+      if (error || !staff) {
+        setLoginError('Invalid Login ID or Username.');
+        setLoginLoading(false);
+        return;
+      }
+
+      if (staff.password_hash !== cleanPass) {
+        setLoginError('Incorrect Terminal Password.');
+        setLoginLoading(false);
+        return;
+      }
+
+      // Successful verification
+      localStorage.setItem('waiter_session', JSON.stringify(staff));
+      localStorage.setItem('staff_role', staff.role || 'waiter');
+      localStorage.setItem('session_token', `waiter_verified_${Date.now()}`);
+      document.cookie = `staff_role=${staff.role || 'waiter'}; path=/; max-age=86400; SameSite=Lax`;
+
+      setCurrentStaff(staff);
+      setIsAuthenticated(true);
+    } catch (err: any) {
+      setLoginError(err.message || 'Login failed.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // Load Terminal Data
   const loadWaiterData = async () => {
     setLoading(true);
     try {
-      const { data: tbls } = await supabase.from('restaurant_tables').select('*').order('table_number');
-      const { data: sess } = await supabase.from('table_sessions').select('*').eq('status', 'active');
-      const { data: bths } = await supabase.from('order_batches').select('*').order('created_at', { ascending: false });
-      const { data: items } = await supabase.from('order_items').select('*, menu_items(name_en, price)');
+      const [tblsRes, sessRes, bthsRes, itemsRes] = await Promise.all([
+        supabase.from('restaurant_tables').select('*').order('table_number'),
+        supabase.from('table_sessions').select('*').eq('status', 'active'),
+        supabase.from('order_batches').select('*').order('created_at', { ascending: false }),
+        supabase.from('order_items').select('*, menu_items(name_en, name, price)')
+      ]);
 
-      if (tbls) setTables(tbls);
-      if (sess) setSessions(sess);
-      if (bths) setBatches(bths);
-      if (items) setOrderItems(items);
+      if (tblsRes.data) setTables(tblsRes.data);
+      if (sessRes.data) setSessions(sessRes.data);
+      if (bthsRes.data) setBatches(bthsRes.data);
+      if (itemsRes.data) setOrderItems(itemsRes.data);
     } catch (err) {
       console.error('Waiter data error:', err);
     } finally {
@@ -118,121 +151,181 @@ export default function WaiterPanel() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadWaiterData();
+    if (!isAuthenticated) return;
 
-      const channel = supabase
-        .channel(`waiter-sync-${Date.now()}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadWaiterData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
-        .subscribe();
+    loadWaiterData();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    const channel = supabase
+      .channel('waiter-live-matrix')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadWaiterData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAuthenticated]);
 
-  // ISSUE 2 FIXED: Logout redirects directly to Main Landing Page '/'
   const handleLogout = () => {
     document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') {
-      localStorage.clear();
+      localStorage.removeItem('waiter_session');
+      localStorage.removeItem('session_token');
+      localStorage.removeItem('staff_role');
     }
-    window.location.replace('/');
+    setIsAuthenticated(false);
+    setCurrentStaff(null);
   };
 
   const handleAcknowledgeBatch = async (batchId: string) => {
-    setActionLoadingBatchId(batchId);
     try {
-      await supabase
-        .from('order_batches')
-        .update({ status: 'sent_to_kitchen' })
-        .eq('id', batchId);
-
-      await supabase
-        .from('order_items')
-        .update({ item_status: 'preparing' })
-        .eq('batch_id', batchId);
-
+      await Promise.all([
+        supabase.from('order_batches').update({ status: 'sent_to_kitchen' }).eq('id', batchId),
+        supabase.from('order_items').update({ item_status: 'preparing' }).eq('batch_id', batchId)
+      ]);
       await loadWaiterData();
-      if (selectedTable) {
-        setSelectedTable(prev => prev ? {
-          ...prev,
-          tableBatches: prev.tableBatches?.map(b => b.id === batchId ? { ...b, status: 'sent_to_kitchen' } : b)
-        } : null);
-      }
     } catch (err: any) {
       alert('Error updating batch: ' + err.message);
-    } finally {
-      setActionLoadingBatchId(null);
     }
   };
 
-  if (authChecking || !isAuthenticated) {
+  if (authChecking) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 border-[3px] border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin" />
-        <span className="text-[#D4AF37] font-mono text-xs tracking-widest uppercase font-bold">
-          Verifying Waiter Session...
-        </span>
+      <div className="min-h-screen bg-[#030305] flex items-center justify-center text-cyan-400 font-mono text-xs tracking-widest uppercase">
+        Verifying Floor Credentials...
       </div>
     );
   }
 
+  // If NOT Logged in: Clean Direct Login View (No Redirect Loop)
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#030305] text-white flex items-center justify-center p-4 font-mono select-none relative overflow-hidden">
+        <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="w-full max-w-sm bg-[#0c0c12] border border-cyan-500/40 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] space-y-5 relative z-10">
+          <div className="text-center space-y-1.5">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center mx-auto text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+              <ChefHat className="w-6 h-6" />
+            </div>
+            <h2 className="text-base font-black text-white uppercase tracking-wider">Waiter Terminal Access</h2>
+            <p className="text-[11px] text-neutral-400">Floor Crew Management Login</p>
+          </div>
+
+          {loginError && (
+            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleWaiterLogin} className="space-y-3.5 text-xs">
+            <div>
+              <label className="text-neutral-400 block mb-1">Staff ID / Username</label>
+              <div className="relative">
+                <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. waiter1"
+                  value={identifierInput}
+                  onChange={(e) => setIdentifierInput(e.target.value)}
+                  className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-cyan-400 transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-neutral-400 block mb-1">Terminal Password</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-cyan-400 transition"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-500 text-black font-black uppercase text-xs shadow-lg cursor-pointer transition hover:brightness-110 disabled:opacity-50"
+            >
+              {loginLoading ? 'Verifying...' : 'Sign In To Terminal'}
+            </button>
+          </form>
+
+          <div className="text-center pt-2 border-t border-white/10">
+            <button
+              onClick={() => router.push('/')}
+              className="text-[10px] text-neutral-500 hover:text-white transition cursor-pointer"
+            >
+              ← Back to Main Menu
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // LOGGED IN: Full Terminal View
   return (
-    <div className="min-h-screen bg-black text-[#FCF6BA] font-sans pb-28 relative overflow-x-hidden antialiased">
+    <div className="min-h-screen bg-[#030305] text-slate-100 font-sans pb-28 relative overflow-hidden select-none">
+      {/* Cyber Neon Ambient Lighting */}
+      <div className="fixed -top-40 left-10 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+      <div className="fixed top-1/2 -right-40 w-[500px] h-[500px] bg-fuchsia-500/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+      <div className="fixed bottom-0 left-1/3 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-black border-b-[3px] border-[#D4AF37] px-4 sm:px-6 py-3.5 shadow-2xl">
+      <header className="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur-3xl border-b border-white/[0.08] px-6 py-4 shadow-[0_4px_30px_rgba(0,0,0,0.8)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-black border-[3px] border-[#D4AF37] flex items-center justify-center shadow-lg shrink-0">
-              <ChefHat className="w-6 h-6 text-[#D4AF37]" />
+            <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+              <ChefHat className="w-5 h-5 text-cyan-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black tracking-widest text-black uppercase bg-[#D4AF37] px-2.5 py-0.5 rounded-full shadow-sm">
+                <span className="text-[10px] font-black tracking-widest text-cyan-300 uppercase bg-cyan-500/20 px-2.5 py-0.5 rounded-full border border-cyan-400/40 shadow-sm">
                   FLOOR SERVICE
                 </span>
-                <h1 className="text-sm sm:text-base font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-[#FCF6BA] via-[#F3E5AB] to-[#D4AF37] uppercase">
+                <h1 className="text-base font-extrabold tracking-wide text-white">
                   WAITER COMMAND
                 </h1>
               </div>
-              <p className="text-[10px] font-mono text-[#D4AF37] mt-0.5 font-bold">
-                Staff: <span className="text-[#FCF6BA]">{staffName}</span>
+              <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                Logged in as: <strong className="text-cyan-300">{currentStaff?.name || currentStaff?.identifier || 'Staff'}</strong>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <div className="hidden sm:flex items-center gap-2 bg-black border-2 border-[#D4AF37]/50 px-3 py-1.5 rounded-xl font-mono text-xs font-bold text-[#FCF6BA]">
-              <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-black/60 border border-white/10 px-3 py-1.5 rounded-2xl font-mono text-xs font-bold text-cyan-300 shadow-inner">
+              <Clock className="w-3.5 h-3.5 text-cyan-400" />
               <span>{timeStr || 'Live'}</span>
             </div>
 
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.94 }}
-              transition={fps90Spring}
+              whileTap={{ scale: 0.95 }}
               onClick={loadWaiterData}
-              className="p-2 rounded-xl border-[3px] border-[#D4AF37] bg-black text-[#FCF6BA] hover:bg-[#D4AF37]/20 transition"
+              className="p-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-200 transition cursor-pointer"
               title="Refresh"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
             </motion.button>
 
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.94 }}
-              transition={fps90Spring}
+              whileTap={{ scale: 0.95 }}
               onClick={handleLogout}
-              className="p-2 rounded-xl bg-black border-[3px] border-rose-500 text-rose-300 hover:bg-rose-950/40 transition cursor-pointer"
-              title="Logout to Main Panel"
+              className="p-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-300 transition cursor-pointer"
+              title="Logout"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-4 h-4" />
             </motion.button>
           </div>
         </div>
@@ -241,24 +334,24 @@ export default function WaiterPanel() {
       {/* Main Floor Grid */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black text-[#FCF6BA] uppercase tracking-wider flex items-center gap-2 font-mono">
-            <Utensils className="w-4 h-4 text-[#D4AF37]" /> Dining Tables Matrix
+          <h2 className="text-sm font-black text-slate-200 uppercase tracking-wider flex items-center gap-2">
+            <Utensils className="w-4 h-4 text-cyan-400" /> Dining Tables Matrix
           </h2>
 
-          <div className="flex items-center gap-3 text-[11px] font-bold">
+          <div className="flex items-center gap-3 text-[11px] font-bold font-mono">
             <span className="flex items-center gap-1.5 text-emerald-400">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" /> Vacant
             </span>
-            <span className="flex items-center gap-1.5 text-[#F3E5AB]">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#D4AF37] shadow-[0_0_8px_#D4AF37]" /> Dining
-            </span>
             <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-ping" /> New Order
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" /> Dining
+            </span>
+            <span className="flex items-center gap-1.5 text-fuchsia-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-400 shadow-[0_0_8px_#e879f9] animate-ping" /> New Order
             </span>
           </div>
         </div>
 
-        {/* Black & Gold Tables Grid */}
+        {/* Neon Tables Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {tables.map(t => {
             const activeSession = sessions.find(s => s.table_number === t.table_number && s.status === 'active');
@@ -267,79 +360,66 @@ export default function WaiterPanel() {
             const tableBatches = batches.filter(b => b.table_number === t.table_number && b.session_id === activeSession?.id);
             const hasPendingAction = tableBatches.some(b => b.status === 'pending_waiter');
 
-            // ISSUE 1 FIXED: Exact Final Payable calculation with discount
-            const grossTotal = Number(activeSession?.total_amount || 0);
-            const discount = Number(activeSession?.discount_amount || 0);
-            const payableTotal = Math.max(0, grossTotal - discount);
-
             return (
               <motion.div
                 key={t.id || t.table_number}
                 layout
-                whileHover={{ y: -3 }}
-                transition={fps90Spring}
+                whileHover={{ scale: 1.02 }}
                 onClick={() => isOccupied && setSelectedTable({ ...t, activeSession, tableBatches })}
-                className={`p-5 rounded-[28px] bg-black border-[3px] transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                className={`p-5 rounded-3xl backdrop-blur-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
                   hasPendingAction
-                    ? 'border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.35)] ring-2 ring-amber-400/40'
+                    ? 'bg-fuchsia-950/20 border-fuchsia-500/60 shadow-[0_0_30px_rgba(217,70,239,0.25)] ring-2 ring-fuchsia-500/40'
                     : isOccupied
-                    ? 'border-[#D4AF37] shadow-[0_8px_30px_rgba(212,175,55,0.25)]'
-                    : 'border-[#D4AF37]/40 hover:border-[#D4AF37]'
+                    ? 'bg-amber-950/20 border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/30'
+                    : 'bg-emerald-950/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:border-emerald-500/60'
                 }`}
               >
-                <div className={`absolute top-0 inset-x-0 h-1.5 ${
-                  hasPendingAction ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : isOccupied ? 'bg-[#D4AF37] shadow-[0_0_12px_#D4AF37]' : 'bg-emerald-500 shadow-[0_0_12px_#10b981]'
+                <div className={`absolute top-0 inset-x-0 h-1 ${
+                  hasPendingAction ? 'bg-fuchsia-400 shadow-[0_0_12px_#e879f9]' : isOccupied ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : 'bg-emerald-400 shadow-[0_0_12px_#34d399]'
                 }`} />
 
-                <div className="flex items-center justify-between mb-3 pt-1">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg font-black text-white">Table #{t.table_number}</span>
-                    <span className="text-[11px] text-[#D4AF37] font-mono">({t.capacity || 4} Seats)</span>
+                    <span className="text-lg font-black text-white">{t.table_name || `Table #${t.table_number}`}</span>
                   </div>
 
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border-2 ${
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border font-mono ${
                     hasPendingAction
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-400 animate-pulse'
+                      ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/50 animate-pulse'
                       : isOccupied
-                      ? 'bg-black text-[#FCF6BA] border-[#D4AF37]'
-                      : 'bg-black text-emerald-300 border-emerald-500'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
                   }`}>
-                    {hasPendingAction ? 'New Order!' : isOccupied ? 'Dining' : 'Available'}
+                    {hasPendingAction ? 'New Order!' : isOccupied ? 'Seated' : 'Available'}
                   </span>
                 </div>
 
                 {isOccupied ? (
                   <div className="space-y-2.5">
-                    <div className="bg-black border-2 border-[#D4AF37]/40 rounded-2xl p-3 text-xs space-y-1 font-mono">
-                      <div className="flex justify-between text-[#D4AF37]">
+                    <div className="bg-black/50 border border-white/10 rounded-2xl p-3 text-xs space-y-1 font-mono">
+                      <div className="flex justify-between text-neutral-400">
                         <span>Guest:</span>
-                        <span className="font-bold text-[#FCF6BA] font-sans">{activeSession.customer_name || 'Guest'}</span>
+                        <span className="font-bold text-white font-sans">{activeSession.customer_name || 'Guest'}</span>
                       </div>
-                      <div className="flex justify-between text-[#D4AF37]">
+                      <div className="flex justify-between text-neutral-400">
                         <span>Mobile:</span>
-                        <span className="text-white">{activeSession.customer_phone || '-'}</span>
+                        <span>{activeSession.customer_phone || '-'}</span>
                       </div>
-                      {discount > 0 && (
-                        <div className="flex justify-between text-emerald-400 font-bold">
-                          <span>Discount Applied:</span>
-                          <span>- ₹{discount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-[#D4AF37] pt-1 border-t border-[#D4AF37]/25">
-                        <span>Net Payable:</span>
-                        <span className="font-black text-[#FCF6BA] text-sm">₹{payableTotal.toFixed(2)}</span>
+                      <div className="flex justify-between text-neutral-400 pt-1 border-t border-white/10">
+                        <span>Live Bill:</span>
+                        <span className="font-black text-amber-300 text-sm">₹{Number(activeSession.total_amount || 0).toFixed(2)}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] font-bold text-[#FCF6BA] pt-1">
-                      <span className="font-mono text-[#D4AF37]">{tableBatches.length} Batches Sent</span>
-                      <span className="underline hover:text-white">View Dishes ➔</span>
+                    <div className="flex items-center justify-between text-[11px] font-bold text-cyan-300 pt-1 font-mono">
+                      <span>{tableBatches.length} Orders Sent</span>
+                      <span className="underline">View Dishes ➔</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-6 text-xs text-emerald-400 font-mono flex flex-col items-center gap-1.5">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                    <span>Table Vacant & Ready</span>
+                  <div className="text-center py-6 text-xs text-emerald-400/70 font-mono flex flex-col items-center gap-1">
+                    <CheckCircle2 className="w-6 h-6 opacity-60" />
+                    <span>Table Ready</span>
                   </div>
                 )}
               </motion.div>
@@ -351,33 +431,32 @@ export default function WaiterPanel() {
       {/* Slide-out Order Details Modal */}
       <AnimatePresence>
         {selectedTable && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.94, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.94, opacity: 0 }}
-              transition={fps90ModalSpring}
-              className="w-full max-w-lg bg-black border-[3px] border-[#D4AF37] rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto custom-gold-scrollbar"
+              className="w-full max-w-lg bg-[#0c0c14]/95 border border-cyan-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(6,182,212,0.25)] space-y-4 max-h-[85vh] overflow-y-auto no-scrollbar font-mono text-xs"
             >
-              <div className="flex items-center justify-between border-b-2 border-[#D4AF37]/30 pb-3">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div>
-                  <h3 className="text-lg font-black text-white flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> Table #{selectedTable.table_number} Service Ledger
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-cyan-400" /> {selectedTable.table_name || `Table #${selectedTable.table_number}`} Ledger
                   </h3>
-                  <span className="text-xs text-[#D4AF37] font-mono">
-                    Guest: {selectedTable.activeSession?.customer_name || 'Guest'} ({selectedTable.activeSession?.customer_phone || '-'})
+                  <span className="text-[11px] text-neutral-400">
+                    Guest: {selectedTable.activeSession?.customer_name || 'Walk-in'} ({selectedTable.activeSession?.customer_phone || '-'})
                   </span>
                 </div>
                 <button
                   onClick={() => setSelectedTable(null)}
-                  className="p-1 rounded-full text-[#D4AF37] hover:text-[#FCF6BA]"
+                  className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Running Orders Breakdown */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {selectedTable.tableBatches?.map((batch, bIdx) => {
                   const bItems = orderItems.filter(oi => oi.batch_id === batch.id);
                   const isPending = batch.status === 'pending_waiter';
@@ -385,35 +464,35 @@ export default function WaiterPanel() {
                   return (
                     <div 
                       key={batch.id} 
-                      className={`p-4 rounded-2xl border-2 transition ${
+                      className={`p-4 rounded-2xl border transition ${
                         isPending 
-                          ? 'bg-amber-950/30 border-amber-400 shadow-md' 
-                          : 'bg-black border-[#D4AF37]/40'
+                          ? 'bg-fuchsia-950/20 border-fuchsia-500/50 shadow-[0_0_15px_rgba(217,70,239,0.2)]'
+                          : 'bg-black/40 border-white/10'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-black text-white font-mono">
+                        <span className="text-xs font-black text-neutral-300">
                           Order Batch #{bIdx + 1}
                         </span>
-                        <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border-2 ${
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
                           isPending 
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-400 animate-pulse' 
+                            ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400 animate-pulse' 
                             : 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
                         }`}>
                           {isPending ? 'Pending Waiter Approval' : 'Sent to Kitchen'}
                         </span>
                       </div>
 
-                      <div className="space-y-1.5 divide-y divide-white/10 text-xs">
+                      <div className="space-y-1.5 divide-y divide-white/[0.05]">
                         {bItems.map(item => (
                           <div key={item.id} className="pt-1.5 flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-black bg-[#D4AF37] px-1.5 py-0.5 rounded">
+                              <span className="font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800 px-1.5 py-0.5 rounded text-[11px]">
                                 {item.quantity}x
                               </span>
-                              <span className="text-white font-bold">{item.menu_items?.name_en || 'Dish'}</span>
+                              <span className="text-neutral-200 font-bold">{item.menu_items?.name_en || item.menu_items?.name || 'Dish'}</span>
                             </div>
-                            <span className="font-mono text-[#FCF6BA]">₹{(item.unit_price * item.quantity).toFixed(2)}</span>
+                            <span className="text-neutral-400">₹{((Number(item.unit_price) || Number(item.menu_items?.price) || 0) * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -421,18 +500,10 @@ export default function WaiterPanel() {
                       {isPending && (
                         <motion.button
                           whileTap={{ scale: 0.97 }}
-                          transition={fps90Spring}
-                          disabled={actionLoadingBatchId === batch.id}
                           onClick={() => handleAcknowledgeBatch(batch.id)}
-                          className="w-full mt-3 py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          className="w-full mt-3 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-black font-black uppercase text-xs shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          {actionLoadingBatchId === batch.id ? (
-                            <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              <Check className="w-4 h-4 stroke-[3]" /> Dispatch to Kitchen KDS
-                            </>
-                          )}
+                          <Check className="w-4 h-4 stroke-[3]" /> Dispatch to Kitchen KDS
                         </motion.button>
                       )}
                     </div>
@@ -440,36 +511,17 @@ export default function WaiterPanel() {
                 })}
               </div>
 
-              {/* Total Active Table Summary with ISSUE 1 Fixed */}
-              {(() => {
-                const sub = Number(selectedTable.activeSession?.subtotal || 0);
-                const gross = Number(selectedTable.activeSession?.total_amount || 0);
-                const disc = Number(selectedTable.activeSession?.discount_amount || 0);
-                const finalPay = Math.max(0, gross - disc);
-
-                return (
-                  <div className="p-4 rounded-2xl bg-black border-2 border-[#D4AF37]/50 text-xs font-mono space-y-1.5">
-                    <div className="flex justify-between text-[#D4AF37]">
-                      <span>Dishes Gross Total:</span>
-                      <span>₹{gross.toFixed(2)}</span>
-                    </div>
-                    {disc > 0 && (
-                      <div className="flex justify-between text-emerald-400 font-bold">
-                        <span>Mystery PIN Discount:</span>
-                        <span>- ₹{disc.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-[#D4AF37]">
-                      <span>GST (5% Inclusive):</span>
-                      <span>₹{(Number(selectedTable.activeSession?.cgst_amount || 0) + Number(selectedTable.activeSession?.sgst_amount || 0)).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-white font-black text-sm pt-2 border-t-2 border-[#D4AF37]/35">
-                      <span>Final Net Settle:</span>
-                      <span className="text-[#FCF6BA] font-mono text-base">₹{finalPay.toFixed(2)}</span>
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* Total Active Table Summary */}
+              <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 space-y-1.5">
+                <div className="flex justify-between text-neutral-400">
+                  <span>Net Dishes Total:</span>
+                  <span>₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-white font-black text-sm pt-2 border-t border-cyan-500/30">
+                  <span>Final Settle Amount:</span>
+                  <span className="text-cyan-300">₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

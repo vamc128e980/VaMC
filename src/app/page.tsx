@@ -3,35 +3,47 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldCheck, 
   UserCheck, 
-  QrCode, 
-  Sparkles, 
-  ArrowRight
+  ArrowUpRight, 
+  Crown, 
+  ChevronRight
 } from 'lucide-react';
 
-const fastGlassSpring = {
+const cardSpring = {
   type: 'spring',
-  stiffness: 420,
+  stiffness: 340,
   damping: 26,
-  mass: 0.8
+  mass: 0.5
 };
 
-export default function HomePage() {
-  const [shopName, setShopName] = useState('VUJWALA SIMHA DRY FRUITS & JUICE POINT');
-  const [tagline, setTagline] = useState('ROYAL ORGANIC DRY FRUITS & COLD-PRESSED JUICES');
+const fastReveal = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.14, ease: 'easeOut' } },
+  exit: { opacity: 0, y: 0, transition: { duration: 0.08, ease: 'easeIn' } }
+};
+
+export default function BentoSliderHomePage() {
+  const [shopName, setShopName] = useState('VUJWALA SIMHA DRY FRUITS AND JUICE POINT');
+  const [tagline, setTagline] = useState('WITH SPICES AND NUTS');
+  const [activeCard, setActiveCard] = useState<number>(0);
 
   useEffect(() => {
     async function fetchShopSettings() {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('restaurant_settings')
           .select('restaurant_name, tagline')
           .eq('id', 1)
-          .single();
+          .maybeSingle();
+
+        if (error) {
+          console.error('Settings fetch error:', error);
+          return;
+        }
 
         if (data) {
           if (data.restaurant_name) setShopName(data.restaurant_name);
@@ -45,7 +57,7 @@ export default function HomePage() {
     fetchShopSettings();
 
     const channel = supabase
-      .channel('landing_page_shop_sync')
+      .channel('landing_bento_sync')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'restaurant_settings' },
@@ -61,128 +73,181 @@ export default function HomePage() {
     };
   }, []);
 
-  const portalCards = [
+  const portals = [
     {
-      title: 'Customer Dining',
-      subtitle: 'Table Menu & Self-Order',
-      href: '/table/1',
-      badge: 'LIVE QR MENU',
-      icon: QrCode,
-      desc: 'Table #1 QR menu access chesi, organic shakes order cheyandi mariyu mystery PIN tho instant bill discount gelavandi.'
+      id: 'qr',
+      title: 'QR Menu',
+      subtitle: 'Customer Interactive Experience',
+      desc: 'Scan or launch interactive digital showcase, secret PIN mystery discount, real-time dining cart & instant billing.',
+      link: '/table/1',
+      btnText: 'Launch Table #1',
+      accentColor: 'from-[#FCF6BA] via-[#D4AF37] to-[#AA771C]',
+      btnBg: 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black',
+      glowColor: 'rgba(212, 175, 55, 0.28)',
+      borderColor: 'border-[#D4AF37]/35',
+      activeBorder: 'border-[#D4AF37]',
+      bgGradient: 'from-[#14120a]/95 via-[#0d0c07]/90 to-[#040406]/95',
+      icon: Crown,
+      tag: '01 / DINING',
+      bgImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&q=80'
     },
     {
-      title: 'Waiter Portal',
-      subtitle: 'Floor Matrix & Service',
-      href: '/waiter',
-      badge: 'STAFF CONSOLE',
-      icon: UserCheck,
-      desc: 'Realtime order batches approve cheyadam, kitchen KDS dispatch mariyu live active table sessions manage cheyadam.'
-    },
-    {
-      title: 'Admin Console',
-      subtitle: 'Royal Operations',
-      href: '/admin',
-      badge: 'MANAGEMENT',
+      id: 'admin',
+      title: 'Master Control',
+      subtitle: 'Executive Admin & Kitchen Suite',
+      desc: 'Live orders management, running table operations, menu & royal combo additions, thermal printer & day analytics.',
+      link: '/admin',
+      btnText: 'Access Console',
+      accentColor: 'from-rose-400 via-red-500 to-rose-600',
+      btnBg: 'bg-gradient-to-r from-red-500 via-rose-600 to-rose-700 text-white',
+      glowColor: 'rgba(244, 63, 94, 0.32)',
+      borderColor: 'border-rose-500/35',
+      activeBorder: 'border-rose-500',
+      bgGradient: 'from-[#180608]/95 via-[#100305]/90 to-[#040406]/95',
       icon: ShieldCheck,
-      desc: 'Sales reports, live floor controls, menu customization mariyu daily 10-slot PIN vault generator setup.'
+      tag: '02 / CONTROL',
+      bgImage: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80'
+    },
+    {
+      id: 'waiter',
+      title: 'Waiter Terminal',
+      subtitle: 'Floor Crew Management',
+      desc: 'Instant sound alerts, table service notifications, real-time dish status updates & quick order handover.',
+      link: '/waiter',
+      btnText: 'Open Terminal',
+      accentColor: 'from-cyan-300 via-cyan-400 to-teal-500',
+      btnBg: 'bg-gradient-to-r from-cyan-400 via-cyan-500 to-teal-600 text-black',
+      glowColor: 'rgba(6, 182, 212, 0.28)',
+      borderColor: 'border-cyan-500/35',
+      activeBorder: 'border-cyan-400',
+      bgGradient: 'from-[#041217]/95 via-[#020b0e]/90 to-[#040406]/95',
+      icon: UserCheck,
+      tag: '03 / CREW',
+      bgImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'
     }
   ];
 
   return (
-    <div className="min-h-screen bg-[#030304] text-[#FCF6BA] flex flex-col justify-between relative overflow-x-hidden font-sans selection:bg-[#D4AF37] selection:text-black subpixel-antialiased">
-      {/* Background Ambient Mesh */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(212,175,55,0.14)_0%,transparent_70%)] blur-[140px] pointer-events-none -z-10" />
-      <div className="fixed bottom-0 right-10 w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(212,175,55,0.08)_0%,transparent_70%)] blur-[140px] pointer-events-none -z-10" />
+    <div className="h-screen w-full bg-[#020204] text-white flex flex-col justify-between px-4 sm:px-8 py-4 relative overflow-hidden font-sans select-none antialiased">
+      {/* Dynamic Ambient Background Aura */}
+      <motion.div 
+        animate={{
+          background: activeCard === 0 
+            ? 'radial-gradient(circle at 50% 20%, rgba(212,175,55,0.14) 0%, transparent 65%)'
+            : activeCard === 1 
+            ? 'radial-gradient(circle at 35% 50%, rgba(244,63,94,0.16) 0%, transparent 65%)'
+            : 'radial-gradient(circle at 65% 50%, rgba(6,182,212,0.14) 0%, transparent 65%)'
+        }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="fixed inset-0 pointer-events-none z-0 transform-gpu"
+      />
 
-      {/* HERO / PORTAL SELECTION SECTION */}
-      <header className="relative pt-16 pb-16 px-4 sm:px-6 max-w-7xl mx-auto w-full flex flex-col items-center text-center my-auto">
-        {/* Floating Gold Pill Badge */}
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={fastGlassSpring}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border-[2px] border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.25)] mb-4"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] animate-pulse" />
-          <span className="text-[10px] font-mono font-bold uppercase tracking-[0.25em] text-[#FCF6BA]">
-            FINE DINE & JUICE BAR OS
-          </span>
-        </motion.div>
-
-        {/* Dynamic Shop Name */}
-        <motion.h1 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={fastGlassSpring}
-          className="text-3xl sm:text-5xl lg:text-6xl font-black uppercase tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#FCF6BA] via-[#F3E5AB] to-[#D4AF37] max-w-4xl drop-shadow-[0_2px_20px_rgba(212,175,55,0.25)] leading-tight"
-        >
+      {/* Top Header - Clean Centered Layout */}
+      <header className="max-w-6xl mx-auto w-full pt-4 flex flex-col items-center justify-center relative z-10 shrink-0 px-2 text-center space-y-1">
+        <h1 className="text-xl sm:text-3xl md:text-4xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white via-[#FCF6BA] to-[#D4AF37] uppercase drop-shadow-md">
           {shopName}
-        </motion.h1>
+        </h1>
+        <p className="text-[11px] sm:text-xs text-neutral-400 font-mono tracking-widest uppercase">{tagline}</p>
+      </header>
 
-        {/* Dynamic Tagline */}
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="text-xs sm:text-sm font-sans text-[#D4AF37] mt-2 max-w-2xl tracking-wider uppercase font-semibold"
-        >
-          {tagline}
-        </motion.p>
+      {/* Bento Grid Accordion Slider */}
+      <main className="max-w-6xl mx-auto w-full my-auto py-2 relative z-10 flex-1 flex items-center justify-center">
+        <div className="flex flex-col lg:flex-row gap-3.5 h-[440px] lg:h-[410px] w-full">
+          {portals.map((portal, idx) => {
+            const isExpanded = activeCard === idx;
+            const IconComponent = portal.icon;
 
-        {/* 3 TILES PORTAL MATRIX */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-12 text-left">
-          {portalCards.map((card, idx) => {
-            const Icon = card.icon;
             return (
-              <Link key={idx} href={card.href} className="group block focus:outline-none">
-                <motion.div
-                  whileHover={{ y: -6, scale: 1.015 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={fastGlassSpring}
-                  className="h-full p-7 rounded-[32px] bg-[#070709] border-[3px] border-[#D4AF37] hover:border-[#FCF6BA] shadow-[0_12px_40px_rgba(0,0,0,0.9)] hover:shadow-[0_0_35px_rgba(212,175,55,0.35)] transition-all duration-300 flex flex-col justify-between"
-                >
-                  <div>
-                    {/* Icon & Badge Row */}
-                    <div className="flex items-center justify-between mb-5">
-                      <div className="w-13 h-13 rounded-2xl bg-[#D4AF37]/15 border-2 border-[#D4AF37] flex items-center justify-center text-[#FCF6BA] shadow-[0_0_15px_rgba(212,175,55,0.2)]">
-                        <Icon className="w-6 h-6 text-[#D4AF37]" />
-                      </div>
-                      <span className="text-[10px] font-sans font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-black border border-[#D4AF37] text-[#FCF6BA]">
-                        {card.badge}
-                      </span>
-                    </div>
+              <motion.div
+                key={portal.id}
+                onClick={() => setActiveCard(idx)}
+                onHoverStart={() => setActiveCard(idx)}
+                animate={{ flex: isExpanded ? 2.6 : 0.85 }}
+                transition={cardSpring}
+                className={`relative rounded-[26px] overflow-hidden border backdrop-blur-2xl cursor-pointer flex flex-col justify-between transform-gpu transition-colors duration-200 ${
+                  isExpanded 
+                    ? `${portal.activeBorder} shadow-2xl` 
+                    : `${portal.borderColor} opacity-80 hover:opacity-100 hover:border-white/30`
+                }`}
+                style={{
+                  boxShadow: isExpanded ? `0 16px 45px ${portal.glowColor}` : 'none'
+                }}
+              >
+                <div 
+                  className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
+                  style={{ 
+                    backgroundImage: `url(${portal.bgImage})`,
+                    transform: isExpanded ? 'scale(1.03)' : 'scale(1)'
+                  }}
+                />
+                <div className={`absolute inset-0 bg-gradient-to-t ${portal.bgGradient}`} />
+                <div className="absolute inset-0 bg-black/45" />
 
-                    {/* Titles */}
-                    <h2 className="text-xl font-bold tracking-tight text-white group-hover:text-[#FCF6BA] transition">
-                      {card.title}
+                <div className="relative z-10 p-5 sm:p-6 flex items-center justify-between">
+                  <span className="font-mono text-[11px] tracking-widest uppercase text-white/80 font-bold bg-black/60 px-3 py-0.5 rounded-full border border-white/10 backdrop-blur-md shadow-sm">
+                    {portal.tag}
+                  </span>
+
+                  <div className={`w-10 h-10 rounded-xl bg-black/60 border ${portal.borderColor} flex items-center justify-center backdrop-blur-xl shadow-lg`}>
+                    <IconComponent className="w-4 h-4 text-white" />
+                  </div>
+                </div>
+
+                <div className="relative z-10 px-6 py-2 hidden lg:flex items-center justify-between">
+                  {!isExpanded && (
+                    <div className="flex items-center gap-2 text-white/90 font-black text-base tracking-wider truncate">
+                      <span className="truncate">{portal.title}</span>
+                      <ChevronRight className="w-4 h-4 text-neutral-400 shrink-0" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative z-10 p-5 sm:p-6 space-y-2.5">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-wide text-white drop-shadow-md">
+                      {portal.title}
                     </h2>
-                    <span className="text-xs font-sans text-[#D4AF37] font-semibold block mt-1">
-                      {card.subtitle}
-                    </span>
-                    <p className="text-xs text-[#F3E5AB]/80 font-sans mt-3.5 leading-relaxed">
-                      {card.desc}
+                    <p className={`text-[11px] sm:text-xs font-mono font-bold bg-clip-text text-transparent bg-gradient-to-r ${portal.accentColor}`}>
+                      {portal.subtitle}
                     </p>
                   </div>
 
-                  {/* Bottom Enter Row */}
-                  <div className="pt-6 mt-6 border-t border-[#D4AF37]/30 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-[#FCF6BA] group-hover:text-white transition">
-                    <span>Enter Terminal</span>
-                    <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1.5 transition text-[#D4AF37]" />
-                  </div>
-                </motion.div>
-              </Link>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        variants={fastReveal}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        className="space-y-3 pt-0.5"
+                      >
+                        <p className="text-[11px] sm:text-xs text-neutral-300 font-mono leading-relaxed line-clamp-2 max-w-md">
+                          {portal.desc}
+                        </p>
+
+                        <div>
+                          <Link href={portal.link} className="inline-block">
+                            <motion.button
+                              whileHover={{ scale: 1.03 }}
+                              whileTap={{ scale: 0.96 }}
+                              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl ${portal.btnBg} font-black text-[11px] uppercase font-mono tracking-wider shadow-lg cursor-pointer`}
+                            >
+                              <span>{portal.btnText}</span>
+                              <ArrowUpRight className="w-3.5 h-3.5 stroke-[3]" />
+                            </motion.button>
+                          </Link>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
             );
           })}
         </div>
-      </header>
+      </main>
 
-      {/* MINIMAL LUXURY FOOTER */}
-      <footer className="border-t-2 border-[#D4AF37]/30 py-6 text-center text-xs font-sans text-[#D4AF37]/70 w-full bg-[#030304]">
-        <p>© 2026 {shopName}. All Rights Reserved.</p>
-        <p className="text-[10px] text-[#D4AF37]/50 mt-1 uppercase font-bold tracking-wider">
-          POWERED BY NEXT.JS & SUPABASE REALTIME
-        </p>
-      </footer>
+      <div className="h-2 shrink-0" />
     </div>
   );
 }

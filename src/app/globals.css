@@ -3,64 +3,64 @@
 @tailwind utilities;
 
 :root {
-  --background: #000000;
-  --foreground: #FCF6BA;
+  --background: #faf6ee;
+  --foreground: #221714;
 }
 
+/* Momtude waylude ɓaleewu tawa a yamiraani ngam reende Dinaro theme oo */
+html,
 body {
-  color: #FCF6BA;
-  background-color: #000000;
-  font-family: Arial, Helvetica, sans-serif;
-  overflow-x: hidden;
-  top: 0px !important;
-  position: static !important;
+  color: var(--foreground);
+  background-color: var(--background);
+  min-height: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Base custom scrollbar */
-.custom-gold-scrollbar {
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #D4AF37 #000000;
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
 }
 
-.custom-gold-scrollbar::-webkit-scrollbar {
+/* Momtude scrollbar tawa ina golloroo e browseruuji kala */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0px;
+  height: 0px;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE e Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Luxury Custom Gold Scrollbar ngam Admin Panel */
+.admin-gold-scrollbar::-webkit-scrollbar {
+  width: 6px;
   height: 6px;
 }
 
-.custom-gold-scrollbar::-webkit-scrollbar-track {
-  background: #000000;
+.admin-gold-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 9999px;
 }
 
-.custom-gold-scrollbar::-webkit-scrollbar-thumb {
-  background: #D4AF37;
+.admin-gold-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #fcf6ba, #d4af37);
   border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-/* =========================================================================
-   COMPLETELY HIDE GOOGLE TRANSLATE WHITE TOP BANNER, POPUPS & IFRAMES
-   ========================================================================= */
-.goog-te-banner-frame,
-.goog-te-banner-frame.skiptranslate,
-iframe.goog-te-banner-frame,
-#goog-gt-tt,
-.goog-te-balloon-frame {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  height: 0px !important;
-  width: 0px !important;
-  border: none !important;
-  pointer-events: none !important;
+.admin-gold-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #aa771c;
 }
 
-body > .skiptranslate {
-  display: none !important;
-  visibility: hidden !important;
-  height: 0px !important;
+/* Momtude butoŋaaji number input arrows (spinners) */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
-
-.goog-text-highlight {
-  background: none !important;
-  box-shadow: none !important;
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
