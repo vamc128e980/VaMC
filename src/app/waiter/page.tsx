@@ -44,7 +44,7 @@ export default function WaiterTerminalPage() {
   const [loading, setLoading] = useState(false);
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. Session Verification
+  // 1. Strict Session Verification (Prevents auto-login on deployment)
   useEffect(() => {
     function verifySession() {
       if (typeof window === 'undefined') return;
@@ -54,17 +54,29 @@ export default function WaiterTerminalPage() {
       const roleCookie = cookies.find(c => c.startsWith('staff_role='));
       const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
 
+      const tokenCookie = cookies.find(c => c.startsWith('session_token='));
+      const cookieToken = tokenCookie ? tokenCookie.split('=')[1] : null;
+
       const localRole = localStorage.getItem('staff_role')?.toLowerCase();
+      const localToken = localStorage.getItem('session_token');
       const localWaiter = localStorage.getItem('waiter_session');
       const localAdmin = localStorage.getItem('admin_session');
 
-      if (cookieRole === 'waiter' || localRole === 'waiter' || localWaiter) {
-        if (localWaiter) {
-          try { setCurrentStaff(JSON.parse(localWaiter)); } catch {}
-        }
+      const isWaiterToken = (cookieToken && cookieToken.startsWith('waiter_verified_')) || 
+                            (localToken && localToken.startsWith('waiter_verified_'));
+      const isAdminToken = (cookieToken && cookieToken.startsWith('admin_verified_')) || 
+                           (localToken && localToken.startsWith('admin_verified_'));
+
+      // Both waiter and admin (with verified tokens) can access
+      if ((cookieRole === 'waiter' || localRole === 'waiter') && isWaiterToken && localWaiter) {
+        try { 
+          setCurrentStaff(JSON.parse(localWaiter)); 
+        } catch {}
         setIsAuthenticated(true);
-      } else if (cookieRole === 'admin' || localRole === 'admin' || localAdmin) {
-        // Admin also has full permission to monitor waiter terminal
+      } else if ((cookieRole === 'admin' || localRole === 'admin') && isAdminToken && localAdmin) {
+        try { 
+          setCurrentStaff(JSON.parse(localAdmin)); 
+        } catch {}
         setIsAuthenticated(true);
       } else {
         setIsAuthenticated(false);
@@ -98,7 +110,7 @@ export default function WaiterTerminalPage() {
       const { data: staff, error } = await supabase
         .from('staff_accounts')
         .select('*')
-        .eq('identifier', cleanId)
+        .ilike('identifier', cleanId)
         .maybeSingle();
 
       if (error || !staff) {
@@ -113,11 +125,20 @@ export default function WaiterTerminalPage() {
         return;
       }
 
-      // Successful verification
+      if (staff.role !== 'waiter' && staff.role !== 'admin') {
+        setLoginError('Account does not have floor service access.');
+        setLoginLoading(false);
+        return;
+      }
+
+      // Successful verification with signed token
+      const verifiedToken = `${staff.role}_verified_${Date.now()}`;
       localStorage.setItem('waiter_session', JSON.stringify(staff));
       localStorage.setItem('staff_role', staff.role || 'waiter');
-      localStorage.setItem('session_token', `waiter_verified_${Date.now()}`);
+      localStorage.setItem('session_token', verifiedToken);
+
       document.cookie = `staff_role=${staff.role || 'waiter'}; path=/; max-age=86400; SameSite=Lax`;
+      document.cookie = `session_token=${verifiedToken}; path=/; max-age=86400; SameSite=Lax`;
 
       setCurrentStaff(staff);
       setIsAuthenticated(true);
@@ -200,7 +221,7 @@ export default function WaiterTerminalPage() {
     );
   }
 
-  // If NOT Logged in: Clean Direct Login View (No Redirect Loop)
+  // IF NOT LOGGED IN: Clean Direct Login View
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#030305] text-white flex items-center justify-center p-4 font-mono select-none relative overflow-hidden">

@@ -134,6 +134,7 @@ export default function LuxuryGoldAdminPanel() {
 
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
 
+  // Strict Auth Verification
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -141,14 +142,19 @@ export default function LuxuryGoldAdminPanel() {
     const cookies = rawCookies.split(';').map(c => c.trim());
     const roleCookie = cookies.find(c => c.startsWith('staff_role='));
     const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
+
+    const tokenCookie = cookies.find(c => c.startsWith('session_token='));
+    const cookieToken = tokenCookie ? tokenCookie.split('=')[1] : null;
+
     const localRole = localStorage.getItem('staff_role')?.toLowerCase();
-    const token = localStorage.getItem('session_token');
+    const localToken = localStorage.getItem('session_token');
     const adminSession = localStorage.getItem('admin_session');
 
-    const isValidAdmin = (cookieRole === 'admin' || localRole === 'admin' || !!adminSession) && 
-                         (!token || token.startsWith('admin_verified_'));
+    const isValidToken = (cookieToken && cookieToken.startsWith('admin_verified_')) || 
+                         (localToken && localToken.startsWith('admin_verified_'));
+    const isValidRole = (cookieRole === 'admin' || localRole === 'admin') && !!adminSession;
 
-    if (isValidAdmin) {
+    if (isValidRole && isValidToken) {
       if (!cookieRole) {
         document.cookie = 'staff_role=admin; path=/; max-age=86400; SameSite=Lax';
       }
@@ -192,6 +198,7 @@ export default function LuxuryGoldAdminPanel() {
       localStorage.setItem('staff_role', 'admin');
       localStorage.setItem('session_token', verifiedToken);
       document.cookie = 'staff_role=admin; path=/; max-age=86400; SameSite=Lax';
+      document.cookie = `session_token=${verifiedToken}; path=/; max-age=86400; SameSite=Lax`;
 
       setIsAuthenticated(true);
     } catch (err: any) {
@@ -213,7 +220,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // High-performance Parallel Data Load
+  // Parallel Data Load
   const loadAdminData = async () => {
     setLoading(true);
     try {
