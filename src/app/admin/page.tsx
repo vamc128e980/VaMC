@@ -57,12 +57,6 @@ export default function LuxuryGoldAdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
 
-  // Inline Login fallback states
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPass, setLoginPass] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  
   // Tabs: live orders, menu, sales history
   const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'history'>('orders');
 
@@ -134,7 +128,7 @@ export default function LuxuryGoldAdminPanel() {
 
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
 
-  // Strict Auth Verification
+  // Strict Auth Verification -> Unauthenticated unte Direct /login ki redirect avthundi
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -159,54 +153,14 @@ export default function LuxuryGoldAdminPanel() {
         document.cookie = 'staff_role=admin; path=/; max-age=86400; SameSite=Lax';
       }
       setIsAuthenticated(true);
+      setAuthChecking(false);
     } else {
       setIsAuthenticated(false);
+      setAuthChecking(false);
+      // Direct ga Login page ki redirect avthundi
+      router.replace('/login');
     }
-    setAuthChecking(false);
-  }, []);
-
-  const handleInlineLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
-
-    try {
-      const cleanEmail = loginEmail.trim().toLowerCase();
-      const cleanPass = loginPass.trim();
-
-      const { data: adminRecord, error } = await supabase
-        .from('staff_accounts')
-        .select('*')
-        .eq('identifier', cleanEmail)
-        .eq('role', 'admin')
-        .maybeSingle();
-
-      if (error || !adminRecord) {
-        setLoginError('Invalid credentials. Check email & password.');
-        setLoginLoading(false);
-        return;
-      }
-
-      if (adminRecord.password_hash !== cleanPass) {
-        setLoginError('Incorrect password.');
-        setLoginLoading(false);
-        return;
-      }
-
-      const verifiedToken = `admin_verified_${Date.now()}`;
-      localStorage.setItem('admin_session', JSON.stringify(adminRecord));
-      localStorage.setItem('staff_role', 'admin');
-      localStorage.setItem('session_token', verifiedToken);
-      document.cookie = 'staff_role=admin; path=/; max-age=86400; SameSite=Lax';
-      document.cookie = `session_token=${verifiedToken}; path=/; max-age=86400; SameSite=Lax`;
-
-      setIsAuthenticated(true);
-    } catch (err: any) {
-      setLoginError(err.message || 'Login failed.');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
+  }, [router]);
 
   const loadBrandSettings = async () => {
     try {
@@ -389,12 +343,12 @@ export default function LuxuryGoldAdminPanel() {
       localStorage.clear();
     }
     setIsAuthenticated(false);
+    router.replace('/login');
   };
 
   // =========================================================================
   // BULLETPROOF: SETTLE & MARK AS PAID
   // Marks session as 'paid' & 'completed', frees up the table to 'available'
-  // (Safely avoids schema cache error by not referencing updated_at)
   // =========================================================================
   const handleSettleAndMarkPaid = async (sessionId: string, tableNumber: number) => {
     setSettlingSessionId(sessionId);
@@ -917,7 +871,6 @@ export default function LuxuryGoldAdminPanel() {
     .filter(d => d.quantity > 0)
     .sort((a, b) => b.quantity - a.quantity);
 
-  // Active Sessions: MUST be status = active AND payment_status != 'paid'
   const activeSessions = sessions.filter(s => s.status === 'active' && s.payment_status !== 'paid');
   const filteredRevenue = filteredSessions.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
   const filteredMenuItems = selectedCatId === 'all' ? menuItems : menuItems.filter(m => m.category_id === selectedCatId);
@@ -995,59 +948,7 @@ export default function LuxuryGoldAdminPanel() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen w-full bg-[#040406] flex items-center justify-center p-4">
-        <div className="w-full max-w-sm bg-[#0c0c10] border border-[#D4AF37]/40 rounded-3xl p-6 shadow-2xl space-y-5 font-mono">
-          <div className="text-center space-y-1">
-            <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center mx-auto text-[#D4AF37]">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <h2 className="text-base font-black text-white uppercase tracking-wider">Owner Console Login</h2>
-            <p className="text-[11px] text-neutral-400">Vujwala Simha Management Access</p>
-          </div>
-
-          {loginError && (
-            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
-              {loginError}
-            </div>
-          )}
-
-          <form onSubmit={handleInlineLogin} className="space-y-3.5 text-xs">
-            <div>
-              <label className="text-neutral-400 block mb-1">Admin Email</label>
-              <input
-                type="email"
-                required
-                placeholder="admin@vujwalasimha.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37]"
-              />
-            </div>
-
-            <div>
-              <label className="text-neutral-400 block mb-1">Security Password</label>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={loginPass}
-                onChange={(e) => setLoginPass(e.target.value)}
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37]"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black uppercase text-xs shadow-lg cursor-pointer transition disabled:opacity-50"
-            >
-              {loginLoading ? 'Authenticating...' : 'Sign In To Dashboard'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
+    return null; // Will redirect automatically to /login in useEffect
   }
 
   return (

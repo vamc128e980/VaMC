@@ -13,13 +13,9 @@ import {
   RefreshCw, 
   ChefHat, 
   Receipt, 
-  Sparkles,
   Check, 
   X, 
-  LogOut,
-  Lock,
-  User,
-  ShieldCheck
+  LogOut
 } from 'lucide-react';
 
 export default function WaiterTerminalPage() {
@@ -28,12 +24,6 @@ export default function WaiterTerminalPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
   const [currentStaff, setCurrentStaff] = useState<any>(null);
-
-  // Login Form States
-  const [identifierInput, setIdentifierInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
 
   // Terminal Live Floor Data
   const [tables, setTables] = useState<any[]>([]);
@@ -44,7 +34,7 @@ export default function WaiterTerminalPage() {
   const [loading, setLoading] = useState(false);
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. Strict Session Verification (Prevents auto-login on deployment)
+  // 1. Strict Session Verification -> Session lekapothe direct ga /login ki redirect avthundi
   useEffect(() => {
     function verifySession() {
       if (typeof window === 'undefined') return;
@@ -67,25 +57,28 @@ export default function WaiterTerminalPage() {
       const isAdminToken = (cookieToken && cookieToken.startsWith('admin_verified_')) || 
                            (localToken && localToken.startsWith('admin_verified_'));
 
-      // Both waiter and admin (with verified tokens) can access
       if ((cookieRole === 'waiter' || localRole === 'waiter') && isWaiterToken && localWaiter) {
         try { 
           setCurrentStaff(JSON.parse(localWaiter)); 
         } catch {}
         setIsAuthenticated(true);
+        setAuthChecking(false);
       } else if ((cookieRole === 'admin' || localRole === 'admin') && isAdminToken && localAdmin) {
         try { 
           setCurrentStaff(JSON.parse(localAdmin)); 
         } catch {}
         setIsAuthenticated(true);
+        setAuthChecking(false);
       } else {
         setIsAuthenticated(false);
+        setAuthChecking(false);
+        // Direct ga centralized /login page ki redirect
+        router.replace('/login');
       }
-      setAuthChecking(false);
     }
 
     verifySession();
-  }, []);
+  }, [router]);
 
   // Live Clock
   useEffect(() => {
@@ -96,58 +89,6 @@ export default function WaiterTerminalPage() {
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  // Handle Waiter Credentials Login
-  const handleWaiterLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
-
-    const cleanId = identifierInput.trim().toLowerCase();
-    const cleanPass = passwordInput.trim();
-
-    try {
-      const { data: staff, error } = await supabase
-        .from('staff_accounts')
-        .select('*')
-        .ilike('identifier', cleanId)
-        .maybeSingle();
-
-      if (error || !staff) {
-        setLoginError('Invalid Login ID or Username.');
-        setLoginLoading(false);
-        return;
-      }
-
-      if (staff.password_hash !== cleanPass) {
-        setLoginError('Incorrect Terminal Password.');
-        setLoginLoading(false);
-        return;
-      }
-
-      if (staff.role !== 'waiter' && staff.role !== 'admin') {
-        setLoginError('Account does not have floor service access.');
-        setLoginLoading(false);
-        return;
-      }
-
-      // Successful verification with signed token
-      const verifiedToken = `${staff.role}_verified_${Date.now()}`;
-      localStorage.setItem('waiter_session', JSON.stringify(staff));
-      localStorage.setItem('staff_role', staff.role || 'waiter');
-      localStorage.setItem('session_token', verifiedToken);
-
-      document.cookie = `staff_role=${staff.role || 'waiter'}; path=/; max-age=86400; SameSite=Lax`;
-      document.cookie = `session_token=${verifiedToken}; path=/; max-age=86400; SameSite=Lax`;
-
-      setCurrentStaff(staff);
-      setIsAuthenticated(true);
-    } catch (err: any) {
-      setLoginError(err.message || 'Login failed.');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
 
   // Load Terminal Data
   const loadWaiterData = async () => {
@@ -193,12 +134,11 @@ export default function WaiterTerminalPage() {
     document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('waiter_session');
-      localStorage.removeItem('session_token');
-      localStorage.removeItem('staff_role');
+      localStorage.clear();
     }
     setIsAuthenticated(false);
     setCurrentStaff(null);
+    router.replace('/login');
   };
 
   const handleAcknowledgeBatch = async (batchId: string) => {
@@ -221,78 +161,9 @@ export default function WaiterTerminalPage() {
     );
   }
 
-  // IF NOT LOGGED IN: Clean Direct Login View
+  // Session lekapothe useEffect lo router.replace('/login') call avthundi
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#030305] text-white flex items-center justify-center p-4 font-mono select-none relative overflow-hidden">
-        <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
-
-        <div className="w-full max-w-sm bg-[#0c0c12] border border-cyan-500/40 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] space-y-5 relative z-10">
-          <div className="text-center space-y-1.5">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center mx-auto text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-              <ChefHat className="w-6 h-6" />
-            </div>
-            <h2 className="text-base font-black text-white uppercase tracking-wider">Waiter Terminal Access</h2>
-            <p className="text-[11px] text-neutral-400">Floor Crew Management Login</p>
-          </div>
-
-          {loginError && (
-            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
-              {loginError}
-            </div>
-          )}
-
-          <form onSubmit={handleWaiterLogin} className="space-y-3.5 text-xs">
-            <div>
-              <label className="text-neutral-400 block mb-1">Staff ID / Username</label>
-              <div className="relative">
-                <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. waiter1"
-                  value={identifierInput}
-                  onChange={(e) => setIdentifierInput(e.target.value)}
-                  className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-cyan-400 transition"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-neutral-400 block mb-1">Terminal Password</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-cyan-400 transition"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-500 text-black font-black uppercase text-xs shadow-lg cursor-pointer transition hover:brightness-110 disabled:opacity-50"
-            >
-              {loginLoading ? 'Verifying...' : 'Sign In To Terminal'}
-            </button>
-          </form>
-
-          <div className="text-center pt-2 border-t border-white/10">
-            <button
-              onClick={() => router.push('/')}
-              className="text-[10px] text-neutral-500 hover:text-white transition cursor-pointer"
-            >
-              ← Back to Main Menu
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   // LOGGED IN: Full Terminal View
