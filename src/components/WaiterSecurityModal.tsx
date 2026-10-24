@@ -2,52 +2,59 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
 import { 
   UserCheck, 
-  KeyRound, 
+  X, 
   Trash2, 
   Plus, 
-  Check, 
-  X, 
   Eye, 
   EyeOff, 
-  Sparkles,
-  Edit2,
-  Phone,
-  User
+  ShieldAlert, 
+  Lock, 
+  User, 
+  KeyRound,
+  Check
 } from 'lucide-react';
 
-const fastSpring = { type: 'spring', stiffness: 480, damping: 28, mass: 0.8 };
+const iosSpring = {
+  type: 'spring',
+  stiffness: 380,
+  damping: 28,
+  mass: 0.6
+};
 
-export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+interface WaiterSecurityModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function WaiterSecurityModal({ isOpen, onClose }: WaiterSecurityModalProps) {
   const [waiters, setWaiters] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-
-  // New Waiter Details
-  const [newName, setNewName] = useState('');
-  const [newIdentifier, setNewIdentifier] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-
-  // Editing States
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editMode, setEditMode] = useState<'name' | 'identifier' | 'password' | null>(null);
-  const [tempValue, setTempValue] = useState('');
   const [showPassMap, setShowPassMap] = useState<Record<number, boolean>>({});
+
+  // New Waiter Form States
+  const [newWaiterName, setNewWaiterName] = useState('');
+  const [newWaiterIdentifier, setNewWaiterIdentifier] = useState('');
+  const [newWaiterPassword, setNewWaiterPassword] = useState('');
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const fetchWaiters = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('staff_accounts')
         .select('*')
         .eq('role', 'waiter')
         .order('id', { ascending: true });
+
+      if (error) throw error;
       if (data) setWaiters(data);
-    } catch (err) {
-      console.error('Waiters fetch error:', err);
+    } catch (err: any) {
+      console.error('Fetch waiters error:', err.message);
     } finally {
       setLoading(false);
     }
@@ -56,141 +63,63 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
   useEffect(() => {
     if (isOpen) {
       fetchWaiters();
-      setShowAddForm(false);
-      cancelEdit();
+      setFormError('');
     }
   }, [isOpen]);
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditMode(null);
-    setTempValue('');
-  };
-
-  if (!isOpen) return null;
-
-  // 1. Add Waiter with explicit Phone/Username Identifier
   const handleAddWaiter = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = newName.trim();
-    const cleanId = (newIdentifier.trim() || cleanName.toLowerCase().replace(/\s+/g, '')).toLowerCase();
-    const cleanPass = newPassword.trim();
+    setFormError('');
 
-    if (!cleanName) return alert('Waiter Name enter cheyandi.');
-    if (!cleanId) return alert('Mobile number or Username enter cheyandi.');
-    if (!cleanPass) return alert('Password/PIN enter cheyandi.');
+    const cleanName = newWaiterName.trim();
+    const cleanId = newWaiterIdentifier.trim().toLowerCase();
+    const cleanPass = newWaiterPassword.trim();
 
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('staff_accounts').insert({
-        name: cleanName,
-        role: 'waiter',
-        identifier: cleanId,
-        password_hash: cleanPass
-      });
-
-      if (error) {
-        if (error.message.includes('unique') || error.code === '23505') {
-          throw new Error(`"${cleanId}" ID tho already account undi. Vere phone/username ivvandi!`);
-        }
-        throw error;
-      }
-
-      setNewName('');
-      setNewIdentifier('');
-      setNewPassword('');
-      setShowAddForm(false);
-      await fetchWaiters();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
+    if (!cleanName || !cleanId || !cleanPass) {
+      setFormError('All fields (Name, Login ID, Password) are mandatory.');
+      return;
     }
-  };
-
-  // 2. Change Name
-  const handleSaveName = async (waiterId: number) => {
-    const cleanName = tempValue.trim();
-    if (!cleanName) return alert('Name empty ga undakudadhu.');
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('staff_accounts')
-        .update({ 
+        .insert({
           name: cleanName,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', waiterId);
-
-      if (error) throw error;
-      cancelEdit();
-      await fetchWaiters();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 3. Change Login ID (Phone / Username)
-  const handleSaveIdentifier = async (waiterId: number) => {
-    const cleanId = tempValue.trim().toLowerCase();
-    if (!cleanId) return alert('Identifier empty ga undakudadhu.');
-
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('staff_accounts')
-        .update({ 
           identifier: cleanId,
-          updated_at: new Date().toISOString()
+          password_hash: cleanPass,
+          role: 'waiter'
         })
-        .eq('id', waiterId);
+        .select();
 
       if (error) throw error;
-      cancelEdit();
+
+      setNewWaiterName('');
+      setNewWaiterIdentifier('');
+      setNewWaiterPassword('');
       await fetchWaiters();
     } catch (err: any) {
-      alert(err.message);
+      setFormError(err.message || 'Failed to add waiter.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 4. Change Password
-  const handleSavePassword = async (waiterId: number) => {
-    const cleanPass = tempValue.trim();
-    if (!cleanPass) return alert('Password empty ga undakudadhu.');
-
-    setLoading(true);
+  const handleDeleteWaiter = async (waiterId: number, name: string) => {
+    if (!confirm(`Are you sure you want to delete account for "${name}"?`)) return;
     try {
+      setLoading(true);
       const { error } = await supabase
         .from('staff_accounts')
-        .update({ 
-          password_hash: cleanPass,
-          updated_at: new Date().toISOString()
-        })
+        .delete()
         .eq('id', waiterId);
 
       if (error) throw error;
-      cancelEdit();
-      await fetchWaiters();
-    } catch (err: any) {
-      alert('Password update error: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 5. Delete Waiter
-  const handleDeleteWaiter = async (waiterId: number, name: string) => {
-    if (!confirm(`Are you sure? "${name}" account delete aipothundi.`)) return;
-    try {
-      await supabase.from('staff_accounts').delete().eq('id', waiterId);
       await fetchWaiters();
     } catch (err: any) {
       alert('Delete failed: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -198,266 +127,180 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     setShowPassMap(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-      <motion.div
-        initial={{ scale: 0.94, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.94, opacity: 0 }}
-        transition={fastSpring}
-        className="w-full max-w-xl bg-black border border-[#D4AF37]/50 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,1)] relative space-y-4 max-h-[85vh] overflow-y-auto no-scrollbar"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#D4AF37]/25 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] p-0.5 shadow-md">
-              <div className="w-full h-full bg-black rounded-[14px] flex items-center justify-center">
-                <UserCheck className="w-5 h-5 text-[#F3E5AB]" />
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <motion.div
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          transition={iosSpring}
+          className="w-full max-w-xl bg-[#0c0c0e] border border-[#D4AF37]/40 rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9)] relative space-y-5 max-h-[88vh] overflow-y-auto no-scrollbar font-mono text-xs select-none"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/35 flex items-center justify-center text-[#D4AF37]">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-white text-base uppercase tracking-wider">Waiter Security Suite</h3>
+                <p className="text-[10px] text-neutral-400">Manage floor crew access credentials</p>
               </div>
             </div>
-            <div>
-              <h3 className="font-black text-white text-base">Waiter Directory & Security</h3>
-              <p className="text-[11px] font-mono text-[#D4AF37]/80">Manage Login Credentials & Passwords</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-[#D4AF37] hover:text-[#FCF6BA]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Action Header */}
-        <div className="flex justify-between items-center pt-1">
-          <span className="text-xs font-mono text-[#F3E5AB]/80 uppercase">
-            Active: {waiters.length} Waiters
-          </span>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            transition={fastSpring}
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>{showAddForm ? 'Close Form' : '+ Add Waiter'}</span>
-          </motion.button>
-        </div>
-
-        {/* Add Waiter Form */}
-        <AnimatePresence>
-          {showAddForm && (
-            <motion.form
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={fastSpring}
-              onSubmit={handleAddWaiter}
-              className="p-4 rounded-2xl bg-black border border-[#D4AF37]/40 space-y-3 text-xs overflow-hidden shadow-lg"
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl border border-white/10 text-neutral-400 hover:text-white hover:border-[#D4AF37]/50 transition cursor-pointer"
             >
-              <div className="font-bold text-[#FCF6BA] flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-[#D4AF37]" /> Create Waiter Login
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Form to Add New Waiter */}
+          <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-3">
+            <span className="text-[11px] font-bold text-[#FCF6BA] uppercase flex items-center gap-1.5">
+              <Plus className="w-4 h-4 text-[#D4AF37]" /> Create Waiter Login
+            </span>
+
+            {formError && (
+              <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-[11px]">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleAddWaiter} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-neutral-400 block mb-1">Staff Name</label>
+                  <div className="relative">
+                    <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Ramesh"
+                      value={newWaiterName}
+                      onChange={(e) => setNewWaiterName(e.target.value)}
+                      className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-white outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-neutral-400 block mb-1">Login ID / Username</label>
+                  <div className="relative">
+                    <KeyRound className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. waiter1"
+                      value={newWaiterIdentifier}
+                      onChange={(e) => setNewWaiterIdentifier(e.target.value)}
+                      className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-white outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[#D4AF37]/80 block mb-1">Staff Name *</label>
+              <div>
+                <label className="text-neutral-400 block mb-1">Terminal Password</label>
+                <div className="relative">
+                  <Lock className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
                   <input
-                    type="text"
+                    type={showNewPass ? 'text' : 'password'}
                     required
-                    placeholder="e.g. Ramesh"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
+                    placeholder="••••••••"
+                    value={newWaiterPassword}
+                    onChange={(e) => setNewWaiterPassword(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-xl pl-9 pr-10 py-2 text-white outline-none focus:border-[#D4AF37]"
                   />
-                </div>
-
-                <div>
-                  <label className="text-[#D4AF37]/80 block mb-1">Login ID (Phone/User) *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 9876543210"
-                    value={newIdentifier}
-                    onChange={(e) => setNewIdentifier(e.target.value)}
-                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-[#D4AF37]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[#D4AF37]/80 block mb-1">Password / PIN *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 1234"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-black border border-[#D4AF37]/40 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-[#D4AF37]"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
+                  >
+                    {showNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-[#D4AF37]" />}
+                  </button>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-md mt-1 cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black uppercase tracking-wider text-xs shadow-md cursor-pointer hover:brightness-110 transition disabled:opacity-50"
               >
-                {loading ? 'Creating Account...' : 'Save Waiter'}
+                {loading ? 'Adding...' : 'Add Waiter Staff'}
               </button>
-            </motion.form>
-          )}
-        </AnimatePresence>
+            </form>
+          </div>
 
-        {/* Waiters Directory */}
-        <div className="space-y-2.5">
-          {waiters.map((w) => {
-            const isEditingThis = editingId === w.id;
-            const isPassVisible = showPassMap[w.id];
+          {/* Existing Waiters List */}
+          <div className="space-y-2.5">
+            <span className="text-[11px] font-bold text-neutral-400 uppercase block">
+              Active Crew Accounts ({waiters.length}):
+            </span>
 
-            return (
-              <motion.div
-                key={w.id}
-                whileHover={{ scale: 1.01 }}
-                transition={fastSpring}
-                className="p-4 rounded-2xl bg-black border border-[#D4AF37]/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-              >
-                {/* Staff Name & ID */}
-                <div className="space-y-1.5">
-                  {/* Name Edit */}
-                  {isEditingThis && editMode === 'name' ? (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={tempValue}
-                        onChange={(e) => setTempValue(e.target.value)}
-                        className="bg-black border border-[#D4AF37] rounded-lg px-2.5 py-1 text-white text-xs outline-none font-bold"
-                        placeholder="New Name"
-                      />
-                      <button
-                        onClick={() => handleSaveName(w.id)}
-                        className="p-1 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
-                        title="Save Name"
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      </button>
-                      <button onClick={cancelEdit} className="p-1 rounded-lg bg-white/10 text-neutral-400">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-[#FCF6BA] text-sm">{w.name}</span>
-                      <button
-                        onClick={() => {
-                          setEditingId(w.id);
-                          setEditMode('name');
-                          setTempValue(w.name);
-                        }}
-                        className="p-1 rounded bg-[#D4AF37]/10 hover:bg-[#D4AF37]/25 text-[#D4AF37]"
-                        title="Edit Name"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
+            {waiters.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 text-center text-neutral-500">
+                No waiter accounts configured yet.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar pr-1">
+                {waiters.map((w) => {
+                  const isPassVisible = !!showPassMap[w.id];
 
-                  {/* Identifier (Login User) Edit */}
-                  <div className="flex items-center gap-2 font-mono text-[11px] text-[#D4AF37]/80">
-                    <span>Login ID:</span>
-                    {isEditingThis && editMode === 'identifier' ? (
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={tempValue}
-                          onChange={(e) => setTempValue(e.target.value)}
-                          className="bg-black border border-[#D4AF37] rounded-lg px-2 py-0.5 text-white text-xs outline-none font-mono"
-                        />
-                        <button
-                          onClick={() => handleSaveIdentifier(w.id)}
-                          className="p-1 rounded bg-emerald-500/20 text-emerald-300"
-                        >
-                          <Check className="w-3 h-3 stroke-[3]" />
-                        </button>
-                        <button onClick={cancelEdit} className="p-1 rounded bg-white/10 text-neutral-400">
-                          <X className="w-3 h-3" />
-                        </button>
+                  return (
+                    <div
+                      key={w.id}
+                      className="p-3 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-3 shadow-sm"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="text-white font-bold block">{w.name || 'Unnamed Staff'}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-neutral-400">
+                          <span>ID: <strong className="text-[#FCF6BA]">{w.identifier}</strong></span>
+                          <span>•</span>
+                          <span>Pass: <strong className="text-white">{isPassVisible ? w.password_hash : '••••••'}</strong></span>
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-[#F3E5AB] font-bold bg-[#D4AF37]/10 px-2 py-0.5 rounded flex items-center gap-1">
-                        {w.identifier}
-                        <button
-                          onClick={() => {
-                            setEditingId(w.id);
-                            setEditMode('identifier');
-                            setTempValue(w.identifier);
-                          }}
-                          className="text-[#D4AF37]/70 hover:text-[#FCF6BA]"
-                        >
-                          <Edit2 className="w-2.5 h-2.5 ml-1" />
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                </div>
 
-                {/* Password & Delete Section */}
-                <div className="flex items-center gap-2">
-                  {isEditingThis && editMode === 'password' ? (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="New Password"
-                        value={tempValue}
-                        onChange={(e) => setTempValue(e.target.value)}
-                        className="w-28 bg-black border border-[#D4AF37] rounded-lg px-2.5 py-1 text-white font-mono text-xs outline-none"
-                      />
-                      <button
-                        onClick={() => handleSavePassword(w.id)}
-                        className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
-                        title="Save Password"
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      </button>
-                      <button onClick={cancelEdit} className="p-1.5 rounded-lg bg-white/10 text-neutral-400">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black border border-[#D4AF37]/25 font-mono text-xs text-[#F3E5AB]">
-                        <KeyRound className="w-3 h-3 text-[#D4AF37]" />
-                        <span>{isPassVisible ? w.password_hash : '••••••••'}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
+                          type="button"
                           onClick={() => toggleShowPass(w.id)}
-                          className="text-[#D4AF37]/70 hover:text-[#FCF6BA] ml-1"
+                          className="p-1.5 rounded-lg border border-white/10 bg-black/40 text-neutral-300 hover:text-white cursor-pointer"
+                          title={isPassVisible ? 'Hide Password' : 'Show Password'}
                         >
-                          {isPassVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          {isPassVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-[#D4AF37]" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteWaiter(w.id, w.name || w.identifier)}
+                          className="p-1.5 rounded-lg border border-rose-500/40 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 cursor-pointer"
+                          title="Delete Waiter Account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-
-                      <button
-                        onClick={() => {
-                          setEditingId(w.id);
-                          setEditMode('password');
-                          setTempValue(w.password_hash);
-                        }}
-                        className="px-2.5 py-1 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-[11px] font-bold"
-                      >
-                        Change Key
-                      </button>
-
-                      <button
-                        onClick={() => handleDeleteWaiter(w.id, w.name)}
-                        className="p-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300"
-                        title="Delete Waiter"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </motion.div>
-    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-white/10 text-right">
+            <button
+              onClick={onClose}
+              className="px-5 py-2 rounded-xl bg-white/[0.05] border border-white/10 hover:border-[#D4AF37]/50 text-white font-bold uppercase tracking-wider text-xs transition cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
   );
 }
