@@ -12,9 +12,12 @@ import {
   Receipt, 
   ChevronRight, 
   ShoppingBag, 
-  Crown, 
   Search, 
-  Tag
+  Tag,
+  User,
+  Phone,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 
 const smoothSpring = {
@@ -38,6 +41,17 @@ export default function TableMenuPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Active Session State (Untill Admin marks PAID)
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
+
+  // Customer Checkout Modal State
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [checkoutError, setCheckoutError] = useState('');
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
   // iOS 5-second Fade In/Out Promo State
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
 
@@ -47,12 +61,64 @@ export default function TableMenuPage() {
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
   const [splitPersons, setSplitPersons] = useState<number>(2);
 
+  // Phone Number Validator (Block fake numbers like 1234567890, 0000000000, 9999999999)
+  const isValidPhoneNumber = (phone: string) => {
+    const clean = phone.trim().replace(/\D/g, '');
+    if (clean.length !== 10) return false;
+    
+    // Check valid Indian mobile format (Starts with 6, 7, 8, or 9)
+    if (!/^[6-9]\d{9}$/.test(clean)) return false;
+
+    // Block common dummy numbers
+    const dummyList = [
+      '1234567890', '0123456789', '9876543210',
+      '0000000000', '1111111111', '2222222222', '3333333333',
+      '4444444444', '5555555555', '6666666666', '7777777777',
+      '8888888888', '9999999999'
+    ];
+    if (dummyList.includes(clean)) return false;
+
+    return true;
+  };
+
+  // Fetch Live Session for this Table
+  const fetchActiveTableSession = async (tableNum: number) => {
+    try {
+      const { data: session } = await supabase
+        .from('table_sessions')
+        .select('*')
+        .eq('table_number', tableNum)
+        .eq('status', 'active')
+        .neq('payment_status', 'paid')
+        .maybeSingle();
+
+      if (session) {
+        setActiveSession(session);
+        setCustomerName(session.customer_name || '');
+        setCustomerPhone(session.customer_phone || '');
+
+        // Fetch all items already placed in this session
+        const { data: items } = await supabase
+          .from('order_items')
+          .select('*, menu_items(name_en, name, price)')
+          .eq('session_id', session.id)
+          .neq('item_status', 'cancelled');
+
+        if (items) setSessionOrderedItems(items);
+      } else {
+        setActiveSession(null);
+        setSessionOrderedItems([]);
+      }
+    } catch (err) {
+      console.error('Session sync error:', err);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
     async function initTableExperience() {
       try {
-        // Table Number Resolution & Session Lock
         let finalTableNumber = 1;
         let finalTableName = 'Table 1';
 
@@ -79,14 +145,15 @@ export default function TableMenuPage() {
           setResolvedTableNumber(finalTableNumber);
           setDisplayTableName(finalTableName);
 
-          // URL mask: Custom Table Name display avthundi, internal orders lock ayyi wrong orders padavu
           if (typeof window !== 'undefined') {
             const cleanSlug = encodeURIComponent(finalTableName.replace(/\s+/g, '-'));
             window.history.replaceState(null, '', `/table/${cleanSlug}`);
           }
         }
 
-        // Parallel Data Fetching
+        // Fetch Live Active Session for this table
+        await fetchActiveTableSession(finalTableNumber);
+
         const [settingsRes, catsRes, itemsRes, bnrsRes] = await Promise.all([
           supabase.from('restaurant_settings').select('restaurant_name').eq('id', 1).maybeSingle(),
           supabase.from('categories').select('id, name, name_en, sort_order').order('sort_order', { ascending: true }),
@@ -116,6 +183,12 @@ export default function TableMenuPage() {
     // Realtime Listener
     const channel = supabase
       .channel(`table_live_${rawParam}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => {
+        fetchActiveTableSession(resolvedTableNumber);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
+        fetchActiveTableSession(resolvedTableNumber);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, async () => {
         const { data } = await supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true });
         if (data && isMounted) setMenuItems(data);
@@ -130,9 +203,9 @@ export default function TableMenuPage() {
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [rawParam]);
+  }, [rawParam, resolvedTableNumber]);
 
-  // iOS 5-Second Promo Banner Smooth Crossfade Timer
+  // iOS 5-Second Promo Banner Smooth Crossfade
   useEffect(() => {
     if (banners.length <= 1) return;
     const interval = setInterval(() => {
@@ -163,6 +236,119 @@ export default function TableMenuPage() {
 
   const cartGrandTotal = cart.reduce((sum, ci) => sum + Number(ci.item.price || 0) * ci.quantity, 0);
   const cartItemCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
+
+  // Existing Session Financials
+  const sessionTotalAmount = sessionOrderedItems.reduce((sum, oi) => {
+    const pr = Number(oi.unit_price || oi.menu_items?.price || 0);
+    return sum + (oi.quantity * pr);
+  }, 0);
+
+  // Combined Total (Placed + In Cart)
+  const combinedTotalBill = sessionTotalAmount + cartGrandTotal;
+
+  // Handle Order Placement to Kitchen & Counter
+  const handleConfirmOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCheckoutError('');
+
+    if (!activeSession) {
+      if (!customerName.trim()) {
+        setCheckoutError('Dayachesi mee peru enter cheyandi.');
+        return;
+      }
+      if (!isValidPhoneNumber(customerPhone)) {
+        setCheckoutError('Valid 10-digit mobile number enter cheyandi (Fake/Dummy numbers allow cheyabadavu).');
+        return;
+      }
+    }
+
+    setIsSubmittingOrder(true);
+    try {
+      let currentSessionId = activeSession?.id;
+
+      // 1. Create session if not already open
+      if (!currentSessionId) {
+        const cleanPhone = customerPhone.trim().replace(/\D/g, '');
+        const { data: newSession, error: sErr } = await supabase
+          .from('table_sessions')
+          .insert({
+            table_number: resolvedTableNumber,
+            customer_name: customerName.trim(),
+            customer_phone: cleanPhone,
+            status: 'active',
+            payment_status: 'unpaid',
+            total_amount: cartGrandTotal,
+            subtotal: cartGrandTotal,
+            cgst_amount: 0,
+            sgst_amount: 0,
+            final_payable: cartGrandTotal
+          })
+          .select()
+          .single();
+
+        if (sErr) throw sErr;
+        currentSessionId = newSession.id;
+
+        await supabase
+          .from('restaurant_tables')
+          .update({ status: 'occupied' })
+          .eq('table_number', resolvedTableNumber);
+      }
+
+      // 2. Create Order Batch
+      const { data: newBatch, error: bErr } = await supabase
+        .from('order_batches')
+        .insert({
+          session_id: currentSessionId,
+          table_number: resolvedTableNumber,
+          status: 'pending_waiter'
+        })
+        .select()
+        .single();
+
+      if (bErr) throw bErr;
+
+      // 3. Insert All Ordered Cart Items
+      const orderPayloads = cart.map(ci => ({
+        session_id: currentSessionId,
+        batch_id: newBatch.id,
+        menu_item_id: ci.item.id,
+        quantity: ci.quantity,
+        unit_price: Number(ci.item.price),
+        item_status: 'pending'
+      }));
+
+      const { error: oiErr } = await supabase
+        .from('order_items')
+        .insert(orderPayloads);
+
+      if (oiErr) throw oiErr;
+
+      // 4. Update Running Total in Table Session
+      const updatedTotal = sessionTotalAmount + cartGrandTotal;
+      await supabase
+        .from('table_sessions')
+        .update({
+          total_amount: updatedTotal,
+          subtotal: updatedTotal,
+          cgst_amount: 0,
+          sgst_amount: 0,
+          final_payable: updatedTotal
+        })
+        .eq('id', currentSessionId);
+
+      // Clean Cart & Refresh State
+      setCart([]);
+      setIsCartOpen(false);
+      setIsCheckoutOpen(false);
+      await fetchActiveTableSession(resolvedTableNumber);
+      alert('Mee order kitchen mariyu counter ki pampabadindhi! Meeru inka dishes add cheyavachhu.');
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Order process failed.');
+    } finally {
+      setIsSubmittingOrder(false);
+    }
+  };
 
   const filteredMenuItems = menuItems.filter(item => {
     const matchesCat = selectedCatId === 'all' || item.category_id === selectedCatId;
@@ -200,27 +386,33 @@ export default function TableMenuPage() {
       <header className="sticky top-0 z-40 bg-[#FAF6EE]/95 backdrop-blur-md border-b border-[#E6DEC8]/60 px-4 sm:px-8 py-3.5 shadow-sm">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#C2412D] text-white flex items-center justify-center font-bold text-sm shadow-md">
-              <Crown className="w-5 h-5 text-white" />
+            <div className="w-11 h-11 rounded-full overflow-hidden bg-white border border-[#E6DEC8] flex items-center justify-center shadow-md p-1">
+              <img 
+                src="/logo.png" 
+                alt="Logo" 
+                className="w-full h-full object-contain" 
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-[#221714] tracking-tight uppercase">
                 {shopName}
               </h1>
               <span className="text-[11px] font-mono text-[#C2412D] font-bold block">
-                {displayTableName}
+                {displayTableName} {activeSession && `• Seated (${activeSession.customer_name})`}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Header: Just "Bill" */}
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={() => setIsBillModalOpen(true)}
               className="px-4 py-2 rounded-full bg-white border border-[#221714]/20 text-[#221714] hover:bg-[#221714] hover:text-white font-mono font-bold text-xs uppercase flex items-center gap-1.5 transition cursor-pointer shadow-sm"
             >
-              <Receipt className="w-3.5 h-3.5" />
-              <span>Bill & Split</span>
+              <Receipt className="w-3.5 h-3.5 text-[#C2412D]" />
+              <span>Bill</span>
             </motion.button>
           </div>
         </div>
@@ -239,7 +431,7 @@ export default function TableMenuPage() {
           </div>
         </div>
 
-        {/* Seamless Borderless Pill Tabs with Smooth Slider Animation */}
+        {/* Seamless Borderless Pill Tabs */}
         <div className="max-w-6xl mx-auto mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 relative">
           <button
             onClick={() => setSelectedCatId('all')}
@@ -370,17 +562,14 @@ export default function TableMenuPage() {
           </div>
         )}
 
-        {/* Regular Dinaro Menu Grid with Tab Shift Animation */}
+        {/* Regular Dinaro Menu Grid */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-3xl font-black text-[#221714]">Our Menu</h2>
             <span className="text-xs font-mono text-[#8C827A]">{filteredMenuItems.length} Items</span>
           </div>
 
-          <motion.div 
-            layout
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
+          <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <AnimatePresence>
               {filteredMenuItems.map((item) => {
                 const inCart = cart.find((ci) => ci.item.id === item.id);
@@ -397,7 +586,7 @@ export default function TableMenuPage() {
                     className="rounded-3xl bg-white border border-[#E6DEC8] p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow duration-200"
                   >
                     <div>
-                      {/* Item Image with Dinaro Dashed Inner Border */}
+                      {/* Item Image with Dashed Inner Border */}
                       <div className="h-52 w-full rounded-2xl overflow-hidden bg-[#FAF6EE] border-2 border-dashed border-[#E2D8C7] mb-3 relative">
                         <img
                           src={item.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80'}
@@ -471,7 +660,7 @@ export default function TableMenuPage() {
                 {cartItemCount}
               </span>
               <div className="leading-tight">
-                <span className="text-[10px] text-[#A69B94] font-sans uppercase block">Order Total</span>
+                <span className="text-[10px] text-[#A69B94] font-sans uppercase block">New Items Total</span>
                 <span className="text-white font-mono font-black text-sm">₹{cartGrandTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -530,19 +719,18 @@ export default function TableMenuPage() {
 
               <div className="pt-3 border-t border-[#E2D8C7] space-y-3 font-mono">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-[#736961]">Total Amount:</span>
+                  <span className="text-[#736961]">Basket Subtotal:</span>
                   <span className="text-xl font-black text-[#C2412D]">₹{cartGrandTotal.toFixed(2)}</span>
                 </div>
 
                 <button
                   onClick={() => {
-                    alert('Order confirmed and sent to kitchen!');
-                    setCart([]);
                     setIsCartOpen(false);
+                    setIsCheckoutOpen(true);
                   }}
                   className="w-full py-3.5 rounded-full bg-[#C2412D] hover:bg-[#a63422] text-white font-black uppercase text-xs shadow-lg cursor-pointer transition font-sans"
                 >
-                  Confirm & Place Order
+                  Pay at Counter / Place Order
                 </button>
               </div>
             </motion.div>
@@ -550,7 +738,113 @@ export default function TableMenuPage() {
         )}
       </AnimatePresence>
 
-      {/* Glassy Bill & Split Modal */}
+      {/* MODAL 1: Pay At Counter Customer Details Modal */}
+      <AnimatePresence>
+        {isCheckoutOpen && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 font-sans">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.94, opacity: 0 }}
+              className="w-full max-w-sm bg-[#FAF6EE] border border-[#E2D8C7] rounded-3xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-[#E2D8C7] pb-3">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-[#C2412D]" />
+                  <h3 className="font-black text-[#221714] text-base">Pay at Counter Details</h3>
+                </div>
+                <button onClick={() => setIsCheckoutOpen(false)} className="text-[#736961] cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {checkoutError && (
+                <div className="p-2.5 rounded-xl bg-rose-100 border border-rose-300 text-rose-700 text-xs">
+                  {checkoutError}
+                </div>
+              )}
+
+              <form onSubmit={handleConfirmOrder} className="space-y-3.5 text-xs">
+                {activeSession ? (
+                  <div className="p-3.5 rounded-2xl bg-white border border-[#E2D8C7] space-y-1">
+                    <span className="text-[10px] font-mono text-[#736961] uppercase block">Running Table Guest</span>
+                    <span className="font-bold text-[#221714] block text-sm">{activeSession.customer_name} ({activeSession.customer_phone})</span>
+                    <span className="text-[11px] text-emerald-700 font-bold block pt-1">
+                      Session Active • Extra items direct ga add aipothayi
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-[#5C544E] block mb-1 font-bold">Customer Name *</label>
+                      <div className="relative flex items-center">
+                        <User className="w-4 h-4 absolute left-3.5 text-[#8C827A]" />
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Surya"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className="w-full bg-white border border-[#E0D7C6] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-[#221714] outline-none focus:border-[#C2412D]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[#5C544E] block mb-1 font-bold">Mobile Number (10 Digits) *</label>
+                      <div className="relative flex items-center">
+                        <Phone className="w-4 h-4 absolute left-3.5 text-[#8C827A]" />
+                        <input
+                          type="tel"
+                          required
+                          maxLength={10}
+                          placeholder="e.g. 9876543210"
+                          value={customerPhone}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setCustomerPhone(val);
+                          }}
+                          className="w-full bg-white border border-[#E0D7C6] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-[#221714] outline-none focus:border-[#C2412D] font-mono"
+                        />
+                      </div>
+                      <span className="text-[10px] text-[#8C827A] mt-1 block">
+                        Fake numbers (1234567890, 0000000000) allow kaavu.
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                <div className="p-3 rounded-2xl bg-white border border-[#E2D8C7] font-mono space-y-1">
+                  <div className="flex justify-between text-neutral-500">
+                    <span>New Items:</span>
+                    <span>₹{cartGrandTotal.toFixed(2)}</span>
+                  </div>
+                  {sessionTotalAmount > 0 && (
+                    <div className="flex justify-between text-neutral-500">
+                      <span>Previous Order:</span>
+                      <span>₹{sessionTotalAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-[#221714] pt-1 border-t border-[#F2ECE1]">
+                    <span>Total Bill:</span>
+                    <span className="text-[#C2412D]">₹{combinedTotalBill.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingOrder}
+                  className="w-full py-3.5 rounded-full bg-[#C2412D] hover:bg-[#a63422] text-white font-black uppercase text-xs shadow-lg cursor-pointer transition disabled:opacity-50"
+                >
+                  {isSubmittingOrder ? 'Submitting Order...' : 'Confirm & Send to Kitchen'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 2: Pure "Bill" & Split Modal (Without GST) */}
       <AnimatePresence>
         {isBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 font-mono">
@@ -558,37 +852,83 @@ export default function TableMenuPage() {
               initial={{ scale: 0.94, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.94, opacity: 0 }}
-              className="w-full max-w-sm bg-[#FAF6EE] border border-[#E2D8C7] rounded-3xl p-6 shadow-2xl space-y-4 text-xs"
+              className="w-full max-w-md bg-[#FAF6EE] border border-[#E2D8C7] rounded-3xl p-6 shadow-2xl space-y-4 text-xs max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between border-b border-[#E2D8C7] pb-3">
                 <div className="flex items-center gap-2">
-                  <Receipt className="w-4 h-4 text-[#C2412D]" />
-                  <h3 className="font-black text-[#221714] text-base">Bill & Split</h3>
+                  <Receipt className="w-5 h-5 text-[#C2412D]" />
+                  <div>
+                    <h3 className="font-black text-[#221714] text-base font-serif">Table Bill</h3>
+                    <span className="text-[10px] text-neutral-500">
+                      {activeSession ? `Guest: ${activeSession.customer_name} (${activeSession.customer_phone})` : 'New Orders (Unplaced)'}
+                    </span>
+                  </div>
                 </div>
                 <button onClick={() => setIsBillModalOpen(false)} className="text-[#736961] cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white border border-[#E2D8C7] space-y-2">
-                <div className="flex justify-between text-[#736961]">
-                  <span>Order Items:</span>
-                  <span className="text-[#221714] font-bold">₹{cartGrandTotal.toFixed(2)}</span>
+              {/* Status Badge */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-[#E2D8C7]">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span className="font-bold text-[#221714]">Status:</span>
                 </div>
-                <div className="flex justify-between text-[#736961]">
-                  <span>GST (5% Included):</span>
-                  <span className="text-[#221714] font-bold">₹{(cartGrandTotal * 0.05).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-[#221714] font-black text-sm pt-2 border-t border-[#E2D8C7]">
-                  <span>Grand Total:</span>
-                  <span className="text-[#C2412D]">₹{cartGrandTotal.toFixed(2)}</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                  {activeSession ? (activeSession.payment_status === 'paid' ? 'PAID' : 'UNPAID (Pending at Counter)') : 'UNPAID'}
+                </span>
+              </div>
+
+              {/* Ordered Dishes List */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-neutral-600 uppercase block">
+                  Items Ordered for this Table:
+                </span>
+                
+                <div className="max-h-48 overflow-y-auto space-y-1.5 p-3 rounded-2xl bg-white border border-[#E2D8C7]">
+                  {sessionOrderedItems.length === 0 && cart.length === 0 ? (
+                    <div className="text-center py-4 text-neutral-400">Inka dishes order cheyaledhu.</div>
+                  ) : (
+                    <>
+                      {/* Confirmed Orders */}
+                      {sessionOrderedItems.map((oi) => (
+                        <div key={oi.id} className="flex justify-between items-center text-xs">
+                          <div>
+                            <span className="font-bold text-[#221714]">{oi.quantity}x {oi.menu_items?.name_en || oi.menu_items?.name || 'Dish'}</span>
+                            <span className="text-[10px] text-emerald-600 block">Sent to Kitchen</span>
+                          </div>
+                          <span className="font-bold text-[#C2412D]">₹{((Number(oi.unit_price) || Number(oi.menu_items?.price) || 0) * oi.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+
+                      {/* Items in Current Cart */}
+                      {cart.map((ci) => (
+                        <div key={ci.item.id} className="flex justify-between items-center text-xs pt-1 border-t border-dashed border-[#E2D8C7]">
+                          <div>
+                            <span className="font-bold text-neutral-600">{ci.quantity}x {ci.item.name_en || ci.item.name}</span>
+                            <span className="text-[10px] text-amber-600 block">(In Cart)</span>
+                          </div>
+                          <span className="font-bold text-neutral-700">₹{(Number(ci.item.price) * ci.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Split Between People */}
+              {/* Financial Calculation (Direct Net Bill without GST) */}
+              <div className="p-4 rounded-2xl bg-white border border-[#E2D8C7] space-y-2">
+                <div className="flex justify-between text-[#221714] font-black text-sm">
+                  <span>Net Total Payable:</span>
+                  <span className="text-[#C2412D] text-base">₹{combinedTotalBill.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Split Option Under Bill */}
               <div className="p-4 rounded-2xl bg-white border border-[#E2D8C7] space-y-3">
                 <span className="text-[11px] text-[#736961] font-bold block uppercase">
-                  Split Persons:
+                  Split Bill Between People:
                 </span>
 
                 <div className="flex items-center justify-between">
@@ -611,7 +951,7 @@ export default function TableMenuPage() {
                   <div className="text-right">
                     <span className="text-[10px] text-[#736961] block uppercase">Per Person:</span>
                     <span className="text-base font-black text-[#C2412D]">
-                      ₹{(cartGrandTotal / splitPersons).toFixed(2)}
+                      ₹{(combinedTotalBill / splitPersons).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -621,7 +961,7 @@ export default function TableMenuPage() {
                 onClick={() => setIsBillModalOpen(false)}
                 className="w-full py-3 rounded-full bg-[#C2412D] text-white font-black uppercase text-xs shadow-md cursor-pointer hover:bg-[#a63422] transition"
               >
-                Done
+                Close Bill
               </button>
             </motion.div>
           </div>

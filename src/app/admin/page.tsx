@@ -79,6 +79,7 @@ export default function LuxuryGoldAdminPanel() {
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [settlingSessionId, setSettlingSessionId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
 
   // Modals
@@ -288,15 +289,8 @@ export default function LuxuryGoldAdminPanel() {
         return sum + (it.quantity * pr);
       }, 0);
 
-      const subtotal = Math.round((newGross / 1.05) * 100) / 100;
-      const totalTax = Math.round((newGross - subtotal) * 100) / 100;
-      const cgst = Math.round((totalTax / 2) * 100) / 100;
-      const sgst = Math.round((totalTax - cgst) * 100) / 100;
-
       await supabase.from('table_sessions').update({
-        subtotal,
-        cgst_amount: cgst,
-        sgst_amount: sgst,
+        subtotal: newGross,
         total_amount: newGross,
         final_payable: newGross
       }).eq('id', sessionId);
@@ -311,7 +305,8 @@ export default function LuxuryGoldAdminPanel() {
     if (!confirm(`"${dishName}" item ni CANCEL cheyala? Total bill nunchi minus aipothundi.`)) return;
     try {
       setLoading(true);
-      await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      const { error } = await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      if (error) throw error;
       await recalculateSessionBill(sessionId);
     } catch (err: any) {
       alert('Cancel failed: ' + err.message);
@@ -325,7 +320,8 @@ export default function LuxuryGoldAdminPanel() {
     if (nextQty <= 0) return alert('Quantity 0 cheyalante "Cancel Item" press cheyandi.');
     try {
       setLoading(true);
-      await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      const { error } = await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      if (error) throw error;
       await recalculateSessionBill(sessionId);
     } catch (err: any) {
       alert('Qty update error: ' + err.message);
@@ -345,8 +341,7 @@ export default function LuxuryGoldAdminPanel() {
       const { error } = await supabase.from('restaurant_settings').upsert({
         id: 1,
         restaurant_name: updatedName,
-        tagline: updatedTagline,
-        updated_at: new Date().toISOString()
+        tagline: updatedTagline
       });
 
       if (error) throw error;
@@ -362,6 +357,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Instant Reset Floor
   const handleResetFloor = async () => {
     if (!confirm('Active tables annitini VACANT (0 Occupied) ga reset cheyala?')) return;
     setLoading(true);
@@ -370,6 +366,7 @@ export default function LuxuryGoldAdminPanel() {
         supabase.from('table_sessions').update({ status: 'completed', payment_status: 'paid' }).eq('status', 'active'),
         supabase.from('restaurant_tables').update({ status: 'available' })
       ]);
+      setSelectedRunningTableNum(null);
       await loadAdminData();
     } catch (err: any) {
       alert('Reset error: ' + err.message);
@@ -387,10 +384,63 @@ export default function LuxuryGoldAdminPanel() {
     setIsAuthenticated(false);
   };
 
+  // =========================================================================
+  // BULLETPROOF: SETTLE & MARK AS PAID
+  // Marks session as 'paid' & 'completed', frees up the table to 'available'
+  // (Safely avoids schema cache error by not referencing updated_at)
+  // =========================================================================
+  const handleSettleAndMarkPaid = async (sessionId: string, tableNumber: number) => {
+    setSettlingSessionId(sessionId);
+    try {
+      // 1. Mark Table Session as PAID & COMPLETED
+      const { error: sessErr } = await supabase
+        .from('table_sessions')
+        .update({
+          payment_status: 'paid',
+          status: 'completed'
+        })
+        .eq('id', sessionId);
+
+      if (sessErr) throw sessErr;
+
+      // 2. Mark the physical table as AVAILABLE (Vacant)
+      const { error: tblErr } = await supabase
+        .from('restaurant_tables')
+        .update({ status: 'available' })
+        .eq('table_number', tableNumber);
+
+      if (tblErr) throw tblErr;
+
+      // 3. Mark all pending order batches for this session as completed (fail-safe)
+      try {
+        await supabase
+          .from('order_batches')
+          .update({ status: 'completed' })
+          .eq('session_id', sessionId);
+      } catch (e) {
+        // order_batches failsafe
+      }
+
+      // 4. Reset selected table selection so view shifts smoothly
+      setSelectedRunningTableNum(null);
+
+      // 5. Reload admin data immediately
+      await loadAdminData();
+      alert(`Table #${tableNumber} bill settled & marked as PAID successfully! Table ippudu vacant aipoindi.`);
+    } catch (err: any) {
+      console.error('Settle error:', err);
+      alert('Payment settle cheyadam lo error: ' + (err.message || 'Check database permissions.'));
+    } finally {
+      setSettlingSessionId(null);
+    }
+  };
+
+  // Toggle status for Tab 3 (Sales History)
   const handleTogglePaymentStatus = async (sessionId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid';
     try {
-      await supabase.from('table_sessions').update({ payment_status: newStatus }).eq('id', sessionId);
+      const { error } = await supabase.from('table_sessions').update({ payment_status: newStatus }).eq('id', sessionId);
+      if (error) throw error;
       await loadAdminData();
     } catch (err: any) {
       alert('Payment update failed: ' + err.message);
@@ -399,12 +449,13 @@ export default function LuxuryGoldAdminPanel() {
 
   const handleClearTable = async (tableNum: number) => {
     if (!confirm(`Table #${tableNum} ni CLEAR cheyala? Active bill settle aipothundi.`)) return;
+    setLoading(true);
     try {
-      setLoading(true);
       await Promise.all([
         supabase.from('table_sessions').update({ status: 'completed', payment_status: 'paid' }).eq('table_number', tableNum).eq('status', 'active'),
         supabase.from('restaurant_tables').update({ status: 'available' }).eq('table_number', tableNum)
       ]);
+      setSelectedRunningTableNum(null);
       await loadAdminData();
     } catch (err: any) {
       alert('Clear error: ' + err.message);
@@ -416,7 +467,8 @@ export default function LuxuryGoldAdminPanel() {
   const handleToggleDishAvailability = async (itemId: number, currentStatus: boolean) => {
     try {
       setMenuItems(prev => prev.map(m => m.id === itemId ? { ...m, is_available: !currentStatus } : m));
-      await supabase.from('menu_items').update({ is_available: !currentStatus }).eq('id', itemId);
+      const { error } = await supabase.from('menu_items').update({ is_available: !currentStatus }).eq('id', itemId);
+      if (error) throw error;
     } catch (err: any) {
       alert('Availability update error: ' + err.message);
       await loadAdminData();
@@ -606,7 +658,7 @@ export default function LuxuryGoldAdminPanel() {
         is_available: true
       };
 
-      const { data, error } = await supabase.from('menu_items').insert(payload).select();
+      const { error } = await supabase.from('menu_items').insert(payload).select();
       if (error) throw error;
 
       setShowSmartComboModal(false);
@@ -806,8 +858,7 @@ export default function LuxuryGoldAdminPanel() {
           </div>
           <div class="divider"></div>
           <div class="footer">
-            <div>GST Included (5%) • Thank you!</div>
-            <div>Visit Us Again!</div>
+            <div>Thank you! • Visit Us Again!</div>
           </div>
           <script>
             window.onload = function() {
@@ -859,11 +910,12 @@ export default function LuxuryGoldAdminPanel() {
     .filter(d => d.quantity > 0)
     .sort((a, b) => b.quantity - a.quantity);
 
-  const activeSessions = sessions.filter(s => s.status === 'active');
+  // Active Sessions: MUST be status = active AND payment_status != 'paid'
+  const activeSessions = sessions.filter(s => s.status === 'active' && s.payment_status !== 'paid');
   const filteredRevenue = filteredSessions.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
   const filteredMenuItems = selectedCatId === 'all' ? menuItems : menuItems.filter(m => m.category_id === selectedCatId);
 
-  // Sheets TSV Export (Sanitized Privacy + Financial Details)
+  // Sheets TSV Export
   const copyToGoogleSheets = () => {
     const headers = ['Date', 'Time', 'Table #', 'Table Name', 'Ordered Dishes & Qty', 'Total Bill (₹)', 'Customer Paid (₹)', 'Change Returned (₹)', 'Payment Status'];
     const rows = filteredSessions.map(s => {
@@ -994,7 +1046,6 @@ export default function LuxuryGoldAdminPanel() {
   return (
     <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] font-sans pb-32 relative overflow-x-hidden antialiased">
       <style jsx global>{`
-        /* Luxury Custom Gold Scrollbar */
         .admin-gold-scrollbar::-webkit-scrollbar {
           width: 6px;
           height: 6px;
@@ -1312,12 +1363,15 @@ export default function LuxuryGoldAdminPanel() {
                       const handedNum = parseFloat(handedInput) || 0;
                       const balanceToReturn = handedNum >= finalPayable ? (handedNum - finalPayable).toFixed(2) : '0.00';
                       const remainingDue = handedNum < finalPayable ? (finalPayable - handedNum).toFixed(2) : '0.00';
+                      const matchingTbl = tables.find(t => t.table_number === curSession.table_number);
 
                       return (
                         <div className="space-y-4 font-mono">
                           <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex justify-between items-center text-xs">
                             <div>
-                              <span className="text-base font-bold text-white block">Table #{curSession.table_number}</span>
+                              <span className="text-base font-bold text-white block">
+                                {matchingTbl?.table_name || `Table #${curSession.table_number}`} (Table #{curSession.table_number})
+                              </span>
                               <span className="text-[11px] text-neutral-400">Customer: {curSession.customer_name || 'Guest'} ({curSession.customer_phone || '-'})</span>
                             </div>
                             <span className="text-[11px] text-[#D4AF37] font-bold">
@@ -1437,10 +1491,11 @@ export default function LuxuryGoldAdminPanel() {
 
                           <div className="flex flex-wrap gap-2 pt-1">
                             <button
-                              onClick={() => handleTogglePaymentStatus(curSession.id, curSession.payment_status)}
-                              className="flex-1 py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md cursor-pointer"
+                              disabled={settlingSessionId === curSession.id}
+                              onClick={() => handleSettleAndMarkPaid(curSession.id, curSession.table_number)}
+                              className="flex-1 py-3 rounded-xl bg-[#D4AF37] hover:bg-[#c29f2d] text-black font-black uppercase text-xs shadow-md cursor-pointer transition disabled:opacity-50"
                             >
-                              Settle & Mark as PAID
+                              {settlingSessionId === curSession.id ? 'Settling Bill...' : 'SETTLE & MARK AS PAID'}
                             </button>
                             <button
                               onClick={() => printThermalSlip(curSession)}
