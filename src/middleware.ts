@@ -2,35 +2,45 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
 
-  const staffRole = request.cookies.get('staff_role')?.value;
+  const staffRole = request.cookies.get('staff_role')?.value?.toLowerCase();
   const sessionToken = request.cookies.get('session_token')?.value;
 
-  // 1. Admin Route Protection
-  if (pathname.startsWith('/admin')) {
-    const isValidAdmin = 
-      staffRole === 'admin' && 
-      sessionToken && 
-      sessionToken.startsWith('admin_verified_');
+  const isAdminRoute = pathname.startsWith('/admin');
+  const isWaiterRoute = pathname.startsWith('/waiter');
+  const isLoginRoute = pathname === '/login';
 
-    if (!isValidAdmin) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  const hasAdminAuth = staffRole === 'admin' && sessionToken && sessionToken.startsWith('admin_verified_');
+  const hasWaiterAuth = (staffRole === 'waiter' || staffRole === 'admin') && sessionToken && (sessionToken.startsWith('waiter_verified_') || sessionToken.startsWith('admin_verified_'));
+
+  // 1. Admin route protection
+  if (isAdminRoute && !hasAdminAuth) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('role', 'admin');
+    return NextResponse.redirect(loginUrl);
   }
 
-  // 2. Waiter Route Protection
-  if (pathname.startsWith('/waiter')) {
-    const isValidWaiter = 
-      (staffRole === 'waiter' && sessionToken && sessionToken.startsWith('waiter_verified_')) ||
-      (staffRole === 'admin' && sessionToken && sessionToken.startsWith('admin_verified_'));
+  // 2. Waiter route protection
+  if (isWaiterRoute && !hasWaiterAuth) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('role', 'waiter');
+    return NextResponse.redirect(loginUrl);
+  }
 
-    if (!isValidWaiter) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
+  // 3. Login page meedha unnapudu query role ki priority ivvali (auto-redirect loop aagadaniki)
+  if (isLoginRoute) {
+    const requestedRole = searchParams.get('role');
+    // Specific role switch kosam click chesthe redirect cheyakunda login form chupinchali
+    if (requestedRole) {
+      return NextResponse.next();
+    }
+
+    if (hasAdminAuth) {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    if (hasWaiterAuth) {
+      return NextResponse.redirect(new URL('/waiter', request.url));
     }
   }
 
@@ -38,5 +48,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/waiter/:path*'],
+  matcher: ['/admin/:path*', '/waiter/:path*', '/login'],
 };

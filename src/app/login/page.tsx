@@ -1,217 +1,261 @@
 // @ts-nocheck
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { Shield, KeyRound, User, ArrowRight, AlertCircle, ChefHat } from 'lucide-react';
+import { ShieldCheck, UserCheck, Mail, Lock, User, ArrowRight, Store } from 'lucide-react';
 
-export default function LoginPage() {
-  const [loginRole, setLoginRole] = useState<'admin' | 'waiter'>('admin');
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
+function LoginContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryRole = searchParams.get('role');
+
+  const [role, setRole] = useState<'waiter' | 'admin'>('waiter');
+  
+  // Admin Credentials (Email + Password)
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+
+  // Waiter Credentials (Name + Password)
+  const [waiterName, setWaiterName] = useState('');
+  const [waiterPassword, setWaiterPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (queryRole === 'admin') {
+      setRole('admin');
+    } else {
+      setRole('waiter');
+    }
+  }, [queryRole]);
+
+  const setAuthCookiesAndLocal = (userRole: 'admin' | 'waiter', token: string, name: string) => {
+    document.cookie = `staff_role=${userRole}; path=/; max-age=86400; SameSite=Lax`;
+    document.cookie = `session_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+    localStorage.setItem('staff_role', userRole);
+    localStorage.setItem('session_token', token);
+    localStorage.setItem('staff_name', name);
+  };
+
+  // 1. Admin Login via Email & Password
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
-    const cleanId = (identifier || '').trim().toLowerCase();
-    const cleanPass = (password || '').trim();
-
     try {
-      // 1. Supabase staff_accounts verify
-      const { data: user, error } = await supabase
+      const trimmedEmail = adminEmail.trim().toLowerCase();
+      const trimmedPassword = adminPassword.trim();
+
+      const { data, error } = await supabase
         .from('staff_accounts')
         .select('*')
-        .ilike('identifier', cleanId)
-        .eq('role', loginRole)
+        .eq('role', 'admin')
+        .or(`email.ilike.${trimmedEmail},username.ilike.${trimmedEmail}`)
         .maybeSingle();
 
-      if (error) throw new Error(error.message);
-
-      if (!user) {
-        setErrorMsg(
-          loginRole === 'admin' 
-            ? 'Admin account not found. Please check your email.' 
-            : 'Waiter account not found. Please check Staff ID / Mobile.'
-        );
-        setLoading(false);
-        return;
+      if (error || !data) {
+        throw new Error('Admin Email kanipinchaledhu. Correct email enter cheyandi.');
       }
 
-      if (user.password_hash !== cleanPass) {
-        setErrorMsg('Incorrect Security Password. Please try again.');
-        setLoading(false);
-        return;
+      if (data.pin !== trimmedPassword) {
+        throw new Error('Incorrect Admin Password. Malli check cheyandi.');
       }
 
-      const verifiedToken = `${user.role}_verified_${Date.now()}`;
-
-      // 2. Set Cookies through Server Route API (Guaranteed Vercel Sync)
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: user.role,
-          token: verifiedToken,
-          user: user
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to set secure session on server.');
-      }
-
-      // Also set client-side localStorage fallback
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('staff_role', user.role);
-        localStorage.setItem('session_token', verifiedToken);
-        if (user.role === 'admin') {
-          localStorage.setItem('admin_session', JSON.stringify(user));
-        } else {
-          localStorage.setItem('waiter_session', JSON.stringify(user));
-        }
-      }
-
-      const targetPath = user.role === 'admin' ? '/admin' : '/waiter';
-
-      // 3. Guaranteed Hard Navigation
-      window.location.replace(targetPath);
-
+      const token = `admin_verified_${Date.now()}`;
+      setAuthCookiesAndLocal('admin', token, data.full_name || 'Master Admin');
+      window.location.href = '/admin';
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Authentication error.');
+      setErrorMsg(err.message || 'Login failed.');
+      setLoading(false);
+    }
+  };
+
+  // 2. Waiter Login via Staff Name & Password
+  const handleWaiterLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setLoading(true);
+
+    try {
+      const trimmedName = waiterName.trim();
+      const trimmedPassword = waiterPassword.trim();
+
+      if (!trimmedName || !trimmedPassword) {
+        throw new Error('Waiter Name mariyu Password rendu enter cheyandi.');
+      }
+
+      const { data, error } = await supabase
+        .from('staff_accounts')
+        .select('*')
+        .eq('role', 'waiter')
+        .or(`full_name.ilike.%${trimmedName}%,username.ilike.${trimmedName}`)
+        .maybeSingle();
+
+      if (error || !data) {
+        throw new Error('Waiter Name kanipinchaledhu. Admin daggara mee name check cheyandi.');
+      }
+
+      if (data.pin !== trimmedPassword) {
+        throw new Error('Incorrect Waiter Password.');
+      }
+
+      const token = `waiter_verified_${Date.now()}`;
+      setAuthCookiesAndLocal('waiter', token, data.full_name || trimmedName);
+      window.location.href = '/waiter';
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Login failed.');
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-black text-white flex items-center justify-center p-4 relative overflow-hidden select-none font-mono">
-      <div 
-        className={`absolute top-1/3 w-[360px] h-[360px] rounded-full blur-[110px] pointer-events-none transition-colors duration-500 ${
-          loginRole === 'admin' ? 'bg-amber-500/10' : 'bg-cyan-500/10'
-        }`} 
-      />
-
-      <div className="w-full max-w-sm p-6 rounded-3xl bg-neutral-900/90 border border-neutral-800 backdrop-blur-2xl relative z-10 shadow-2xl">
-        <div className="flex p-1 bg-black/60 border border-white/10 rounded-2xl mb-6">
-          <button
-            type="button"
-            onClick={() => {
-              setLoginRole('admin');
-              setErrorMsg('');
-            }}
-            className={`flex-1 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              loginRole === 'admin'
-                ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black shadow-md'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Admin Login</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setLoginRole('waiter');
-              setErrorMsg('');
-            }}
-            className={`flex-1 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              loginRole === 'waiter'
-                ? 'bg-gradient-to-r from-cyan-400 to-teal-500 text-black shadow-md'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            <ChefHat className="w-3.5 h-3.5" />
-            <span>Waiter Login</span>
-          </button>
+    <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] flex items-center justify-center p-4 antialiased selection:bg-[#D4AF37] selection:text-black">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-sm rounded-[32px] bg-gradient-to-b from-[#111115] via-[#0b0b0e] to-[#070709] border border-[#D4AF37]/40 p-6 sm:p-8 shadow-[0_12px_45px_rgba(0,0,0,0.85)] space-y-5"
+      >
+        <div className="text-center space-y-1.5">
+          <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/50 flex items-center justify-center mx-auto shadow-lg text-[#D4AF37]">
+            <Store className="w-6 h-6" />
+          </div>
+          <h1 className="text-base font-black uppercase tracking-wider text-white">STAFF COMMAND ACCESS</h1>
+          <p className="text-[11px] font-mono text-neutral-400">Vujwala Simha Restaurant & Dine</p>
         </div>
 
-        <div className="flex flex-col items-center text-center space-y-2 mb-6">
-          <div 
-            className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-lg transition-colors ${
-              loginRole === 'admin' 
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_20px_rgba(212,175,55,0.2)]'
-                : 'bg-cyan-500/10 border-cyan-400/40 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
+        {/* Role Toggle */}
+        <div className="grid grid-cols-2 p-1 rounded-2xl bg-white/[0.03] border border-white/10 font-mono text-xs">
+          <button
+            type="button"
+            onClick={() => { setRole('waiter'); setErrorMsg(''); }}
+            className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+              role === 'waiter' ? 'bg-[#D4AF37] text-black font-black shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
-            {loginRole === 'admin' ? <Shield className="w-6 h-6" /> : <ChefHat className="w-6 h-6" />}
-          </div>
-          <h1 className="text-lg font-black tracking-wider uppercase text-white">
-            {loginRole === 'admin' ? 'Owner / Admin Portal' : 'Floor Waiter Terminal'}
-          </h1>
-          <p className="text-[11px] text-neutral-400 font-sans">
-            {loginRole === 'admin' 
-              ? 'Enter Admin Email & Security Password' 
-              : 'Enter Staff ID or Mobile Number'}
-          </p>
+            <UserCheck className="w-4 h-4" /> Waiter Login
+          </button>
+          <button
+            type="button"
+            onClick={() => { setRole('admin'); setErrorMsg(''); }}
+            className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+              role === 'admin' ? 'bg-[#D4AF37] text-black font-black shadow-md' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" /> Admin Login
+          </button>
         </div>
 
         {errorMsg && (
-          <div className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
+          <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono text-center">
+            {errorMsg}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs text-neutral-400 uppercase tracking-wider block">
-              {loginRole === 'admin' ? 'Admin Email' : 'Staff ID / Mobile'}
-            </label>
-            <div className="relative flex items-center">
-              <User className="w-4 h-4 absolute left-3.5 text-neutral-500" />
-              <input
-                type="text"
-                required
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={loginRole === 'admin' ? 'admin@vujwalasimha.com' : 'waiter1'}
-                className="w-full pl-10 pr-3.5 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl text-xs text-white focus:outline-none focus:border-[#D4AF37] transition"
-              />
+        {/* 1. Waiter Login (Name + Password) */}
+        {role === 'waiter' ? (
+          <form onSubmit={handleWaiterLogin} className="space-y-3 font-mono">
+            <div>
+              <label className="text-[11px] text-neutral-400 block mb-1">Staff / Waiter Name</label>
+              <div className="relative">
+                <User className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ramesh"
+                  value={waiterName}
+                  onChange={(e) => setWaiterName(e.target.value)}
+                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs text-neutral-400 uppercase tracking-wider block">
-              Security Password
-            </label>
-            <div className="relative flex items-center">
-              <KeyRound className="w-4 h-4 absolute left-3.5 text-neutral-500" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl text-xs text-white focus:outline-none focus:border-[#D4AF37] transition"
-              />
+            <div>
+              <label className="text-[11px] text-neutral-400 block mb-1">Waiter Password</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={waiterPassword}
+                  onChange={(e) => setWaiterPassword(e.target.value)}
+                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none"
+                />
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full py-3 px-4 mt-2 rounded-xl text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-lg cursor-pointer ${
-              loginRole === 'admin'
-                ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] hover:brightness-110'
-                : 'bg-gradient-to-r from-cyan-400 to-teal-500 hover:brightness-110'
-            }`}
-          >
-            <span>
-              {loading 
-                ? 'Authenticating...' 
-                : loginRole === 'admin' 
-                ? 'Sign In to Admin Console' 
-                : 'Sign In to Waiter Terminal'}
-            </span>
-            <ArrowRight className="w-4 h-4 stroke-[3]" />
-          </button>
-        </form>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              disabled={loading}
+              type="submit"
+              className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <span>{loading ? 'Verifying Staff...' : 'Access Waiter Floor'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
+          </form>
+        ) : (
+          /* 2. Admin Login (Email + Password) */
+          <form onSubmit={handleAdminLogin} className="space-y-3 font-mono">
+            <div>
+              <label className="text-[11px] text-neutral-400 block mb-1">Admin Email Address</label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@vujwalasimha.com"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] text-neutral-400 block mb-1">Admin Password</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none"
+                />
+              </div>
+            </div>
+
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              disabled={loading}
+              type="submit"
+              className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <span>{loading ? 'Verifying Admin...' : 'Access Admin Dashboard'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
+          </form>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
       </div>
-    </main>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

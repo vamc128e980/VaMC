@@ -1,104 +1,144 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
+  Bell, 
   CheckCircle2, 
   Clock, 
   Utensils, 
   RefreshCw, 
   ChefHat, 
   Receipt, 
+  Sparkles, 
+  AlertCircle,
+  Eye, 
   Check, 
   X, 
-  LogOut
+  LogOut, 
+  User, 
+  Phone,
+  MessageSquare,
+  Plus,
+  Minus,
+  Droplets,
+  Search,
+  CheckCheck
 } from 'lucide-react';
 
-export default function WaiterTerminalPage() {
-  const router = useRouter();
+const fluidSpring = {
+  type: 'spring',
+  stiffness: 440,
+  damping: 32,
+  mass: 0.55
+};
 
+const triggerHaptic = (ms = 15) => {
+  if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+    try { navigator.vibrate(ms); } catch (e) {}
+  }
+};
+
+const playChimeTone = () => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
+
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(587.33, ctx.currentTime);
+
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc1.start();
+    osc2.start();
+    osc1.stop(ctx.currentTime + 0.6);
+    osc2.stop(ctx.currentTime + 0.6);
+  } catch (e) {
+    console.error('Audio play error:', e);
+  }
+};
+
+export default function WaiterPanel() {
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
-  const [currentStaff, setCurrentStaff] = useState<any>(null);
+  const [staffName, setStaffName] = useState('Floor Steward');
 
-  // Terminal Live Floor Data
+  // Core Data States
   const [tables, setTables] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [waiterCalls, setWaiterCalls] = useState<any[]>([]);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
+
+  // Selected Table & Action Modals
   const [selectedTable, setSelectedTable] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const [actionLoadingBatchId, setActionLoadingBatchId] = useState<string | null>(null);
+
+  // Walk-in Direct Table Punching Modal
+  const [showPunchOrderModal, setShowPunchOrderModal] = useState(false);
+  const [punchTable, setPunchTable] = useState<any | null>(null);
+  const [punchCart, setPunchCart] = useState<Record<number, number>>({});
+  const [punchSearch, setPunchSearch] = useState('');
+  const [punchNotes, setPunchNotes] = useState('');
+  const [punchCustomerName, setPunchCustomerName] = useState('Walk-in Guest');
+  const [punchCustomerPhone, setPunchCustomerPhone] = useState('9999999999');
+
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. Session Verification
+  // 1. Auth Guard
   useEffect(() => {
-    function verifySession() {
-      if (typeof window === 'undefined') return;
-
+    if (typeof window !== 'undefined') {
       const rawCookies = document.cookie || '';
       const cookies = rawCookies.split(';').map(c => c.trim());
       const roleCookie = cookies.find(c => c.startsWith('staff_role='));
       const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
-
-      const tokenCookie = cookies.find(c => c.startsWith('session_token='));
-      const cookieToken = tokenCookie ? tokenCookie.split('=')[1] : null;
-
       const localRole = localStorage.getItem('staff_role')?.toLowerCase();
-      const localToken = localStorage.getItem('session_token');
-      const localWaiter = localStorage.getItem('waiter_session');
-      const localAdmin = localStorage.getItem('admin_session');
+      const token = localStorage.getItem('session_token');
+      const storedName = localStorage.getItem('staff_name');
 
-      const isWaiterRole = cookieRole === 'waiter' || localRole === 'waiter';
-      const isAdminRole = cookieRole === 'admin' || localRole === 'admin';
+      if (storedName) setStaffName(storedName);
 
-      const hasWaiterToken = (cookieToken && cookieToken.startsWith('waiter_verified_')) || 
-                             (localToken && localToken.startsWith('waiter_verified_')) ||
-                             Boolean(localWaiter);
+      const activeRole = cookieRole || localRole;
+      const hasValidToken = token && (token.startsWith('waiter_verified_') || token.startsWith('admin_verified_'));
 
-      const hasAdminToken = (cookieToken && cookieToken.startsWith('admin_verified_')) || 
-                            (localToken && localToken.startsWith('admin_verified_')) ||
-                            Boolean(localAdmin);
-
-      if (isWaiterRole && hasWaiterToken && localWaiter) {
-        try { 
-          setCurrentStaff(JSON.parse(localWaiter)); 
-        } catch {}
-
-        const isHttps = window.location.protocol === 'https:';
-        const cookieConfig = `path=/; max-age=86400; SameSite=Lax${isHttps ? '; Secure' : ''}`;
-        const activeToken = cookieToken || localToken || `waiter_verified_${Date.now()}`;
-        document.cookie = `staff_role=waiter; ${cookieConfig}`;
-        document.cookie = `session_token=${activeToken}; ${cookieConfig}`;
-
-        setIsAuthenticated(true);
-        setAuthChecking(false);
-      } else if (isAdminRole && hasAdminToken && localAdmin) {
-        try { 
-          setCurrentStaff(JSON.parse(localAdmin)); 
-        } catch {}
-
-        const isHttps = window.location.protocol === 'https:';
-        const cookieConfig = `path=/; max-age=86400; SameSite=Lax${isHttps ? '; Secure' : ''}`;
-        const activeToken = cookieToken || localToken || `admin_verified_${Date.now()}`;
-        document.cookie = `staff_role=admin; ${cookieConfig}`;
-        document.cookie = `session_token=${activeToken}; ${cookieConfig}`;
-
+      if ((activeRole === 'waiter' || activeRole === 'admin') && hasValidToken) {
+        if (!cookieRole) {
+          document.cookie = `staff_role=${activeRole}; path=/; max-age=86400; SameSite=Lax`;
+        }
         setIsAuthenticated(true);
         setAuthChecking(false);
       } else {
+        localStorage.clear();
+        document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+        document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
         setIsAuthenticated(false);
         setAuthChecking(false);
-        router.replace('/login');
+        window.location.replace('/login');
       }
     }
+  }, []);
 
-    verifySession();
-  }, [router]);
-
-  // Live Clock
+  // Live Digital Clock
   useEffect(() => {
     const updateTime = () => {
       setTimeStr(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
@@ -108,21 +148,31 @@ export default function WaiterTerminalPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Load Terminal Data
   const loadWaiterData = async () => {
     setLoading(true);
     try {
-      const [tblsRes, sessRes, bthsRes, itemsRes] = await Promise.all([
+      const [
+        { data: tbls },
+        { data: sess },
+        { data: bths },
+        { data: items },
+        { data: calls },
+        { data: mItems }
+      ] = await Promise.all([
         supabase.from('restaurant_tables').select('*').order('table_number'),
         supabase.from('table_sessions').select('*').eq('status', 'active'),
         supabase.from('order_batches').select('*').order('created_at', { ascending: false }),
-        supabase.from('order_items').select('*, menu_items(name_en, name, price)')
+        supabase.from('order_items').select('*, menu_items(name_en, name, price)'),
+        supabase.from('waiter_calls').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+        supabase.from('menu_items').select('*').eq('is_available', true).order('name_en')
       ]);
 
-      if (tblsRes.data) setTables(tblsRes.data);
-      if (sessRes.data) setSessions(sessRes.data);
-      if (bthsRes.data) setBatches(bthsRes.data);
-      if (itemsRes.data) setOrderItems(itemsRes.data);
+      if (tbls) setTables(tbls);
+      if (sess) setSessions(sess);
+      if (bths) setBatches(bths);
+      if (items) setOrderItems(items);
+      if (calls) setWaiterCalls(calls);
+      if (mItems) setMenuItems(mItems);
     } catch (err) {
       console.error('Waiter data error:', err);
     } finally {
@@ -131,21 +181,30 @@ export default function WaiterTerminalPage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (isAuthenticated) {
+      loadWaiterData();
 
-    loadWaiterData();
+      const channel = supabase
+        .channel(`waiter-sync-${Date.now()}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => {
+          triggerHaptic(25);
+          loadWaiterData();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'waiter_calls' }, () => {
+          triggerHaptic(50);
+          playChimeTone();
+          loadWaiterData();
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'waiter_calls' }, () => loadWaiterData())
+        .subscribe();
 
-    const channel = supabase
-      .channel('waiter-live-matrix')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadWaiterData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [isAuthenticated]);
 
   const handleLogout = () => {
@@ -154,108 +213,282 @@ export default function WaiterTerminalPage() {
     if (typeof window !== 'undefined') {
       localStorage.clear();
     }
-    setIsAuthenticated(false);
-    setCurrentStaff(null);
-    router.replace('/login');
+    window.location.replace('/');
   };
 
+  // Acknowledge Batch (Send to Kitchen Ticket Preparation)
   const handleAcknowledgeBatch = async (batchId: string) => {
+    setActionLoadingBatchId(batchId);
     try {
-      await Promise.all([
-        supabase.from('order_batches').update({ status: 'sent_to_kitchen' }).eq('id', batchId),
-        supabase.from('order_items').update({ item_status: 'preparing' }).eq('batch_id', batchId)
-      ]);
+      await supabase
+        .from('order_batches')
+        .update({ status: 'sent_to_kitchen' })
+        .eq('id', batchId);
+
+      await supabase
+        .from('order_items')
+        .update({ item_status: 'preparing' })
+        .eq('batch_id', batchId);
+
       await loadWaiterData();
+      if (selectedTable) {
+        setSelectedTable(prev => prev ? {
+          ...prev,
+          tableBatches: prev.tableBatches?.map(b => b.id === batchId ? { ...b, status: 'sent_to_kitchen' } : b)
+        } : null);
+      }
     } catch (err: any) {
       alert('Error updating batch: ' + err.message);
+    } finally {
+      setActionLoadingBatchId(null);
     }
   };
 
-  if (authChecking) {
+  // Mark Dish as Served
+  const handleMarkItemServed = async (itemId: number) => {
+    triggerHaptic(15);
+    try {
+      await supabase.from('order_items').update({ item_status: 'served' }).eq('id', itemId);
+      setOrderItems(prev => prev.map(oi => oi.id === itemId ? { ...oi, item_status: 'served' } : oi));
+      await loadWaiterData();
+    } catch (err: any) {
+      alert('Error marking served: ' + err.message);
+    }
+  };
+
+  // Dismiss Waiter Call
+  const handleDismissWaiterCall = async (callId: number) => {
+    triggerHaptic(20);
+    try {
+      await supabase.from('waiter_calls').update({ status: 'attended' }).eq('id', callId);
+      setWaiterCalls(prev => prev.filter(c => c.id !== callId));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Direct Walk-In Punch Order to Table
+  const handlePunchOrderSubmit = async () => {
+    if (!punchTable) return;
+    const itemIds = Object.keys(punchCart).filter(id => punchCart[Number(id)] > 0);
+    if (itemIds.length === 0) return alert('At least 1 dish select cheyandi.');
+
+    setLoading(true);
+    triggerHaptic(35);
+    try {
+      const activeSession = sessions.find(s => s.table_number === punchTable.table_number && s.status === 'active');
+      let sessionId = activeSession?.id;
+
+      const punchTotal = itemIds.reduce((sum, id) => {
+        const dish = menuItems.find(m => m.id === Number(id));
+        return sum + (Number(dish?.price || 0) * punchCart[Number(id)]);
+      }, 0);
+
+      if (!sessionId) {
+        const { data: newSession, error: sErr } = await supabase
+          .from('table_sessions')
+          .insert({
+            table_number: punchTable.table_number,
+            customer_name: punchCustomerName.trim() || 'Walk-in Guest',
+            customer_phone: punchCustomerPhone.trim() || '9999999999',
+            subtotal: punchTotal,
+            cgst_amount: 0,
+            sgst_amount: 0,
+            total_amount: punchTotal,
+            discount_amount: 0,
+            final_payable: punchTotal,
+            status: 'active',
+            payment_status: 'unpaid'
+          })
+          .select()
+          .single();
+
+        if (sErr) throw sErr;
+        sessionId = newSession.id;
+        await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', punchTable.table_number);
+      } else {
+        const newTotal = Number(activeSession.total_amount || 0) + punchTotal;
+        await supabase.from('table_sessions').update({
+          subtotal: newTotal,
+          total_amount: newTotal,
+          final_payable: newTotal
+        }).eq('id', sessionId);
+      }
+
+      const { data: batch, error: bErr } = await supabase
+        .from('order_batches')
+        .insert({
+          session_id: sessionId,
+          table_number: punchTable.table_number,
+          status: 'sent_to_kitchen'
+        })
+        .select()
+        .single();
+
+      if (bErr) throw bErr;
+
+      const payload = itemIds.map(id => {
+        const dish = menuItems.find(m => m.id === Number(id));
+        return {
+          batch_id: batch.id,
+          session_id: sessionId,
+          menu_item_id: Number(id),
+          station_id: 'kitchen_hot',
+          quantity: punchCart[Number(id)],
+          unit_price: Number(dish?.price || 0),
+          item_status: 'ordered',
+          cooking_notes: punchNotes.trim() || null
+        };
+      });
+
+      await supabase.from('order_items').insert(payload);
+
+      setPunchCart({});
+      setPunchNotes('');
+      setShowPunchOrderModal(false);
+      await loadWaiterData();
+      alert(`Order punched to Table #${punchTable.table_number}! Sent directly to kitchen.`);
+    } catch (err: any) {
+      alert('Punch error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter(m => {
+      const name = (m.name_en || m.name || '').toLowerCase();
+      return name.includes(punchSearch.toLowerCase());
+    });
+  }, [menuItems, punchSearch]);
+
+  if (authChecking || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#030305] flex items-center justify-center text-cyan-400 font-mono text-xs tracking-widest uppercase">
-        Verifying Floor Credentials...
+      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-2 border-white/10 border-t-[#D4AF37] rounded-full animate-spin" />
+        <span className="text-[#D4AF37] font-mono text-xs tracking-widest uppercase font-bold">
+          Verifying Waiter Session...
+        </span>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-[#030305] text-slate-100 font-sans pb-28 relative overflow-hidden select-none">
-      <div className="fixed -top-40 left-10 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none -z-10" />
-      <div className="fixed top-1/2 -right-40 w-[500px] h-[500px] bg-fuchsia-500/10 rounded-full blur-[140px] pointer-events-none -z-10" />
-      <div className="fixed bottom-0 left-1/3 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none -z-10" />
-
+    <div className="min-h-screen bg-[#060608] text-[#FCF6BA] font-sans pb-28 relative overflow-x-hidden antialiased">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur-3xl border-b border-white/[0.08] px-6 py-4 shadow-[0_4px_30px_rgba(0,0,0,0.8)]">
+      <header className="sticky top-0 z-40 bg-[#0c0c0e]/95 backdrop-blur-2xl border-b border-[#D4AF37]/30 px-4 sm:px-6 py-3.5 shadow-2xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-              <ChefHat className="w-5 h-5 text-cyan-400" />
+            <div className="w-11 h-11 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/40 flex items-center justify-center shadow-lg shrink-0">
+              <ChefHat className="w-6 h-6 text-[#D4AF37]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black tracking-widest text-cyan-300 uppercase bg-cyan-500/20 px-2.5 py-0.5 rounded-full border border-cyan-400/40 shadow-sm">
+                <span className="text-[9px] font-black tracking-widest text-black uppercase bg-[#D4AF37] px-2.5 py-0.5 rounded-full shadow-sm">
                   FLOOR SERVICE
                 </span>
-                <h1 className="text-base font-extrabold tracking-wide text-white">
+                <h1 className="text-sm sm:text-base font-black tracking-wide text-white uppercase">
                   WAITER COMMAND
                 </h1>
               </div>
-              <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                Logged in as: <strong className="text-cyan-300">{currentStaff?.name || currentStaff?.identifier || 'Staff'}</strong>
+              <p className="text-[10px] font-mono text-[#D4AF37] mt-0.5 font-bold">
+                Staff: <span className="text-[#FCF6BA]">{staffName}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-black/60 border border-white/10 px-3 py-1.5 rounded-2xl font-mono text-xs font-bold text-cyan-300 shadow-inner">
-              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="flex items-center gap-2.5">
+            <div className="hidden sm:flex items-center gap-2 bg-white/[0.03] border border-white/10 px-3 py-1.5 rounded-xl font-mono text-xs font-bold text-[#FCF6BA]">
+              <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>{timeStr || 'Live'}</span>
             </div>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              transition={fluidSpring}
               onClick={loadWaiterData}
-              className="p-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-200 transition cursor-pointer"
-              title="Refresh"
+              className="p-2 rounded-xl border border-white/10 bg-white/[0.04] text-[#FCF6BA] hover:border-[#D4AF37]/40 transition cursor-pointer"
+              title="Refresh Floor"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
-            </button>
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`} />
+            </motion.button>
 
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              transition={fluidSpring}
               onClick={handleLogout}
-              className="p-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-300 transition cursor-pointer"
+              className="p-2 rounded-xl bg-rose-950/20 border border-rose-500/40 text-rose-300 hover:bg-rose-950/50 transition cursor-pointer"
               title="Logout"
             >
-              <LogOut className="w-4 h-4" />
-            </button>
+              <LogOut className="w-3.5 h-3.5" />
+            </motion.button>
           </div>
         </div>
       </header>
 
+      {/* FLOATING "CALL WAITER" NOTIFICATIONS (WATER & ASSISTANCE ONLY) */}
+      {waiterCalls.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 space-y-2">
+          {waiterCalls.map((call) => {
+            const matchingTable = tables.find(t => t.table_number === call.table_number);
+            const tLabel = matchingTable?.table_name || `Table #${call.table_number}`;
+            const isWater = call.call_type === 'water';
+            const callStyle = isWater 
+              ? 'border-cyan-500/60 bg-cyan-950/40 text-cyan-200' 
+              : 'border-amber-500/60 bg-amber-950/40 text-amber-200';
+            const callText = isWater 
+              ? 'Needs Drinking Water 💧' 
+              : 'Needs Waiter Assistance 🧑‍🍳';
+
+            return (
+              <motion.div
+                key={call.id}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className={`p-3.5 rounded-2xl border ${callStyle} shadow-xl flex items-center justify-between gap-3 font-mono text-xs backdrop-blur-xl animate-pulse`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Bell className="w-4 h-4 shrink-0 text-[#D4AF37]" />
+                  <div>
+                    <strong className="text-white text-sm block">{tLabel}</strong>
+                    <span>{callText}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleDismissWaiterCall(call.id)}
+                  className="px-3.5 py-1.5 rounded-xl bg-white text-black font-black uppercase text-[10px] shadow-md hover:bg-[#FCF6BA] cursor-pointer"
+                >
+                  Mark Done ✓
+                </button>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Main Floor Grid */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 space-y-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black text-slate-200 uppercase tracking-wider flex items-center gap-2">
-            <Utensils className="w-4 h-4 text-cyan-400" /> Dining Tables Matrix
+          <h2 className="text-sm font-black text-[#FCF6BA] uppercase tracking-wider flex items-center gap-2 font-mono">
+            <Utensils className="w-4 h-4 text-[#D4AF37]" /> Dining Tables Matrix
           </h2>
 
-          <div className="flex items-center gap-3 text-[11px] font-bold font-mono">
+          <div className="flex items-center gap-3 text-[11px] font-bold">
             <span className="flex items-center gap-1.5 text-emerald-400">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" /> Vacant
             </span>
-            <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" /> Dining
+            <span className="flex items-center gap-1.5 text-[#F3E5AB]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#D4AF37] shadow-[0_0_8px_#D4AF37]" /> Dining
             </span>
-            <span className="flex items-center gap-1.5 text-fuchsia-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-400 shadow-[0_0_8px_#e879f9] animate-ping" /> New Order
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-ping" /> New Batch
             </span>
           </div>
         </div>
 
+        {/* Dining Tables Matrix */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {tables.map(t => {
             const activeSession = sessions.find(s => s.table_number === t.table_number && s.status === 'active');
@@ -263,101 +496,132 @@ export default function WaiterTerminalPage() {
 
             const tableBatches = batches.filter(b => b.table_number === t.table_number && b.session_id === activeSession?.id);
             const hasPendingAction = tableBatches.some(b => b.status === 'pending_waiter');
+            const grossTotal = Number(activeSession?.total_amount || 0);
 
             return (
-              <div
+              <motion.div
                 key={t.id || t.table_number}
-                onClick={() => isOccupied && setSelectedTable({ ...t, activeSession, tableBatches })}
-                className={`p-5 rounded-3xl backdrop-blur-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                layout
+                whileHover={{ y: -3 }}
+                transition={fluidSpring}
+                className={`p-5 rounded-[28px] bg-gradient-to-b from-[#111114]/90 to-[#08080a]/90 border-[2px] transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
                   hasPendingAction
-                    ? 'bg-fuchsia-950/20 border-fuchsia-500/60 shadow-[0_0_30px_rgba(217,70,239,0.25)] ring-2 ring-fuchsia-500/40'
+                    ? 'border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.25)] ring-2 ring-amber-400/40'
                     : isOccupied
-                    ? 'bg-amber-950/20 border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/30'
-                    : 'bg-emerald-950/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:border-emerald-500/60'
+                    ? 'border-[#D4AF37]/50 shadow-[0_8px_30px_rgba(212,175,55,0.15)]'
+                    : 'border-white/[0.08] hover:border-[#D4AF37]/40'
                 }`}
               >
-                <div className={`absolute top-0 inset-x-0 h-1 ${
-                  hasPendingAction ? 'bg-fuchsia-400 shadow-[0_0_12px_#e879f9]' : isOccupied ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : 'bg-emerald-400 shadow-[0_0_12px_#34d399]'
+                <div className={`absolute top-0 inset-x-0 h-1.5 ${
+                  hasPendingAction ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : isOccupied ? 'bg-[#D4AF37]' : 'bg-emerald-500'
                 }`} />
 
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-black text-white">{t.table_name || `Table #${t.table_number}`}</span>
+                <div>
+                  <div className="flex items-center justify-between mb-3 pt-1">
+                    <div className="flex flex-col">
+                      <span className="text-base font-black text-white">{t.table_name || `Table #${t.table_number}`}</span>
+                      <span className="text-[10px] text-[#D4AF37] font-mono">({t.capacity || 4} Seats • #{t.table_number})</span>
+                    </div>
+
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                      hasPendingAction
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400 animate-pulse'
+                        : isOccupied
+                        ? 'bg-[#D4AF37]/15 text-[#FCF6BA] border-[#D4AF37]/40'
+                        : 'bg-emerald-950/30 text-emerald-300 border-emerald-500/40'
+                    }`}>
+                      {hasPendingAction ? 'New Order!' : isOccupied ? 'Dining' : 'Available'}
+                    </span>
                   </div>
 
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border font-mono ${
-                    hasPendingAction
-                      ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/50 animate-pulse'
-                      : isOccupied
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
-                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
-                  }`}>
-                    {hasPendingAction ? 'New Order!' : isOccupied ? 'Seated' : 'Available'}
-                  </span>
+                  {isOccupied ? (
+                    <div className="space-y-2.5">
+                      <div className="bg-black/40 border border-white/5 rounded-2xl p-3 text-xs space-y-1 font-mono">
+                        <div className="flex justify-between text-neutral-400">
+                          <span>Guest:</span>
+                          <span className="font-bold text-white font-sans">{activeSession.customer_name || 'Guest'}</span>
+                        </div>
+                        <div className="flex justify-between text-neutral-400">
+                          <span>Mobile:</span>
+                          <span className="text-white">{activeSession.customer_phone || '-'}</span>
+                        </div>
+                        <div className="flex justify-between text-[#D4AF37] pt-1 border-t border-white/10">
+                          <span>Flat Total (Zero GST):</span>
+                          <span className="font-black text-[#FCF6BA] text-sm">₹{grossTotal.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-bold text-[#FCF6BA]">
+                        <span className="font-mono text-neutral-400">{tableBatches.length} Batches Sent</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-xs text-emerald-400 font-mono flex flex-col items-center gap-1.5">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                      <span>Table Vacant & Ready</span>
+                    </div>
+                  )}
                 </div>
 
-                {isOccupied ? (
-                  <div className="space-y-2.5">
-                    <div className="bg-black/50 border border-white/10 rounded-2xl p-3 text-xs space-y-1 font-mono">
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Guest:</span>
-                        <span className="font-bold text-white font-sans">{activeSession.customer_name || 'Guest'}</span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Mobile:</span>
-                        <span>{activeSession.customer_phone || '-'}</span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400 pt-1 border-t border-white/10">
-                        <span>Live Bill:</span>
-                        <span className="font-black text-amber-300 text-sm">₹{Number(activeSession.total_amount || 0).toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] font-bold text-cyan-300 pt-1 font-mono">
-                      <span>{tableBatches.length} Orders Sent</span>
-                      <span className="underline">View Dishes ➔</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-xs text-emerald-400/70 font-mono flex flex-col items-center gap-1">
-                    <CheckCircle2 className="w-6 h-6 opacity-60" />
-                    <span>Table Ready</span>
-                  </div>
-                )}
-              </div>
+                {/* Quick Action Buttons */}
+                <div className="flex gap-2 pt-3 border-t border-white/10 mt-3">
+                  {isOccupied && (
+                    <button
+                      onClick={() => setSelectedTable({ ...t, activeSession, tableBatches })}
+                      className="flex-1 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-mono font-bold text-white text-center cursor-pointer"
+                    >
+                      View Ledger
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setPunchTable(t);
+                      setPunchCart({});
+                      setPunchCustomerName(activeSession?.customer_name || 'Walk-in Guest');
+                      setPunchCustomerPhone(activeSession?.customer_phone || '9999999999');
+                      setShowPunchOrderModal(true);
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-[#D4AF37]/15 hover:bg-[#D4AF37]/25 border border-[#D4AF37]/40 text-xs font-mono font-bold text-[#FCF6BA] flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Punch Dish
+                  </button>
+                </div>
+              </motion.div>
             );
           })}
         </div>
       </main>
 
-      {/* Order Details Modal */}
+      {/* MODAL 1: Table Service Ledger & Batch Actions */}
       <AnimatePresence>
         {selectedTable && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.94, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.94, opacity: 0 }}
-              className="w-full max-w-lg bg-[#0c0c14]/95 border border-cyan-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(6,182,212,0.25)] space-y-4 max-h-[85vh] overflow-y-auto no-scrollbar font-mono text-xs"
+              transition={fluidSpring}
+              className="w-full max-w-lg bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[32px] p-6 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto custom-gold-scrollbar"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div>
-                  <h3 className="text-base font-black text-white flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-cyan-400" /> {selectedTable.table_name || `Table #${selectedTable.table_number}`} Ledger
+                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> {selectedTable.table_name || `Table #${selectedTable.table_number}`}
                   </h3>
-                  <span className="text-[11px] text-neutral-400">
-                    Guest: {selectedTable.activeSession?.customer_name || 'Walk-in'} ({selectedTable.activeSession?.customer_phone || '-'})
+                  <span className="text-xs text-neutral-400 font-mono">
+                    Guest: {selectedTable.activeSession?.customer_name || 'Guest'} ({selectedTable.activeSession?.customer_phone || '-'})
                   </span>
                 </div>
                 <button
                   onClick={() => setSelectedTable(null)}
-                  className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer"
+                  className="p-1 rounded-full text-neutral-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="space-y-3">
+              {/* Running Orders Breakdown */}
+              <div className="space-y-4">
                 {selectedTable.tableBatches?.map((batch, bIdx) => {
                   const bItems = orderItems.filter(oi => oi.batch_id === batch.id);
                   const isPending = batch.status === 'pending_waiter';
@@ -367,60 +631,180 @@ export default function WaiterTerminalPage() {
                       key={batch.id} 
                       className={`p-4 rounded-2xl border transition ${
                         isPending 
-                          ? 'bg-fuchsia-950/20 border-fuchsia-500/50 shadow-[0_0_15px_rgba(217,70,239,0.2)]'
-                          : 'bg-black/40 border-white/10'
+                          ? 'bg-amber-950/20 border-amber-400 shadow-md' 
+                          : 'bg-white/[0.02] border-white/10'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-black text-neutral-300">
-                          Order Batch #{bIdx + 1}
+                        <span className="text-xs font-black text-white font-mono">
+                          Batch #{bIdx + 1}
                         </span>
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                        <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
                           isPending 
-                            ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400 animate-pulse' 
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-400 animate-pulse' 
                             : 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
                         }`}>
                           {isPending ? 'Pending Waiter Approval' : 'Sent to Kitchen'}
                         </span>
                       </div>
 
-                      <div className="space-y-1.5 divide-y divide-white/[0.05]">
+                      <div className="space-y-2 divide-y divide-white/5 text-xs">
                         {bItems.map(item => (
-                          <div key={item.id} className="pt-1.5 flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800 px-1.5 py-0.5 rounded text-[11px]">
-                                {item.quantity}x
-                              </span>
-                              <span className="text-neutral-200 font-bold">{item.menu_items?.name_en || item.menu_items?.name || 'Dish'}</span>
+                          <div key={item.id} className="pt-2 flex flex-col gap-1">
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-black bg-[#D4AF37] px-1.5 py-0.5 rounded">
+                                  {item.quantity}x
+                                </span>
+                                <span className="text-white font-bold">{item.menu_items?.name_en || item.menu_items?.name || 'Dish'}</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[#FCF6BA]">₹{(Number(item.unit_price) * item.quantity).toFixed(2)}</span>
+                                {item.item_status !== 'served' ? (
+                                  <button
+                                    onClick={() => handleMarkItemServed(item.id)}
+                                    className="px-2 py-0.5 rounded bg-white/[0.06] hover:bg-emerald-950/50 hover:text-emerald-300 text-[10px] font-mono border border-white/10 cursor-pointer"
+                                  >
+                                    Mark Served ✓
+                                  </button>
+                                ) : (
+                                  <span className="text-emerald-400 text-[10px] font-mono font-bold">Served</span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-neutral-400">₹{((Number(item.unit_price) || Number(item.menu_items?.price) || 0) * item.quantity).toFixed(2)}</span>
+
+                            {item.cooking_notes && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-500/30 font-sans">
+                                <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>Note: {item.cooking_notes}</span>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
 
                       {isPending && (
-                        <button
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          transition={fluidSpring}
+                          disabled={actionLoadingBatchId === batch.id}
                           onClick={() => handleAcknowledgeBatch(batch.id)}
-                          className="w-full mt-3 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-black font-black uppercase text-xs shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="w-full mt-3 py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
-                          <Check className="w-4 h-4 stroke-[3]" /> Dispatch to Kitchen KDS
-                        </button>
+                          {actionLoadingBatchId === batch.id ? (
+                            <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4 stroke-[3]" /> Send to Kitchen
+                            </>
+                          )}
+                        </motion.button>
                       )}
                     </div>
                   );
                 })}
               </div>
 
-              <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 space-y-1.5">
+              {/* Total Summary (Zero-GST Flat Billing) */}
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 text-xs font-mono space-y-1">
                 <div className="flex justify-between text-neutral-400">
-                  <span>Net Dishes Total:</span>
-                  <span>₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
+                  <span>Gross Flat Amount (Zero GST):</span>
+                  <span className="text-white">₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-white font-black text-sm pt-2 border-t border-cyan-500/30">
-                  <span>Final Settle Amount:</span>
-                  <span className="text-cyan-300">₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
+                <div className="flex justify-between text-white font-black text-sm pt-2 border-t border-white/10">
+                  <span>Final Net Settle:</span>
+                  <span className="text-[#D4AF37] font-mono text-base">₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 2: Direct Walk-In Order Punching */}
+      <AnimatePresence>
+        {showPunchOrderModal && punchTable && (
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.94, opacity: 0 }}
+              transition={fluidSpring}
+              className="w-full max-w-lg bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[32px] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar font-mono text-xs"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div>
+                  <h3 className="text-base font-black text-white uppercase">
+                    Punch Order ➔ {punchTable.table_name || `Table #${punchTable.table_number}`}
+                  </h3>
+                  <span className="text-[11px] text-[#D4AF37]">Direct Offline Order to Kitchen</span>
+                </div>
+                <button onClick={() => setShowPunchOrderModal(false)} className="cursor-pointer"><X className="w-5 h-5 text-neutral-400" /></button>
+              </div>
+
+              <div className="relative">
+                <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search dish name..."
+                  value={punchSearch}
+                  onChange={(e) => setPunchSearch(e.target.value)}
+                  className="w-full bg-[#161619] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-white outline-none"
+                />
+              </div>
+
+              <div className="max-h-52 overflow-y-auto custom-gold-scrollbar space-y-1.5 p-2 bg-black/40 border border-white/5 rounded-2xl">
+                {filteredMenuItems.map(dish => {
+                  const qty = punchCart[dish.id] || 0;
+                  return (
+                    <div key={dish.id} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-white block">{dish.name_en || dish.name}</span>
+                        <span className="text-[#D4AF37] font-bold">₹{Number(dish.price).toFixed(2)}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {qty > 0 && (
+                          <button
+                            onClick={() => setPunchCart({ ...punchCart, [dish.id]: qty - 1 })}
+                            className="p-1 rounded-lg bg-white/[0.05] text-white cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {qty > 0 && <span className="font-black text-white px-1">{qty}</span>}
+                        <button
+                          onClick={() => setPunchCart({ ...punchCart, [dish.id]: qty + 1 })}
+                          className="p-1 rounded-lg bg-[#D4AF37] text-black font-black cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div>
+                <label className="text-neutral-400 block mb-1">Cooking Instructions / Notes (Optional):</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Less ice, no sugar, parcel..."
+                  value={punchNotes}
+                  onChange={(e) => setPunchNotes(e.target.value)}
+                  className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                />
+              </div>
+
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                disabled={loading}
+                onClick={handlePunchOrderSubmit}
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+              >
+                {loading ? 'Punching to Kitchen...' : 'Confirm & Dispatch to Kitchen'}
+              </motion.button>
             </motion.div>
           </div>
         )}
