@@ -100,54 +100,68 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Resolve Table ID / Dedicated Name
+  // Dynamic Identity Resolver with Direct Native Browser URL Rewrite
   const resolveTableIdentity = async () => {
     if (!rawTableParam) return;
     try {
-      const isNumeric = /^\d+$/.test(rawTableParam.trim());
+      const cleanParam = rawTableParam.trim();
+      const isNumeric = /^\d+$/.test(cleanParam);
       let matched = null;
 
       if (isNumeric) {
         const { data } = await supabase
           .from('restaurant_tables')
           .select('*')
-          .or(`table_number.eq.${parseInt(rawTableParam)},table_name.ilike.${rawTableParam}`)
-          .limit(1)
+          .eq('table_number', parseInt(cleanParam))
           .maybeSingle();
         matched = data;
       } else {
         const { data } = await supabase
           .from('restaurant_tables')
           .select('*')
-          .ilike('table_name', rawTableParam.trim())
-          .limit(1)
+          .ilike('table_name', cleanParam)
           .maybeSingle();
         matched = data;
       }
 
       if (matched) {
         const tNum = matched.table_number;
+        const assignedName = matched.table_name || `Table #${tNum}`;
         setRealTableNumber(tNum);
-        setDisplayTableName(matched.table_name || `Table #${tNum}`);
+        setDisplayTableName(assignedName);
         setTableResolved(true);
+        setTableNotFound(false);
+
+        // Instantly transform browser address bar to table name (No Page Reload / No Loop)
+        if (typeof window !== 'undefined' && matched.table_name && matched.table_name.trim() !== '') {
+          const targetPath = `/table/${encodeURIComponent(matched.table_name.trim())}`;
+          if (window.location.pathname !== targetPath) {
+            window.history.replaceState(null, '', targetPath);
+          }
+        }
+        return;
       } else {
         if (isNumeric) {
-          const fallbackNum = parseInt(rawTableParam);
+          const fallbackNum = parseInt(cleanParam);
           setRealTableNumber(fallbackNum);
           setDisplayTableName(`Table #${fallbackNum}`);
           setTableResolved(true);
+          setTableNotFound(false);
         } else {
           setTableNotFound(true);
+          setTableResolved(false);
         }
       }
     } catch (err) {
-      if (/^\d+$/.test(rawTableParam)) {
-        const fallbackNum = parseInt(rawTableParam);
+      if (/^\d+$/.test(rawTableParam.trim())) {
+        const fallbackNum = parseInt(rawTableParam.trim());
         setRealTableNumber(fallbackNum);
         setDisplayTableName(`Table #${fallbackNum}`);
         setTableResolved(true);
+        setTableNotFound(false);
       } else {
         setTableNotFound(true);
+        setTableResolved(false);
       }
     }
   };
@@ -255,7 +269,7 @@ export default function LuxuryCustomerTablePage() {
     } catch (e) {}
   };
 
-  // Realtime Sync Listener for All Tables
+  // Realtime Sync Listener - Auto-updates Table Name instantly if Admin modifies it
   useEffect(() => {
     if (!tableResolved || !realTableNumber) return;
     syncSessionData();
@@ -263,6 +277,20 @@ export default function LuxuryCustomerTablePage() {
 
     const channel = supabase
       .channel(`table-${realTableNumber}-realtime-hub`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'restaurant_tables', 
+        filter: `table_number=eq.${realTableNumber}` 
+      }, (payload) => {
+        if (payload.new && payload.new.table_name) {
+          const newName = payload.new.table_name.trim();
+          setDisplayTableName(newName);
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `/table/${encodeURIComponent(newName)}`);
+          }
+        }
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
         if (activeSessionId) fetchSessionItems(activeSessionId);
@@ -319,8 +347,8 @@ export default function LuxuryCustomerTablePage() {
   const runningGrandTotal = liveSessionBaseTotal + cartGrandTotal;
   const splitAmountPerPerson = splitCount > 0 ? (runningGrandTotal / splitCount).toFixed(2) : runningGrandTotal.toFixed(2);
 
-  // Waiter Call
-  const handleCallWaiter = async (callType: 'water' | 'waiter' | 'bill') => {
+  // Waiter Call Functionality (Water & Staff)
+  const handleCallWaiter = async (callType: 'water' | 'waiter') => {
     if (!realTableNumber) return;
     triggerHaptic(25);
     try {
@@ -330,7 +358,7 @@ export default function LuxuryCustomerTablePage() {
         status: 'pending'
       });
       setIsWaiterModalOpen(false);
-      const textMap = { water: 'Drinking Water requested', waiter: 'Waiter called to table', bill: 'Bill requested' };
+      const textMap = { water: 'Drinking Water requested', waiter: 'Waiter called to table' };
       setWaiterToast(`🔔 ${textMap[callType]} for ${displayTableName}! Staff notified.`);
       setTimeout(() => setWaiterToast(null), 4000);
     } catch (e) {
@@ -489,20 +517,15 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* 1. TOP HEADER */}
+      {/* 1. TOP HEADER - Pure Table Name Display (Badge-Free) */}
       <header className="sticky top-0 z-40 bg-[#060608]/90 backdrop-blur-2xl px-4 pt-3.5 pb-3 border-b border-white/[0.08] shadow-2xl">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div>
             <span className="text-[9px] tracking-[0.2em] font-mono uppercase text-[#D4AF37] block font-bold">
               ROYAL FINE-DINE
             </span>
-            <h1 className="text-sm font-black text-white flex items-center gap-1.5 mt-0.5">
-              <span>{displayTableName || `Table #${realTableNumber || '...'}`}</span>
-              {realTableNumber && (
-                <span className="text-[10px] font-mono text-[#D4AF37] bg-[#D4AF37]/15 px-2 py-0.5 rounded-full border border-[#D4AF37]/30">
-                  T-{realTableNumber}
-                </span>
-              )}
+            <h1 className="text-base font-black text-amber-200 tracking-wide mt-0.5">
+              {displayTableName || (realTableNumber ? `Table #${realTableNumber}` : 'Loading...')}
             </h1>
           </div>
 
@@ -1111,7 +1134,7 @@ export default function LuxuryCustomerTablePage() {
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-2.5">
                 <span className="font-black text-white uppercase flex items-center gap-1.5">
-                  <BellRing className="w-4 h-4 text-[#D4AF37]" /> Call Waiter
+                  <BellRing className="w-4 h-4 text-[#D4AF37]" /> Call Staff
                 </span>
                 <button onClick={() => setIsWaiterModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4 text-neutral-400" /></button>
               </div>
@@ -1131,13 +1154,7 @@ export default function LuxuryCustomerTablePage() {
                   onClick={() => handleCallWaiter('waiter')}
                   className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-amber-400 text-amber-300 font-bold flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <ChefHat className="w-4 h-4" /> Call Staff / Order Help
-                </button>
-                <button
-                  onClick={() => handleCallWaiter('bill')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-emerald-400 text-emerald-300 font-bold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Receipt className="w-4 h-4" /> Request Bill to Table
+                  <ChefHat className="w-4 h-4" /> Call Waiter / Order Help
                 </button>
               </div>
             </motion.div>
