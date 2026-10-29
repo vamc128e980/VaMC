@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import Script from 'next/script';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { Category, MenuItem, CartItem } from '@/types/restaurant';
+import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import { 
   Plus, 
   Minus, 
@@ -17,18 +17,21 @@ import {
   Image as ImgIcon, 
   AlertTriangle,
   Search,
-  Split,
   BellRing,
   Droplets,
   Flame,
   Crown,
   ChefHat,
   MessageSquare,
-  CheckCircle2
+  CheckCircle2,
+  Gift,
+  Layers,
+  Scale,
+  Hash
 } from 'lucide-react';
 
-const smoothSpring = { type: 'spring', stiffness: 400, damping: 30, mass: 0.5 };
-const tapSpring = { type: 'spring', stiffness: 450, damping: 25, mass: 0.5 };
+const butterSpring = { type: 'spring', stiffness: 420, damping: 32, mass: 0.45 };
+const tapSpring = { type: 'spring', stiffness: 500, damping: 25, mass: 0.4 };
 
 const triggerHaptic = (ms = 12) => {
   if (typeof window !== 'undefined' && 'vibrate' in navigator) {
@@ -50,6 +53,7 @@ export default function LuxuryCustomerTablePage() {
   // Core Data
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [addons, setAddons] = useState<MenuAddon[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -60,19 +64,31 @@ export default function LuxuryCustomerTablePage() {
   const [selectedCategory, setSelectedCategory] = useState<number | 'combos' | null>(null);
   const [foodFilter, setFoodFilter] = useState<'all' | 'veg' | 'non_veg'>('all');
 
+  // Add-ons Customization Bottom Sheet
+  const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
+  const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
+  const [selectedWeightVariant, setSelectedWeightVariant] = useState<any | null>(null);
+
   // Cart & Item-wise Cooking Notes
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Active Dining Session
+  // Active Dining Session & Customer Loyalty
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerVisitCount, setCustomerVisitCount] = useState<number>(1);
+  const [isRewardClaimedThisSession, setIsRewardClaimedThisSession] = useState(false);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+
+  // Active Live Order Token / PIN
+  const [activeOrderToken, setActiveOrderToken] = useState<string | null>(null);
+  const [activeBatchStatus, setActiveBatchStatus] = useState<string | null>(null);
+
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSessionTotal, setActiveSessionTotal] = useState<number>(0);
   const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
   const [isTotalBillModalOpen, setIsTotalBillModalOpen] = useState(false);
-  const [splitCount, setSplitCount] = useState<number>(2);
 
   // Waiter Call Feature
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
@@ -81,7 +97,7 @@ export default function LuxuryCustomerTablePage() {
   const [loading, setLoading] = useState(false);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
 
-  // Language Trigger (Banner-Free)
+  // Language Trigger
   const triggerGoogleTranslate = (langCode: 'en' | 'te' | 'hi') => {
     setActiveLang(langCode);
     triggerHaptic(15);
@@ -100,7 +116,7 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Dynamic Identity Resolver with Direct Native Browser URL Rewrite
+  // Dynamic Identity Resolver
   const resolveTableIdentity = async () => {
     if (!rawTableParam) return;
     try {
@@ -132,7 +148,6 @@ export default function LuxuryCustomerTablePage() {
         setTableResolved(true);
         setTableNotFound(false);
 
-        // Instantly transform browser address bar to table name (No Page Reload / No Loop)
         if (typeof window !== 'undefined' && matched.table_name && matched.table_name.trim() !== '') {
           const targetPath = `/table/${encodeURIComponent(matched.table_name.trim())}`;
           if (window.location.pathname !== targetPath) {
@@ -187,6 +202,23 @@ export default function LuxuryCustomerTablePage() {
     } catch (e) {}
   };
 
+  const fetchLatestOrderToken = async (sessionId: string) => {
+    try {
+      const { data } = await supabase
+        .from('order_batches')
+        .select('id, order_pin, status')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setActiveOrderToken(data.order_pin);
+        setActiveBatchStatus(data.status);
+      }
+    } catch (e) {}
+  };
+
   const syncSessionData = async () => {
     if (!realTableNumber) return;
     const { data: session } = await supabase
@@ -204,26 +236,53 @@ export default function LuxuryCustomerTablePage() {
       setCustomerName(session.customer_name || '');
       setCustomerPhone(session.customer_phone || '');
       fetchSessionItems(session.id);
+      fetchLatestOrderToken(session.id);
       localStorage.setItem(`table_sess_${realTableNumber}`, session.id);
+
+      if (session.customer_phone) {
+        checkLoyaltyProfile(session.customer_phone);
+      }
     } else {
       setActiveSessionId(null);
       setActiveSessionTotal(0);
       setCustomerName('');
       setCustomerPhone('');
       setSessionOrderedItems([]);
+      setActiveOrderToken(null);
+      setActiveBatchStatus(null);
       localStorage.removeItem(`table_sess_${realTableNumber}`);
     }
+  };
+
+  // Check 10th Visit Loyalty Status
+  const checkLoyaltyProfile = async (phone: string) => {
+    if (!phone || phone.length !== 10) return;
+    try {
+      const { data } = await supabase
+        .from('customer_loyalty')
+        .select('*')
+        .eq('phone', phone.trim())
+        .maybeSingle();
+
+      if (data) {
+        setCustomerVisitCount(data.total_visits || 1);
+      } else {
+        setCustomerVisitCount(1);
+      }
+    } catch (e) {}
   };
 
   const fetchMenuData = async () => {
     const [
       { data: cats },
       { data: items },
+      { data: adns },
       { data: cmbs },
       { data: bnrs }
     ] = await Promise.all([
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
       supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
+      supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('combos').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false })
     ]);
@@ -237,13 +296,13 @@ export default function LuxuryCustomerTablePage() {
       });
     }
     if (items) setMenuItems(items);
+    if (adns) setAddons(adns);
     if (cmbs) setCombos(cmbs);
     if (bnrs) {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
     }
 
-    // Top Picks Analytics (Current Month)
     try {
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
@@ -269,7 +328,7 @@ export default function LuxuryCustomerTablePage() {
     } catch (e) {}
   };
 
-  // Realtime Sync Listener - Auto-updates Table Name instantly if Admin modifies it
+  // Realtime Sync Listener
   useEffect(() => {
     if (!tableResolved || !realTableNumber) return;
     syncSessionData();
@@ -292,11 +351,15 @@ export default function LuxuryCustomerTablePage() {
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => {
+        if (activeSessionId) fetchLatestOrderToken(activeSessionId);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
         if (activeSessionId) fetchSessionItems(activeSessionId);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenuData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
       .subscribe();
@@ -304,7 +367,7 @@ export default function LuxuryCustomerTablePage() {
     return () => { supabase.removeChannel(channel); };
   }, [realTableNumber, tableResolved, activeSessionId]);
 
-  // Auto-Slide Interval for Promo Banners (4 Seconds)
+  // Auto-Slide Interval for Promo Banners
   useEffect(() => {
     if (banners.length <= 1) return;
     const timer = setInterval(() => {
@@ -313,41 +376,124 @@ export default function LuxuryCustomerTablePage() {
     return () => clearInterval(timer);
   }, [banners.length]);
 
-  const addToCart = (item: any, isCombo = false) => {
+  // Open Customization or Instant Add
+  const handleItemAddClick = (item: MenuItem) => {
     triggerHaptic(15);
-    setCart((prev) => {
-      const existing = prev.find((ci) => ci.menuItem.id === item.id && ci.isCombo === isCombo);
-      if (existing) {
-        return prev.map((ci) => (ci.menuItem.id === item.id && ci.isCombo === isCombo) ? { ...ci, quantity: ci.quantity + 1 } : ci);
+    const hasAddons = item.has_addons && Array.isArray(item.addon_ids) && item.addon_ids.length > 0;
+    const hasRetailVariants = item.is_retail_item && Array.isArray(item.weight_variants) && item.weight_variants.length > 0;
+
+    if (hasAddons || hasRetailVariants) {
+      setCustomizingItem(item);
+      setSelectedAddonIds([]);
+      if (hasRetailVariants) {
+        setSelectedWeightVariant(item.weight_variants[0]);
+      } else {
+        setSelectedWeightVariant(null);
       }
-      return [...prev, { menuItem: item, quantity: 1, isCombo }];
+    } else {
+      addToCartDirect(item, false);
+    }
+  };
+
+  const addToCartDirect = (item: any, isCombo = false, chosenAddons: MenuAddon[] = [], chosenVariant: any = null, isFree = false) => {
+    triggerHaptic(15);
+    const effectivePrice = isFree ? 0 : (chosenVariant ? chosenVariant.price : item.price);
+
+    setCart((prev) => {
+      const existing = prev.find((ci) => 
+        ci.menuItem.id === item.id && 
+        ci.isCombo === isCombo && 
+        ci.isComplimentary === isFree &&
+        ci.selectedWeightVariant?.size === chosenVariant?.size &&
+        JSON.stringify(ci.selectedAddons?.map(a => a.id).sort()) === JSON.stringify(chosenAddons.map(a => a.id).sort())
+      );
+
+      if (existing) {
+        return prev.map((ci) => ci === existing ? { ...ci, quantity: ci.quantity + 1 } : ci);
+      }
+      return [...prev, { 
+        menuItem: { ...item, price: effectivePrice }, 
+        quantity: 1, 
+        isCombo,
+        selectedAddons: chosenAddons,
+        selectedWeightVariant: chosenVariant,
+        isComplimentary: isFree
+      }];
     });
   };
 
-  const removeFromCart = (itemId: number, isCombo = false) => {
+  const confirmCustomizationAndAdd = () => {
+    if (!customizingItem) return;
+    const chosenAddons = addons.filter(a => selectedAddonIds.includes(a.id));
+    addToCartDirect(customizingItem, false, chosenAddons, selectedWeightVariant, false);
+    setCustomizingItem(null);
+    setSelectedAddonIds([]);
+    setSelectedWeightVariant(null);
+  };
+
+  const removeFromCart = (cartItemIndex: number) => {
     triggerHaptic(12);
     setCart((prev) => {
-      const existing = prev.find((ci) => ci.menuItem.id === itemId && ci.isCombo === isCombo);
-      if (existing && existing.quantity > 1) {
-        return prev.map((ci) => (ci.menuItem.id === itemId && ci.isCombo === isCombo) ? { ...ci, quantity: ci.quantity - 1 } : ci);
+      const target = prev[cartItemIndex];
+      if (!target) return prev;
+      if (target.quantity > 1) {
+        return prev.map((ci, idx) => idx === cartItemIndex ? { ...ci, quantity: ci.quantity - 1 } : ci);
       }
-      return prev.filter((ci) => !(ci.menuItem.id === itemId && ci.isCombo === isCombo));
+      return prev.filter((_, idx) => idx !== cartItemIndex);
     });
   };
 
-  // Zero-GST Totals
-  const cartGrandTotal = cart.reduce((sum, ci) => sum + ci.menuItem.price * ci.quantity, 0);
+  // Zero-GST Totals Computation with Addons
+  const cartGrandTotal = useMemo(() => {
+    return cart.reduce((sum, ci) => {
+      if (ci.isComplimentary) return sum;
+      const basePrice = Number(ci.menuItem.price || 0);
+      const addOnsTotal = (ci.selectedAddons || []).reduce((aSum, a) => aSum + Number(a.price || 0), 0);
+      return sum + ((basePrice + addOnsTotal) * ci.quantity);
+    }, 0);
+  }, [cart]);
+
   const cartItemCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
 
-  const orderedItemsComputedTotal = sessionOrderedItems.reduce(
-    (sum, it) => sum + (it.quantity * Number(it.unit_price || it.menu_items?.price || 0)), 
-    0
-  );
+  const orderedItemsComputedTotal = sessionOrderedItems.reduce((sum, it) => {
+    if (it.is_complimentary) return sum;
+    const pr = Number(it.unit_price || it.menu_items?.price || 0);
+    const aTotal = Array.isArray(it.selected_addons) ? it.selected_addons.reduce((aSum: number, a: any) => aSum + Number(a.price || 0), 0) : 0;
+    return sum + (it.quantity * (pr + aTotal));
+  }, 0);
+
   const liveSessionBaseTotal = activeSessionTotal > 0 ? activeSessionTotal : orderedItemsComputedTotal;
   const runningGrandTotal = liveSessionBaseTotal + cartGrandTotal;
-  const splitAmountPerPerson = splitCount > 0 ? (runningGrandTotal / splitCount).toFixed(2) : runningGrandTotal.toFixed(2);
 
-  // Waiter Call Functionality (Water & Staff)
+  // Cross-sell Suggested Items
+  const cartSuggestedItems = useMemo(() => {
+    const suggestedIds = new Set<number>();
+    cart.forEach(ci => {
+      if (Array.isArray(ci.menuItem.suggested_item_ids)) {
+        ci.menuItem.suggested_item_ids.forEach(id => suggestedIds.add(id));
+      }
+    });
+    const currentCartDishIds = new Set(cart.map(ci => ci.menuItem.id));
+    return menuItems.filter(m => suggestedIds.has(m.id) && !currentCartDishIds.has(m.id));
+  }, [cart, menuItems]);
+
+  // Complimentary Drinks (Under ₹60) for 10th Visit Reward
+  const freeRewardDrinks = useMemo(() => {
+    return menuItems.filter(m => Number(m.price) <= 60 && m.food_type !== 'non_veg').slice(0, 4);
+  }, [menuItems]);
+
+  const is10thVisitMilestone = customerVisitCount === 10 || (customerVisitCount > 0 && customerVisitCount % 10 === 0);
+
+  const handleClaimFreeReward = (drink: MenuItem) => {
+    triggerHaptic(25);
+    addToCartDirect(drink, false, [], null, true);
+    setIsRewardClaimedThisSession(true);
+    setShowRewardModal(false);
+    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE as your 10th Visit Gift!`);
+    setTimeout(() => setWaiterToast(null), 4000);
+  };
+
+  // Waiter Call Functionality
   const handleCallWaiter = async (callType: 'water' | 'waiter') => {
     if (!realTableNumber) return;
     triggerHaptic(25);
@@ -358,7 +504,7 @@ export default function LuxuryCustomerTablePage() {
         status: 'pending'
       });
       setIsWaiterModalOpen(false);
-      const textMap = { water: 'Drinking Water requested', waiter: 'Waiter called to table' };
+      const textMap = { water: 'Drinking Water requested', waiter: 'Steward called to table' };
       setWaiterToast(`🔔 ${textMap[callType]} for ${displayTableName}! Staff notified.`);
       setTimeout(() => setWaiterToast(null), 4000);
     } catch (e) {
@@ -366,7 +512,7 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Place Order / Add to Running Table Bill
+  // Place Order / Add to Running Table Bill (Generates #Token)
   const handlePlaceOrder = async () => {
     triggerHaptic(30);
     if (!realTableNumber) return alert('Invalid table. Re-scan QR.');
@@ -414,29 +560,39 @@ export default function LuxuryCustomerTablePage() {
         setActiveSessionTotal(newTotal);
       }
 
+      // Generate Random 4-Digit Token (e.g. 1234)
+      const randomToken = Math.floor(1000 + Math.random() * 9000).toString();
+
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
         .insert({
           session_id: sessionId,
           table_number: realTableNumber,
-          status: 'pending_waiter'
+          status: 'pending_waiter',
+          order_pin: randomToken
         })
         .select()
         .single();
 
       if (bErr) throw bErr;
 
-      const orderPayload = cart.map((ci) => {
-        const itemKey = (ci.isCombo ? 'c-' : 'i-') + ci.menuItem.id;
+      setActiveOrderToken(batch.order_pin || randomToken);
+      setActiveBatchStatus('pending_waiter');
+
+      const orderPayload = cart.map((ci, idx) => {
+        const itemKey = `${ci.isCombo ? 'c-' : 'i-'}${ci.menuItem.id}-${idx}`;
         return {
           batch_id: batch.id,
           session_id: sessionId,
           menu_item_id: ci.menuItem.id,
           station_id: 'kitchen_hot',
           quantity: ci.quantity,
-          unit_price: ci.menuItem.price,
+          unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
           item_status: 'ordered',
-          cooking_notes: cartNotes[itemKey] || null
+          cooking_notes: cartNotes[itemKey] || null,
+          selected_addons: ci.selectedAddons || [],
+          is_complimentary: Boolean(ci.isComplimentary),
+          selected_weight_variant: ci.selectedWeightVariant?.size || null
         };
       });
 
@@ -481,7 +637,7 @@ export default function LuxuryCustomerTablePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#060608] text-[#FCF6BA] pb-32 font-sans selection:bg-[#D4AF37] selection:text-black antialiased relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#060608] text-[#FCF6BA] pb-32 font-sans selection:bg-[#D4AF37] selection:text-black antialiased relative overflow-x-hidden transform-gpu will-change-transform">
       
       {/* Hidden Translate */}
       <div id="google_translate_element" style={{ display: 'none' }} />
@@ -509,6 +665,7 @@ export default function LuxuryCustomerTablePage() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={butterSpring}
             className="fixed top-16 inset-x-4 max-w-sm mx-auto z-50 p-3.5 rounded-[22px] bg-gradient-to-r from-[#18181b] to-[#0c0c0e] border border-[#D4AF37]/80 text-[#FCF6BA] text-xs font-mono font-bold shadow-2xl flex items-center gap-2.5 backdrop-blur-2xl"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -517,7 +674,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* 1. TOP HEADER - Pure Table Name Display (Badge-Free) */}
+      {/* 1. TOP HEADER */}
       <header className="sticky top-0 z-40 bg-[#060608]/90 backdrop-blur-2xl px-4 pt-3.5 pb-3 border-b border-white/[0.08] shadow-2xl">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div>
@@ -572,8 +729,78 @@ export default function LuxuryCustomerTablePage() {
       </header>
 
       {/* 2. MAIN CONTAINER */}
-      <main className="max-w-md mx-auto px-4 pt-4 space-y-5">
+      <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
         
+        {/* 10th Visit Reward Celebration Card */}
+        {is10thVisitMilestone && !isRewardClaimedThisSession && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={butterSpring}
+            className="p-4 rounded-[26px] bg-gradient-to-r from-[#211a0c] via-[#17140b] to-[#0a0907] border border-[#D4AF37] shadow-[0_4px_25px_rgba(212,175,55,0.25)] flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center shrink-0">
+                <Gift className="w-5 h-5 text-[#D4AF37] animate-bounce" />
+              </div>
+              <div>
+                <span className="text-xs font-black text-[#FCF6BA] block">
+                  🎉 10th Royal Visit Milestone!
+                </span>
+                <span className="text-[10px] text-neutral-300 font-sans block">
+                  Enjoy a complimentary drink under ₹60 on us!
+                </span>
+              </div>
+            </div>
+
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setShowRewardModal(true)}
+              className="px-3 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-[10px] uppercase font-mono tracking-wider shrink-0 shadow-md cursor-pointer"
+            >
+              Claim Drink
+            </motion.button>
+          </motion.div>
+        )}
+
+        {/* ORDER TOKEN BADGE (Direct visual token for steward) */}
+        {activeOrderToken && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={butterSpring}
+            className={`p-3.5 rounded-[24px] border shadow-xl flex items-center justify-between gap-3 font-mono ${
+              activeBatchStatus === 'pending_waiter'
+                ? 'bg-gradient-to-r from-[#1c180e] to-[#0f0e0c] border-[#D4AF37]'
+                : 'bg-[#0f1712] border-emerald-500/50'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black ${
+                activeBatchStatus === 'pending_waiter' ? 'bg-[#D4AF37] text-black' : 'bg-emerald-400 text-black'
+              }`}>
+                <Hash className="w-4 h-4 stroke-[3]" />
+              </div>
+              <div>
+                <span className="text-[10px] text-neutral-400 uppercase block font-sans">
+                  {activeBatchStatus === 'pending_waiter' ? 'Order Token (Share with Steward)' : 'Status'}
+                </span>
+                <span className="text-base font-black text-white">
+                  #{activeOrderToken}
+                </span>
+              </div>
+            </div>
+
+            <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+              activeBatchStatus === 'pending_waiter'
+                ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40 animate-pulse'
+                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+            }`}>
+              {activeBatchStatus === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen 👨‍🍳'}
+            </span>
+          </motion.div>
+        )}
+
         {/* HERO PROMO BANNER */}
         {banners.length > 0 && (
           <div className="relative w-full h-44 sm:h-52 overflow-hidden rounded-[26px] border border-[#D4AF37]/50 shadow-[0_8px_30px_rgba(0,0,0,0.7)] bg-neutral-950">
@@ -679,14 +906,14 @@ export default function LuxuryCustomerTablePage() {
 
                       {inCart ? (
                         <div className="flex items-center bg-white/[0.08] rounded-xl px-1 py-0.5">
-                          <button onClick={() => removeFromCart(dish.id, false)} className="text-[#FCF6BA]"><Minus className="w-2.5 h-2.5" /></button>
+                          <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="text-[#FCF6BA]"><Minus className="w-2.5 h-2.5" /></button>
                           <span className="font-mono font-bold text-[10px] text-white px-1">{inCart.quantity}</span>
-                          <button onClick={() => addToCart(dish, false)} className="text-[#FCF6BA]"><Plus className="w-2.5 h-2.5" /></button>
+                          <button onClick={() => addToCartDirect(dish, false)} className="text-[#FCF6BA]"><Plus className="w-2.5 h-2.5" /></button>
                         </div>
                       ) : (
                         <motion.button
                           whileTap={{ scale: 0.88 }}
-                          onClick={() => addToCart(dish, false)}
+                          onClick={() => handleItemAddClick(dish)}
                           className="w-6 h-6 rounded-full bg-[#D4AF37] text-black flex items-center justify-center font-black shadow-md cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5 stroke-[3]" />
@@ -722,7 +949,7 @@ export default function LuxuryCustomerTablePage() {
                   <motion.div
                     layoutId="custPill"
                     className="absolute inset-0 bg-[#D4AF37] rounded-2xl shadow-md"
-                    transition={smoothSpring}
+                    transition={butterSpring}
                   />
                 )}
                 <Sparkles className="w-3.5 h-3.5 relative z-10" />
@@ -749,10 +976,12 @@ export default function LuxuryCustomerTablePage() {
                     <motion.div
                       layoutId="custPill"
                       className="absolute inset-0 bg-[#D4AF37] rounded-2xl shadow-md"
-                      transition={smoothSpring}
+                      transition={butterSpring}
                     />
                   )}
-                  <span className="relative z-10">{cat.name_en || cat.name}</span>
+                  <span className="relative z-10">
+                    {cat.name_en || cat.name} {cat.category_type === 'retail' ? '🛍️' : ''}
+                  </span>
                 </button>
               );
             })}
@@ -821,14 +1050,14 @@ export default function LuxuryCustomerTablePage() {
 
                     {inCart ? (
                       <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-xl p-0.5">
-                        <button onClick={() => removeFromCart(combo.id, true)} className="p-1.5 text-[#FCF6BA]"><Minus className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-1.5 text-[#FCF6BA]"><Minus className="w-3.5 h-3.5" /></button>
                         <span className="font-mono font-bold text-xs text-white px-2">{inCart.quantity}</span>
-                        <button onClick={() => addToCart(combo, true)} className="p-1.5 text-[#FCF6BA]"><Plus className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => addToCartDirect(combo, true)} className="p-1.5 text-[#FCF6BA]"><Plus className="w-3.5 h-3.5" /></button>
                       </div>
                     ) : (
                       <motion.button
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => addToCart(combo, true)}
+                        onClick={() => addToCartDirect(combo, true)}
                         className="px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase cursor-pointer"
                       >
                         + Add Combo
@@ -842,9 +1071,11 @@ export default function LuxuryCustomerTablePage() {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {filteredMenuItems.map((item) => {
-              const inCart = cart.find((ci) => ci.menuItem.id === item.id && !ci.isCombo);
+              const inCart = cart.find(ci => ci.menuItem.id === item.id && !ci.isCombo);
               const dishTitle = item.name_en || item.name;
               const isSpecial = item.is_special;
+              const hasAddons = item.has_addons && item.addon_ids?.length > 0;
+              const isRetail = item.is_retail_item;
 
               return (
                 <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[24px] p-3 flex flex-col justify-between shadow-xl relative overflow-hidden">
@@ -863,6 +1094,11 @@ export default function LuxuryCustomerTablePage() {
                           <Crown className="w-2.5 h-2.5" /> Special
                         </span>
                       )}
+                      {isRetail && (
+                        <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-amber-950/80 border border-amber-500/40 text-amber-200 font-mono text-[8px] font-bold">
+                          🛍️ Gourmet
+                        </span>
+                      )}
                     </div>
 
                     <h4 className="text-xs font-bold text-white line-clamp-1">{dishTitle}</h4>
@@ -872,19 +1108,24 @@ export default function LuxuryCustomerTablePage() {
                   </div>
 
                   <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
-                    <span className="font-mono text-xs font-black text-[#D4AF37]">₹{Number(item.price).toFixed(2)}</span>
+                    <div>
+                      <span className="font-mono text-xs font-black text-[#D4AF37]">₹{Number(item.price).toFixed(0)}</span>
+                      {hasAddons && (
+                        <span className="text-[8px] font-mono text-amber-300 block">+ Addons</span>
+                      )}
+                    </div>
 
                     {inCart ? (
                       <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-xl p-0.5">
-                        <button onClick={() => removeFromCart(item.id, false)} className="p-1 text-[#FCF6BA]"><Minus className="w-3 h-3" /></button>
+                        <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-1 text-[#FCF6BA]"><Minus className="w-3 h-3" /></button>
                         <span className="font-mono font-bold text-[11px] text-white px-1.5">{inCart.quantity}</span>
-                        <button onClick={() => addToCart(item, false)} className="p-1 text-[#FCF6BA]"><Plus className="w-3 h-3" /></button>
+                        <button onClick={() => handleItemAddClick(item)} className="p-1 text-[#FCF6BA]"><Plus className="w-3 h-3" /></button>
                       </div>
                     ) : (
                       <motion.button
                         whileTap={{ scale: 0.88 }}
-                        onClick={() => addToCart(item, false)}
-                        className="w-7 h-7 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer"
+                        onClick={() => handleItemAddClick(item)}
+                        className="w-7 h-7 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md"
                       >
                         <Plus className="w-3.5 h-3.5 stroke-[3]" />
                       </motion.button>
@@ -909,7 +1150,7 @@ export default function LuxuryCustomerTablePage() {
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer"
           >
             <BellRing className="w-4 h-4 text-[#D4AF37]" />
-            <span>Call Waiter</span>
+            <span>Call Steward</span>
           </button>
 
           {cartItemCount > 0 ? (
@@ -940,17 +1181,141 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* 6. CART DRAWER (With Cooking Notes) */}
+      {/* 6. ADD-ONS CUSTOMIZATION BOTTOM SHEET */}
       <AnimatePresence>
-        {isCartOpen && (
+        {customizingItem && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
-            <div onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCustomizingItem(null)} 
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm" 
+            />
             <motion.div 
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={smoothSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl"
+              transition={butterSpring}
+              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/60 rounded-t-[36px] p-5 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl"
+            >
+              <div className="flex justify-between items-start border-b border-white/10 pb-3">
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-[#D4AF37] block font-bold">
+                    Customize Handcrafted Delight
+                  </span>
+                  <h3 className="font-black text-white text-base">
+                    {customizingItem.name_en || customizingItem.name}
+                  </h3>
+                </div>
+                <button onClick={() => setCustomizingItem(null)} className="text-neutral-400 hover:text-white"><X className="w-5 h-5" /></button>
+              </div>
+
+              {customizingItem.is_retail_item && Array.isArray(customizingItem.weight_variants) && (
+                <div className="space-y-2">
+                  <span className="text-xs font-mono font-bold text-neutral-300 flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-emerald-400" /> Select Pack Weight:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {customizingItem.weight_variants.map((v) => {
+                      const isSel = selectedWeightVariant?.size === v.size;
+                      return (
+                        <button
+                          key={v.size}
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic(10);
+                            setSelectedWeightVariant(v);
+                          }}
+                          className={`p-2 rounded-xl text-center border font-mono transition cursor-pointer ${
+                            isSel 
+                              ? 'bg-[#D4AF37] text-black font-black border-transparent shadow-md' 
+                              : 'bg-white/[0.03] border-white/10 text-neutral-400'
+                          }`}
+                        >
+                          <span className="block text-xs">{v.size}</span>
+                          <span className="text-[11px] block mt-0.5">₹{Number(v.price).toFixed(0)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {customizingItem.has_addons && Array.isArray(customizingItem.addon_ids) && (
+                <div className="space-y-2.5">
+                  <span className="text-xs font-mono font-bold text-neutral-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" /> Upgrade with Add-ons (Optional):
+                  </span>
+
+                  <div className="space-y-2">
+                    {addons.filter(a => customizingItem.addon_ids.includes(a.id)).map((addon) => {
+                      const isChecked = selectedAddonIds.includes(addon.id);
+                      return (
+                        <div
+                          key={addon.id}
+                          onClick={() => {
+                            triggerHaptic(12);
+                            if (isChecked) setSelectedAddonIds(selectedAddonIds.filter(id => id !== addon.id));
+                            else setSelectedAddonIds([...selectedAddonIds, addon.id]);
+                          }}
+                          className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition ${
+                            isChecked 
+                              ? 'bg-[#D4AF37]/15 border-[#D4AF37] text-white shadow-md' 
+                              : 'bg-white/[0.02] border-white/5 text-neutral-400 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-4 h-4 rounded-md border flex items-center justify-center text-black text-xs ${
+                              isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'
+                            }`}>
+                              {isChecked && '✓'}
+                            </div>
+                            <span className="text-xs font-bold text-white">{addon.name}</span>
+                          </div>
+                          <span className="font-mono text-xs font-black text-[#D4AF37]">+₹{Number(addon.price).toFixed(0)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={confirmCustomizationAndAdd}
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer flex justify-between px-5 font-mono"
+              >
+                <span>Add to Dining Cart</span>
+                <span>
+                  ₹{(
+                    (selectedWeightVariant ? selectedWeightVariant.price : customizingItem.price) +
+                    addons.filter(a => selectedAddonIds.includes(a.id)).reduce((s, a) => s + Number(a.price), 0)
+                  ).toFixed(2)}
+                </span>
+              </motion.button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 7. CART DRAWER (With Cross-Sell Suggestions) */}
+      <AnimatePresence>
+        {isCartOpen && (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCartOpen(false)} 
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={butterSpring}
+              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[88vh] overflow-y-auto custom-gold-scrollbar shadow-2xl"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -960,22 +1325,47 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
+              {/* Cart Items List */}
               <div className="space-y-3 divide-y divide-white/5">
-                {cart.map((ci) => {
-                  const itemKey = (ci.isCombo ? 'c-' : 'i-') + ci.menuItem.id;
+                {cart.map((ci, idx) => {
+                  const itemKey = `${ci.isCombo ? 'c-' : 'i-'}${ci.menuItem.id}-${idx}`;
+                  const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
+                  const singleUnitPrice = ci.isComplimentary ? 0 : (Number(ci.menuItem.price || 0) + addOnsCost);
+                  const lineTotal = singleUnitPrice * ci.quantity;
+
                   return (
                     <div key={itemKey} className="pt-2 space-y-2 text-xs">
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-start">
                         <div>
-                          <div className="font-bold text-white">{ci.menuItem.name_en || ci.menuItem.name}</div>
-                          <span className="font-mono text-[#D4AF37]">₹{ci.menuItem.price} each</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white">
+                              {ci.menuItem.name_en || ci.menuItem.name} {ci.selectedWeightVariant ? `(${ci.selectedWeightVariant.size})` : ''}
+                            </span>
+                            {ci.isComplimentary && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">
+                                10th VISIT FREE
+                              </span>
+                            )}
+                          </div>
+                          
+                          {ci.selectedAddons && ci.selectedAddons.length > 0 && (
+                            <div className="text-[10px] text-amber-300 font-mono mt-0.5">
+                              {ci.selectedAddons.map(a => `+ ${a.name} (₹${a.price})`).join(', ')}
+                            </div>
+                          )}
+                          <span className="font-mono text-[#D4AF37] block mt-0.5">
+                            {ci.isComplimentary ? 'FREE' : `₹${singleUnitPrice.toFixed(2)} each`}
+                          </span>
                         </div>
+
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-white">₹{(ci.menuItem.price * ci.quantity).toFixed(2)}</span>
+                          <span className="font-mono font-bold text-white">
+                            {ci.isComplimentary ? '₹0.00' : `₹${lineTotal.toFixed(2)}`}
+                          </span>
                           <div className="flex items-center bg-white/[0.05] border border-white/[0.1] rounded-xl p-0.5">
-                            <button onClick={() => removeFromCart(ci.menuItem.id, ci.isCombo)} className="p-1 text-[#D4AF37]"><Minus className="w-3 h-3" /></button>
+                            <button onClick={() => removeFromCart(idx)} className="p-1 text-[#D4AF37]"><Minus className="w-3 h-3" /></button>
                             <span className="px-2 font-mono font-bold text-white">{ci.quantity}</span>
-                            <button onClick={() => addToCart(ci.menuItem, ci.isCombo)} className="p-1 text-[#D4AF37]"><Plus className="w-3 h-3" /></button>
+                            <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary)} className="p-1 text-[#D4AF37]"><Plus className="w-3 h-3" /></button>
                           </div>
                         </div>
                       </div>
@@ -984,7 +1374,7 @@ export default function LuxuryCustomerTablePage() {
                         <MessageSquare className="w-3 h-3 text-[#D4AF37]" />
                         <input
                           type="text"
-                          placeholder="Note: Less ice, no sugar, extra nuts..."
+                          placeholder="Note: Less ice, no sugar, extra spicy..."
                           value={cartNotes[itemKey] || ''}
                           onChange={(e) => setCartNotes({ ...cartNotes, [itemKey]: e.target.value })}
                           className="w-full bg-transparent text-white outline-none text-[11px] placeholder-neutral-500 font-sans"
@@ -995,6 +1385,41 @@ export default function LuxuryCustomerTablePage() {
                 })}
               </div>
 
+              {/* CROSS-SELL PAIRINGS CAROUSEL */}
+              {cartSuggestedItems.length > 0 && (
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-950/20 via-black to-black border border-amber-500/30 space-y-2">
+                  <span className="text-[11px] font-mono font-bold text-amber-300 uppercase flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-amber-400" /> Pairs Best With Your Order 🔥
+                  </span>
+
+                  <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1">
+                    {cartSuggestedItems.map(sItem => (
+                      <div key={sItem.id} className="p-2 rounded-xl bg-white/[0.04] border border-white/10 flex items-center gap-2 shrink-0 min-w-[170px]">
+                        <div className="w-9 h-9 rounded-lg overflow-hidden bg-neutral-900 shrink-0">
+                          {sItem.image_url ? (
+                            <img src={sItem.image_url} alt={sItem.name_en} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-3.5 h-3.5" /></div>
+                          )}
+                        </div>
+                        <div className="truncate flex-1">
+                          <span className="text-[10px] font-bold text-white block truncate">{sItem.name_en || sItem.name}</span>
+                          <span className="text-[10px] font-mono text-[#D4AF37]">₹{Number(sItem.price).toFixed(0)}</span>
+                        </div>
+                        <motion.button
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => addToCartDirect(sItem, false)}
+                          className="px-2 py-1 rounded-lg bg-[#D4AF37] text-black font-black text-[9px] uppercase cursor-pointer"
+                        >
+                          + Add
+                        </motion.button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Guest Identification */}
               {!activeSessionId && (
                 <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
                   <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
@@ -1012,7 +1437,11 @@ export default function LuxuryCustomerTablePage() {
                     required
                     placeholder="10-digit Phone Number *"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '');
+                      setCustomerPhone(clean);
+                      if (clean.length === 10) checkLoyaltyProfile(clean);
+                    }}
                     className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none font-mono"
                   />
                 </div>
@@ -1029,16 +1458,59 @@ export default function LuxuryCustomerTablePage() {
                 whileTap={{ scale: 0.96 }}
                 disabled={loading}
                 onClick={handlePlaceOrder}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer font-mono"
               >
-                {loading ? 'Sending to Kitchen...' : (activeSessionId ? 'Add to Running Order' : 'Confirm & Dispatch to Kitchen')}
+                {loading ? 'Generating Order Token...' : (activeSessionId ? 'Add to Running Order' : 'Submit Order & Get Token')}
               </motion.button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* 7. TABLE LEDGER MODAL WITH COOKING NOTES */}
+      {/* 8. 10th VISIT REWARD CLAIM MODAL */}
+      <AnimatePresence>
+        {showRewardModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={butterSpring}
+              className="w-full max-w-sm bg-[#0f0e12] border border-[#D4AF37] rounded-[28px] p-5 space-y-3.5 shadow-2xl font-mono text-xs"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <span className="font-black text-white uppercase flex items-center gap-1.5">
+                  <Gift className="w-4 h-4 text-[#D4AF37]" /> Claim 10th Visit Gift
+                </span>
+                <button onClick={() => setShowRewardModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+              </div>
+
+              <p className="text-neutral-300 text-[11px] font-sans">
+                As a royal guest, pick any fresh drink below completely <strong>FREE (₹0.00)</strong>!
+              </p>
+
+              <div className="space-y-2">
+                {freeRewardDrinks.map(d => (
+                  <div key={d.id} className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-white block">{d.name_en || d.name}</span>
+                      <span className="text-[10px] text-neutral-400 line-through">₹{Number(d.price).toFixed(0)}</span>
+                    </div>
+                    <button
+                      onClick={() => handleClaimFreeReward(d)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-400 text-black font-black uppercase text-[10px]"
+                    >
+                      Pick Free
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 9. TABLE LEDGER MODAL (Clean Single Bill - Split Removed) */}
       <AnimatePresence>
         {isTotalBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
@@ -1046,6 +1518,7 @@ export default function LuxuryCustomerTablePage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 15 }}
+              transition={butterSpring}
               className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
@@ -1056,7 +1529,14 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              <div className="space-y-2 max-h-48 overflow-y-auto custom-gold-scrollbar p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs font-mono">
+              {activeOrderToken && (
+                <div className="p-2.5 rounded-xl bg-[#161619] border border-[#D4AF37]/40 flex justify-between items-center font-mono text-xs">
+                  <span className="text-neutral-400">Order Token:</span>
+                  <span className="text-[#D4AF37] font-black text-sm">#{activeOrderToken}</span>
+                </div>
+              )}
+
+              <div className="space-y-2 max-h-56 overflow-y-auto custom-gold-scrollbar p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs font-mono">
                 {sessionOrderedItems.length === 0 ? (
                   <div className="text-center py-4 text-neutral-500">No active kitchen orders.</div>
                 ) : (
@@ -1064,7 +1544,9 @@ export default function LuxuryCustomerTablePage() {
                     <div key={idx} className="space-y-0.5 border-b border-white/5 pb-1.5 last:border-b-0">
                       <div className="flex justify-between items-center">
                         <span>{item.quantity}x {item.menu_items?.name_en || item.menu_items?.name}</span>
-                        <span className="font-black text-white">₹{(item.quantity * Number(item.unit_price || item.menu_items?.price || 0)).toFixed(2)}</span>
+                        <span className="font-black text-white">
+                          {item.is_complimentary ? 'FREE' : `₹${(item.quantity * Number(item.unit_price || item.menu_items?.price || 0)).toFixed(2)}`}
+                        </span>
                       </div>
                       {item.cooking_notes && (
                         <div className="text-[10px] text-amber-300 italic">
@@ -1083,37 +1565,9 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               </div>
 
-              {/* Fair Share Split Bill */}
-              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-[#D4AF37]/40 space-y-2 font-mono shadow-md">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#D4AF37] font-black uppercase tracking-wider flex items-center gap-1.5">
-                    <Split className="w-4 h-4 text-[#D4AF37]" /> Split Bill (Fair Share)
-                  </span>
-                  <div className="flex items-center gap-2 bg-black border border-white/15 rounded-xl px-2.5 py-1">
-                    <button 
-                      onClick={() => setSplitCount(Math.max(1, splitCount - 1))} 
-                      className="text-[#D4AF37] font-black px-1 text-sm cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="text-white font-black text-xs">{splitCount} Ppl</span>
-                    <button 
-                      onClick={() => setSplitCount(splitCount + 1)} 
-                      className="text-[#D4AF37] font-black px-1 text-sm cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-white/10 text-xs">
-                  <span className="text-neutral-300">Each Person Share (ఒక్కొక్కరికి):</span>
-                  <span className="text-sm font-black text-emerald-400">₹{splitAmountPerPerson}</span>
-                </div>
-              </div>
-
               <button
                 onClick={() => setIsTotalBillModalOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-black border border-[#D4AF37]/40 text-[#D4AF37] font-bold text-xs uppercase cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase cursor-pointer"
               >
                 Close Ledger
               </button>
@@ -1122,7 +1576,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* 8. CALL WAITER MODAL */}
+      {/* 10. CALL WAITER MODAL */}
       <AnimatePresence>
         {isWaiterModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
@@ -1130,6 +1584,7 @@ export default function LuxuryCustomerTablePage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
+              transition={butterSpring}
               className="w-full max-w-xs bg-[#0f0e12] border border-[#D4AF37]/60 rounded-[28px] p-5 space-y-4 shadow-2xl font-mono text-xs text-center"
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-2.5">
@@ -1154,7 +1609,7 @@ export default function LuxuryCustomerTablePage() {
                   onClick={() => handleCallWaiter('waiter')}
                   className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-amber-400 text-amber-300 font-bold flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <ChefHat className="w-4 h-4" /> Call Waiter / Order Help
+                  <ChefHat className="w-4 h-4" /> Call Steward / Order Help
                 </button>
               </div>
             </motion.div>

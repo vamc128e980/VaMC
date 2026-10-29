@@ -41,7 +41,10 @@ import {
   EyeOff,
   ChefHat,
   MessageSquare,
-  Bell
+  Bell,
+  Sparkles,
+  Layers,
+  Scale
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -61,7 +64,7 @@ export default function LuxuryGoldAdminPanel() {
   
   // Main Workspace: 'live_orders' | 'menu_hub'
   const [activeWorkspace, setActiveWorkspace] = useState<'live_orders' | 'menu_hub'>('live_orders');
-  const [menuHubTab, setMenuHubTab] = useState<'items' | 'combos' | 'promos'>('items');
+  const [menuHubTab, setMenuHubTab] = useState<'items' | 'combos' | 'addons' | 'promos'>('items');
 
   // Brand Info
   const [shopName, setShopName] = useState('VUJWALA SIMHA DRY FRUITS & NUTS');
@@ -75,6 +78,7 @@ export default function LuxuryGoldAdminPanel() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [addons, setAddons] = useState<any[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
@@ -104,8 +108,16 @@ export default function LuxuryGoldAdminPanel() {
   // Categories CRUD
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categoryName, setCategoryName] = useState('');
+  const [categoryType, setCategoryType] = useState<'dine_in' | 'retail'>('dine_in');
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
+
+  // Add-ons Master CRUD
+  const [showAddonModal, setShowAddonModal] = useState(false);
+  const [editingAddon, setEditingAddon] = useState<any | null>(null);
+  const [addonName, setAddonName] = useState('');
+  const [addonPrice, setAddonPrice] = useState('');
+  const [addonCategory, setAddonCategory] = useState<'ice_cream' | 'nuts' | 'dips' | 'toppings' | 'general'>('ice_cream');
 
   // Menu Items CRUD
   const [showItemModal, setShowItemModal] = useState(false);
@@ -116,6 +128,15 @@ export default function LuxuryGoldAdminPanel() {
   const [itemCategoryId, setItemCategoryId] = useState<number | null>(null);
   const [itemFoodType, setItemFoodType] = useState<'veg' | 'non_veg'>('veg');
   const [itemImageUrl, setItemImageUrl] = useState('');
+  const [itemHasAddons, setItemHasAddons] = useState(false);
+  const [itemAddonIds, setItemAddonIds] = useState<number[]>([]);
+  const [itemSuggestedIds, setItemSuggestedIds] = useState<number[]>([]);
+  const [itemIsRetail, setItemIsRetail] = useState(false);
+  const [itemWeightVariants, setItemWeightVariants] = useState<{ size: string; price: number }[]>([
+    { size: '250g', price: 0 },
+    { size: '500g', price: 0 },
+    { size: '1kg', price: 0 }
+  ]);
   const itemFileRef = useRef<HTMLInputElement>(null);
 
   // Smart Dynamic Combos CRUD
@@ -190,6 +211,7 @@ export default function LuxuryGoldAdminPanel() {
         { data: sess },
         { data: cats },
         { data: itms },
+        { data: adns },
         { data: oitms },
         { data: bnrs },
         { data: cmbs },
@@ -199,6 +221,7 @@ export default function LuxuryGoldAdminPanel() {
         supabase.from('table_sessions').select('*').order('created_at', { ascending: false }),
         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
         supabase.from('menu_items').select('*').order('id', { ascending: true }),
+        supabase.from('menu_addons').select('*').order('id', { ascending: true }),
         supabase.from('order_items').select('*, menu_items(name_en, name, price, category_id, image_url)'),
         supabase.from('promo_banners').select('*'),
         supabase.from('combos').select('*').order('id', { ascending: true }),
@@ -218,6 +241,7 @@ export default function LuxuryGoldAdminPanel() {
       if (sess) setSessions(sess);
       if (cats) setCategories(cats);
       if (itms) setMenuItems(itms);
+      if (adns) setAddons(adns);
       if (cmbs) setCombos(cmbs);
       if (oitms) setOrderItems(oitms);
       if (bnrs) setBanners(bnrs);
@@ -240,6 +264,7 @@ export default function LuxuryGoldAdminPanel() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadAdminData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => loadAdminData())
@@ -306,8 +331,13 @@ export default function LuxuryGoldAdminPanel() {
         .neq('item_status', 'cancelled');
 
       const newGross = (liveItems || []).reduce((sum, it) => {
-        const pr = Number(it.unit_price || it.menu_items?.price || 0);
-        return sum + (it.quantity * pr);
+        if (it.is_complimentary) return sum;
+        const basePr = Number(it.unit_price || it.menu_items?.price || 0);
+        let addOnsSum = 0;
+        if (Array.isArray(it.selected_addons)) {
+          addOnsSum = it.selected_addons.reduce((aSum: number, a: any) => aSum + Number(a.price || 0), 0);
+        }
+        return sum + (it.quantity * (basePr + addOnsSum));
       }, 0);
 
       await supabase.from('table_sessions').update({
@@ -352,19 +382,36 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Settle Bill
+  // Settle Bill & Log Loyalty Visit
   const handleSettleOrder = async (sessionId: string, tableNum: number, mode: 'cash' | 'upi') => {
     try {
       setLoading(true);
       const activeSess = sessions.find(s => s.id === sessionId);
       if (activeSess && activeSess.customer_phone && activeSess.customer_phone.length === 10) {
         try {
-          await supabase.rpc('record_customer_visit', {
-            p_phone: activeSess.customer_phone,
-            p_name: activeSess.customer_name || 'Guest',
-            p_bill_amount: Number(activeSess.total_amount || 0)
-          });
-        } catch (e) {}
+          const { data: existingLoyal } = await supabase
+            .from('customer_loyalty')
+            .select('*')
+            .eq('phone', activeSess.customer_phone)
+            .maybeSingle();
+
+          if (existingLoyal) {
+            await supabase.from('customer_loyalty').update({
+              total_visits: (existingLoyal.total_visits || 1) + 1,
+              customer_name: activeSess.customer_name || existingLoyal.customer_name,
+              last_visited_at: new Date().toISOString()
+            }).eq('phone', activeSess.customer_phone);
+          } else {
+            await supabase.from('customer_loyalty').insert({
+              phone: activeSess.customer_phone,
+              customer_name: activeSess.customer_name || 'Guest',
+              total_visits: 1,
+              rewards_claimed: 0
+            });
+          }
+        } catch (e) {
+          console.error('Loyalty log err:', e);
+        }
       }
 
       await supabase.from('table_sessions').update({ 
@@ -479,12 +526,22 @@ export default function LuxuryGoldAdminPanel() {
     setLoading(true);
     try {
       if (editingCategory) {
-        await supabase.from('categories').update({ name: cleanName, name_en: cleanName }).eq('id', editingCategory.id);
+        await supabase.from('categories').update({ 
+          name: cleanName, 
+          name_en: cleanName,
+          category_type: categoryType
+        }).eq('id', editingCategory.id);
       } else {
         const nextSort = (categories.length > 0 ? Math.max(...categories.map(c => Number(c.sort_order || 0))) : 0) + 1;
-        await supabase.from('categories').insert({ name: cleanName, name_en: cleanName, sort_order: nextSort });
+        await supabase.from('categories').insert({ 
+          name: cleanName, 
+          name_en: cleanName, 
+          sort_order: nextSort,
+          category_type: categoryType
+        });
       }
       setCategoryName('');
+      setCategoryType('dine_in');
       setEditingCategory(null);
       setShowCategoryModal(false);
       await loadAdminData();
@@ -507,6 +564,55 @@ export default function LuxuryGoldAdminPanel() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Add-ons Master CRUD
+  const handleSaveAddon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = addonName.trim();
+    const prNum = parseFloat(addonPrice);
+    if (!cleanName || !prNum || prNum < 0) return alert('Add-on Name & valid Price ivvandi.');
+
+    setLoading(true);
+    try {
+      const payload = {
+        name: cleanName,
+        price: prNum,
+        category: addonCategory,
+        is_available: true
+      };
+
+      if (editingAddon) {
+        await supabase.from('menu_addons').update(payload).eq('id', editingAddon.id);
+      } else {
+        await supabase.from('menu_addons').insert(payload);
+      }
+
+      setShowAddonModal(false);
+      setEditingAddon(null);
+      setAddonName('');
+      setAddonPrice('');
+      await loadAdminData();
+    } catch (err: any) {
+      alert('Add-on save error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleAddon = async (addonId: number, currentStatus: boolean) => {
+    try {
+      await supabase.from('menu_addons').update({ is_available: !currentStatus }).eq('id', addonId);
+      await loadAdminData();
+    } catch (err) {}
+  };
+
+  const handleDeleteAddon = async (addonId: number, name: string) => {
+    if (!confirm(`"${name}" add-on ni DELETE cheyala?`)) return;
+    try {
+      await supabase.from('menu_addons').delete().eq('id', addonId);
+      await loadAdminData();
+    } catch (err) {}
   };
 
   // Instant Stock Toggle
@@ -539,7 +645,12 @@ export default function LuxuryGoldAdminPanel() {
         category_id: itemCategoryId,
         food_type: itemFoodType,
         image_url: itemImageUrl.trim(),
-        is_available: true
+        is_available: true,
+        has_addons: itemHasAddons,
+        addon_ids: itemAddonIds,
+        suggested_item_ids: itemSuggestedIds,
+        is_retail_item: itemIsRetail,
+        weight_variants: itemIsRetail ? itemWeightVariants.filter(v => v.price > 0) : []
       };
 
       if (editingItem) {
@@ -694,7 +805,10 @@ export default function LuxuryGoldAdminPanel() {
         name: oi.menu_items?.name_en || oi.menu_items?.name || 'Dish #' + oi.menu_item_id,
         quantity: oi.quantity || 1,
         price: Number(oi.unit_price || oi.menu_items?.price || 0),
-        cooking_notes: oi.cooking_notes || null
+        cooking_notes: oi.cooking_notes || null,
+        selected_addons: oi.selected_addons || [],
+        is_complimentary: oi.is_complimentary || false,
+        selected_weight_variant: oi.selected_weight_variant || null
       }));
   };
 
@@ -702,7 +816,7 @@ export default function LuxuryGoldAdminPanel() {
     return orderItems.filter(oi => oi.session_id === sessionId);
   };
 
-  // 1. PHYSICAL 80mm KOT (Kitchen Order Ticket) SLIP WITH COOKING INSTRUCTIONS
+  // 1. PHYSICAL 80mm KOT WITH ADD-ONS & COMPLIMENTARY TAGS
   const printKitchenOrderTicket = (session: any) => {
     const items = getSessionOrderedItems(session.id);
     const matchingTable = tables.find(t => t.table_number === session.table_number);
@@ -732,10 +846,12 @@ export default function LuxuryGoldAdminPanel() {
             .divider { border-top: 2px dashed #000; margin: 6px 0; }
             .kot-title { font-size: 16px; font-weight: 900; letter-spacing: 1px; }
             .table-badge { font-size: 18px; font-weight: 900; margin: 4px 0; }
-            .item-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 13px; font-weight: bold; }
+            .item-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 13px; font-weight: bold; }
             .item-name { width: 75%; word-break: break-word; }
             .item-qty { width: 25%; text-align: right; font-size: 15px; }
-            .note-box { font-size: 11px; font-style: italic; background: #eee; padding: 2px 4px; margin-bottom: 6px; }
+            .addon-line { font-size: 11px; margin-left: 8px; color: #222; }
+            .free-tag { background: #000; color: #fff; padding: 1px 4px; font-size: 10px; border-radius: 3px; }
+            .note-box { font-size: 11px; font-style: italic; background: #eee; padding: 2px 4px; margin-top: 2px; margin-bottom: 5px; }
           </style>
         </head>
         <body>
@@ -749,11 +865,17 @@ export default function LuxuryGoldAdminPanel() {
           </div>
           <div class="divider"></div>
           ${items.map(it => `
-            <div>
+            <div style="margin-bottom: 6px;">
               <div class="item-row">
-                <span class="item-name">• ${it.name}</span>
+                <span class="item-name">
+                  • ${it.name} ${it.selected_weight_variant ? `(${it.selected_weight_variant})` : ''}
+                  ${it.is_complimentary ? '<span class="free-tag">10th VISIT FREE</span>' : ''}
+                </span>
                 <span class="item-qty">[ ${it.quantity} ]</span>
               </div>
+              ${Array.isArray(it.selected_addons) && it.selected_addons.length > 0 ? it.selected_addons.map((a: any) => `
+                <div class="addon-line">+ Extra: ${a.name}</div>
+              `).join('') : ''}
               ${it.cooking_notes ? `<div class="note-box">>> NOTE: ${it.cooking_notes}</div>` : ''}
             </div>
           `).join('')}
@@ -774,7 +896,7 @@ export default function LuxuryGoldAdminPanel() {
     printWindow.document.close();
   };
 
-  // 2. 80mm ESC/POS Customer Thermal Receipt (Zero GST Flat)
+  // 2. 80mm ESC/POS Customer Receipt With Add-ons Breakdown
   const printThermalSlip = (session: any) => {
     const items = getSessionOrderedItems(session.id);
     const gross = Number(session.total_amount || 0);
@@ -804,10 +926,11 @@ export default function LuxuryGoldAdminPanel() {
             .text-center { text-align: center; }
             .bold { font-weight: bold; }
             .divider { border-top: 1px dashed #000; margin: 5px 0; }
-            .item-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+            .item-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
             .item-name { width: 55%; word-break: break-word; }
             .item-qty { width: 15%; text-align: center; }
             .item-total { width: 30%; text-align: right; }
+            .addon-line { font-size: 9px; margin-left: 6px; color: #333; }
             .total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-top: 5px; }
             .footer { font-size: 9px; text-align: center; margin-top: 10px; }
           </style>
@@ -827,13 +950,26 @@ export default function LuxuryGoldAdminPanel() {
             <span class="item-total">AMT</span>
           </div>
           <div class="divider"></div>
-          ${items.map(it => `
-            <div class="item-row">
-              <span class="item-name">${it.name}</span>
-              <span class="item-qty">${it.quantity}</span>
-              <span class="item-total">₹${(it.quantity * it.price).toFixed(2)}</span>
-            </div>
-          `).join('')}
+          ${items.map(it => {
+            const addOnsCost = Array.isArray(it.selected_addons) 
+              ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
+              : 0;
+            const singleItemPrice = it.is_complimentary ? 0 : (it.price + addOnsCost);
+            const lineTotal = singleItemPrice * it.quantity;
+
+            return `
+              <div style="margin-bottom: 3px;">
+                <div class="item-row">
+                  <span class="item-name">${it.name} ${it.selected_weight_variant ? `(${it.selected_weight_variant})` : ''}</span>
+                  <span class="item-qty">${it.quantity}</span>
+                  <span class="item-total">${it.is_complimentary ? 'FREE' : `₹${lineTotal.toFixed(2)}`}</span>
+                </div>
+                ${Array.isArray(it.selected_addons) && it.selected_addons.length > 0 ? it.selected_addons.map((a: any) => `
+                  <div class="addon-line">+ ${a.name} (+₹${Number(a.price).toFixed(2)})</div>
+                `).join('') : ''}
+              </div>
+            `;
+          }).join('')}
           <div class="divider"></div>
           <div class="total-row">
             <span>NET PAYABLE (Zero GST):</span>
@@ -886,7 +1022,7 @@ export default function LuxuryGoldAdminPanel() {
     setTimeout(() => setCopySuccess(false), 3000);
   };
 
-  // Calendar
+  // Calendar Days
   const renderCalendarDays = () => {
     const year = calViewDate.getFullYear();
     const month = calViewDate.getMonth();
@@ -1315,7 +1451,7 @@ export default function LuxuryGoldAdminPanel() {
             }`}
           >
             <UtensilsCrossed className="w-4 h-4" />
-            <span>Menu, Combos & Promos Hub</span>
+            <span>Menu, Add-ons, Combos & Promos</span>
           </button>
         </div>
 
@@ -1383,7 +1519,7 @@ export default function LuxuryGoldAdminPanel() {
 
                 // 10th Milestone Visit Reward
                 const cLoyalty = curSession.customer_phone ? loyaltyData[curSession.customer_phone] : null;
-                const visitCount = cLoyalty?.successful_visits || 1;
+                const visitCount = cLoyalty?.total_visits || 1;
                 const isMilestone = visitCount === 10 || (visitCount > 0 && visitCount % 10 === 0);
 
                 // Payment Mode Switch
@@ -1413,13 +1549,13 @@ export default function LuxuryGoldAdminPanel() {
                       <div className="p-4 rounded-[22px] bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black text-xs flex items-center justify-between shadow-lg">
                         <div className="flex items-center gap-2">
                           <Crown className="w-5 h-5" />
-                          <span>10TH MILESTONE VISIT! OFFER FREE WELCOME JUICE TO GUEST</span>
+                          <span>10TH MILESTONE VISIT! GUEST UNLOCKED COMPLIMENTARY REFRESHMENT</span>
                         </div>
-                        <span className="bg-black text-[#FCF6BA] px-2.5 py-1 rounded-xl text-[10px]">REWARD</span>
+                        <span className="bg-black text-[#FCF6BA] px-2.5 py-1 rounded-xl text-[10px]">LOYALTY</span>
                       </div>
                     )}
 
-                    {/* Ordered Items List with Cooking Notes */}
+                    {/* Ordered Items List with Add-ons Breakdown */}
                     <div className="space-y-2">
                       <span className="text-xs text-neutral-400 font-bold uppercase block">
                         Ordered Dishes ({items.filter(i => i.item_status !== 'cancelled').length}):
@@ -1430,15 +1566,28 @@ export default function LuxuryGoldAdminPanel() {
                           const isCancelled = it.item_status === 'cancelled';
                           const dName = it.menu_items?.name_en || it.menu_items?.name || 'Dish #' + it.menu_item_id;
                           const dPrice = Number(it.unit_price || it.menu_items?.price || 0);
+                          const addOnsCost = Array.isArray(it.selected_addons)
+                            ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
+                            : 0;
+                          const totalLineCost = it.is_complimentary ? 0 : (dPrice + addOnsCost) * it.quantity;
 
                           return (
                             <div key={it.id} className={`p-2.5 rounded-2xl border space-y-1 ${isCancelled ? 'bg-rose-950/20 border-rose-500/30' : 'bg-white/[0.02] border-white/5'}`}>
                               <div className="flex justify-between items-center">
                                 <div>
-                                  <span className={`font-bold block ${isCancelled ? 'line-through text-rose-300' : 'text-white'}`}>
-                                    {it.quantity}x {dName}
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`font-bold block ${isCancelled ? 'line-through text-rose-300' : 'text-white'}`}>
+                                      {it.quantity}x {dName} {it.selected_weight_variant ? `(${it.selected_weight_variant})` : ''}
+                                    </span>
+                                    {it.is_complimentary && (
+                                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold">
+                                        FREE 10th VISIT
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[11px] text-[#D4AF37]">
+                                    {it.is_complimentary ? '₹0.00' : `₹${totalLineCost.toFixed(2)}`}
                                   </span>
-                                  <span className="text-[11px] text-neutral-400">₹{(it.quantity * dPrice).toFixed(2)}</span>
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
@@ -1460,7 +1609,7 @@ export default function LuxuryGoldAdminPanel() {
                                         onClick={() => handleCancelOrderItem(it.id, curSession.id, dName)}
                                         className="px-2.5 py-1 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 font-bold text-[10px]"
                                       >
-                                        Cancel Dish
+                                        Cancel
                                       </button>
                                     </>
                                   ) : (
@@ -1471,7 +1620,18 @@ export default function LuxuryGoldAdminPanel() {
                                 </div>
                               </div>
 
-                              {/* Customer Cooking Notes Highlight */}
+                              {/* Selected Add-ons Badges */}
+                              {Array.isArray(it.selected_addons) && it.selected_addons.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {it.selected_addons.map((a: any, aIdx: number) => (
+                                    <span key={aIdx} className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[9px] font-mono">
+                                      + {a.name} (₹{Number(a.price).toFixed(0)})
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Customer Cooking Notes */}
                               {it.cooking_notes && (
                                 <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-500/30 font-sans">
                                   <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
@@ -1576,7 +1736,7 @@ export default function LuxuryGoldAdminPanel() {
                       )}
                     </div>
 
-                    {/* Settle Action Buttons with KOT and Receipt Print */}
+                    {/* Settle Action Buttons */}
                     <div className="flex gap-2 pt-1 flex-wrap sm:flex-nowrap">
                       <motion.button
                         whileTap={{ scale: 0.95 }}
@@ -1589,18 +1749,16 @@ export default function LuxuryGoldAdminPanel() {
                         <span>Settle Bill via {curMode.toUpperCase()}</span>
                       </motion.button>
 
-                      {/* PHYSICAL KOT KITCHEN TICKET PRINT WITH NOTES */}
                       <motion.button
                         whileTap={{ scale: 0.95 }}
                         onClick={() => printKitchenOrderTicket(curSession)}
                         className="px-4 py-3.5 rounded-[20px] border border-amber-400/40 bg-amber-400/10 text-amber-200 font-bold text-xs uppercase flex items-center gap-1.5 hover:bg-amber-400/20"
-                        title="Print Kitchen Order Ticket (Dishes & Notes Only)"
+                        title="Print Kitchen Order Ticket (Dishes & Add-ons)"
                       >
                         <ChefHat className="w-4 h-4 text-amber-400" />
                         <span>KOT Print</span>
                       </motion.button>
 
-                      {/* Customer Slip */}
                       <motion.button
                         whileTap={{ scale: 0.95 }}
                         onClick={() => printThermalSlip(curSession)}
@@ -1617,14 +1775,15 @@ export default function LuxuryGoldAdminPanel() {
           </div>
         )}
 
-        {/* VIEW B: MENU, COMBOS & PROMOS OPERATIONS HUB */}
+        {/* VIEW B: MENU, ADD-ONS, COMBOS & PROMOS OPERATIONS HUB */}
         {activeWorkspace === 'menu_hub' && (
           <div className="space-y-5">
-            <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto custom-gold-scrollbar">
               {[
-                { id: 'items', label: '1. Dishes & Categories', icon: UtensilsCrossed },
-                { id: 'combos', label: '2. Smart Dynamic Combos', icon: PackagePlus },
-                { id: 'promos', label: '3. Promo Slider Banners', icon: ImageIcon }
+                { id: 'items', label: '1. Dishes & Retail', icon: UtensilsCrossed },
+                { id: 'addons', label: '2. Add-ons Master', icon: Sparkles },
+                { id: 'combos', label: '3. Smart Combos', icon: PackagePlus },
+                { id: 'promos', label: '4. Slider Banners', icon: ImageIcon }
               ].map(sub => {
                 const Icon = sub.icon;
                 const isCur = menuHubTab === sub.id;
@@ -1632,7 +1791,7 @@ export default function LuxuryGoldAdminPanel() {
                   <button
                     key={sub.id}
                     onClick={() => setMenuHubTab(sub.id as any)}
-                    className={`px-5 py-2.5 rounded-[20px] text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition ${
+                    className={`px-5 py-2.5 rounded-[20px] text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition shrink-0 ${
                       isCur
                         ? 'bg-[#D4AF37] text-black font-black shadow-md'
                         : 'bg-white/[0.02] border border-white/10 text-neutral-400 hover:text-white'
@@ -1645,14 +1804,14 @@ export default function LuxuryGoldAdminPanel() {
               })}
             </div>
 
-            {/* B.1: Dishes & Categories with Instant Stock Toggle */}
+            {/* B.1: Dishes & Categories with Add-on Linking */}
             {menuHubTab === 'items' && (
               <div className="space-y-5">
                 <div className="p-5 rounded-[28px] bg-gradient-to-b from-[#111115]/90 to-[#09090c]/90 border border-white/10 space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-mono font-bold text-white uppercase">Categories ({categories.length})</span>
                     <button
-                      onClick={() => { setEditingCategory(null); setCategoryName(''); setShowCategoryModal(true); }}
+                      onClick={() => { setEditingCategory(null); setCategoryName(''); setCategoryType('dine_in'); setShowCategoryModal(true); }}
                       className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-black font-bold text-xs flex items-center gap-1"
                     >
                       <Plus className="w-3 h-3 stroke-[3]" /> Add Category
@@ -1666,17 +1825,18 @@ export default function LuxuryGoldAdminPanel() {
                         selectedCatId === 'all' ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/10'
                       }`}
                     >
-                      All Dishes ({menuItems.length})
+                      All Items ({menuItems.length})
                     </button>
                     {categories.map(c => (
                       <div key={c.id} className="flex items-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 py-1.5 gap-1.5 shrink-0 text-xs font-mono">
                         <button onClick={() => setSelectedCatId(c.id)} className={selectedCatId === c.id ? 'text-[#D4AF37] font-bold' : 'text-neutral-300'}>
-                          {c.name_en || c.name}
+                          {c.name_en || c.name} {c.category_type === 'retail' ? '🛍️' : ''}
                         </button>
                         <button 
                           onClick={() => {
                             setEditingCategory(c);
                             setCategoryName(c.name_en || c.name);
+                            setCategoryType(c.category_type || 'dine_in');
                             setShowCategoryModal(true);
                           }} 
                           className="text-neutral-400 hover:text-white ml-1 p-0.5"
@@ -1696,13 +1856,23 @@ export default function LuxuryGoldAdminPanel() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-mono font-bold text-neutral-400 uppercase">
-                      Menu Dishes ({selectedCatId === 'all' ? menuItems.length : menuItems.filter(m => m.category_id === selectedCatId).length})
+                      Menu Dishes & Products ({selectedCatId === 'all' ? menuItems.length : menuItems.filter(m => m.category_id === selectedCatId).length})
                     </span>
                     <button
-                      onClick={() => { setEditingItem(null); setItemName(''); setItemPrice(''); setItemImageUrl(''); setShowItemModal(true); }}
+                      onClick={() => { 
+                        setEditingItem(null); 
+                        setItemName(''); 
+                        setItemPrice(''); 
+                        setItemImageUrl(''); 
+                        setItemHasAddons(false);
+                        setItemAddonIds([]);
+                        setItemSuggestedIds([]);
+                        setItemIsRetail(false);
+                        setShowItemModal(true); 
+                      }}
                       className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5"
                     >
-                      <Plus className="w-4 h-4 stroke-[3]" /> Add Dish
+                      <Plus className="w-4 h-4 stroke-[3]" /> Add Item / Retail
                     </button>
                   </div>
 
@@ -1711,19 +1881,24 @@ export default function LuxuryGoldAdminPanel() {
                       <div key={item.id} className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex items-center justify-between gap-3 font-mono text-xs">
                         <div className="flex items-center gap-2.5 truncate">
                           {item.image_url ? (
-                            <img src={item.image_url} alt={item.name_en} className="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0" />
+                            <img src={item.image_url} alt={item.name_en} className="w-12 h-12 rounded-xl object-cover border border-white/10 shrink-0" />
                           ) : (
-                            <div className="w-11 h-11 rounded-xl bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 text-neutral-600">
-                              <UtensilsCrossed className="w-4 h-4" />
+                            <div className="w-12 h-12 rounded-xl bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 text-neutral-600">
+                              <UtensilsCrossed className="w-5 h-5" />
                             </div>
                           )}
                           <div className="truncate">
-                            <span className="font-bold text-white block truncate">{item.name_en || item.name}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="font-bold text-white truncate">{item.name_en || item.name}</span>
+                              {item.is_retail_item && <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1 rounded">RETAIL</span>}
+                            </div>
                             <span className="text-[#D4AF37] font-bold text-xs">₹{Number(item.price).toFixed(2)}</span>
+                            {item.has_addons && (
+                              <span className="text-[9px] text-neutral-400 block">+ {item.addon_ids?.length || 0} Add-ons</span>
+                            )}
                           </div>
                         </div>
 
-                        {/* OUT-OF-STOCK AUTO-HIDE TOGGLE */}
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
@@ -1733,7 +1908,6 @@ export default function LuxuryGoldAdminPanel() {
                                 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25' 
                                 : 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
                             }`}
-                            title={item.is_available ? 'Available on Menu' : 'Auto-Hidden on QR Menu'}
                           >
                             {item.is_available ? 'In Stock' : 'Out'}
                           </button>
@@ -1746,6 +1920,15 @@ export default function LuxuryGoldAdminPanel() {
                               setItemCategoryId(item.category_id);
                               setItemFoodType(item.food_type || 'veg');
                               setItemImageUrl(item.image_url || '');
+                              setItemHasAddons(Boolean(item.has_addons));
+                              setItemAddonIds(item.addon_ids || []);
+                              setItemSuggestedIds(item.suggested_item_ids || []);
+                              setItemIsRetail(Boolean(item.is_retail_item));
+                              setItemWeightVariants(item.weight_variants?.length > 0 ? item.weight_variants : [
+                                { size: '250g', price: 0 },
+                                { size: '500g', price: 0 },
+                                { size: '1kg', price: 0 }
+                              ]);
                               setShowItemModal(true);
                             }} 
                             className="p-1 text-neutral-300 hover:text-white"
@@ -1763,7 +1946,56 @@ export default function LuxuryGoldAdminPanel() {
               </div>
             )}
 
-            {/* Smart Dynamic Combos */}
+            {/* B.2: Add-ons Master Tab */}
+            {menuHubTab === 'addons' && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="text-sm font-black text-white uppercase font-mono">Add-ons Master ({addons.length})</h4>
+                    <p className="text-xs text-neutral-400 font-mono">Create Ice Cream scoops, Roasted Dry Fruits toppings, Dips, etc.</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingAddon(null);
+                      setAddonName('');
+                      setAddonPrice('');
+                      setShowAddonModal(true);
+                    }}
+                    className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" /> Add New Add-on
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 font-mono text-xs">
+                  {addons.map(a => (
+                    <div key={a.id} className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-white block">{a.name}</span>
+                        <span className="text-[#D4AF37] font-black text-sm">₹{Number(a.price).toFixed(2)}</span>
+                        <span className="text-[10px] text-neutral-500 block uppercase">[{a.category || 'general'}]</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleToggleAddon(a.id, a.is_available)}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] border ${
+                            a.is_available ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
+                          }`}
+                        >
+                          {a.is_available ? 'Active' : 'Off'}
+                        </button>
+                        <button onClick={() => handleDeleteAddon(a.id, a.name)} className="text-rose-400 p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* B.3: Smart Dynamic Combos */}
             {menuHubTab === 'combos' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -1815,7 +2047,7 @@ export default function LuxuryGoldAdminPanel() {
               </div>
             )}
 
-            {/* Promo Slider Banners */}
+            {/* B.4: Promo Slider Banners */}
             {menuHubTab === 'promos' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -1893,43 +2125,62 @@ export default function LuxuryGoldAdminPanel() {
       </main>
 
       {/* MODALS */}
-      {/* Add Table Modal */}
+      {/* Add-on Master Modal */}
       <AnimatePresence>
-        {showAddTableModal && (
+        {showAddonModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
             <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">Add Dining Table</span>
-                <button onClick={() => setShowAddTableModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <span className="text-sm font-black text-white uppercase">{editingAddon ? 'Edit Add-on' : 'New Add-on'}</span>
+                <button onClick={() => setShowAddonModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
               </div>
 
-              <form onSubmit={handleAddTable} className="space-y-3">
+              <form onSubmit={handleSaveAddon} className="space-y-3">
                 <div>
-                  <label className="text-neutral-400 block mb-1">Table Number *</label>
+                  <label className="text-neutral-400 block mb-1">Add-on Name *</label>
                   <input
-                    type="number"
+                    type="text"
                     required
-                    min="1"
-                    placeholder="e.g. 12"
-                    value={newTableNumber}
-                    onChange={(e) => setNewTableNumber(e.target.value)}
+                    placeholder="e.g. Vanilla Ice Cream Scoop"
+                    value={addonName}
+                    onChange={(e) => setAddonName(e.target.value)}
                     className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="text-neutral-400 block mb-1">Dedicated Name (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Royal VIP-1"
-                    value={newTableName}
-                    onChange={(e) => setNewTableName(e.target.value)}
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-neutral-400 block mb-1">Extra Price (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 30"
+                      value={addonPrice}
+                      onChange={(e) => setAddonPrice(e.target.value)}
+                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-neutral-400 block mb-1">Group Tag</label>
+                    <select
+                      value={addonCategory}
+                      onChange={(e) => setAddonCategory(e.target.value as any)}
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                    >
+                      <option value="ice_cream">Ice Cream</option>
+                      <option value="nuts">Dry Fruits</option>
+                      <option value="dips">Dips & Sauces</option>
+                      <option value="toppings">Toppings</option>
+                      <option value="general">General</option>
+                    </select>
+                  </div>
                 </div>
 
                 <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
-                  Deploy Table
+                  Save Add-on
                 </button>
               </form>
             </div>
@@ -1937,94 +2188,32 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </AnimatePresence>
 
-      {/* Edit Table Modal */}
-      <AnimatePresence>
-        {showEditTableNameModal && editingTableObj && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
-              <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">Rename Table #{editingTableObj.table_number}</span>
-                <button onClick={() => setShowEditTableNameModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
-              </div>
-
-              <form onSubmit={handleUpdateTableName} className="space-y-3">
-                <div>
-                  <label className="text-neutral-400 block mb-1">Custom Table Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={tempCustomTableName}
-                    onChange={(e) => setTempCustomTableName(e.target.value)}
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
-                  />
-                </div>
-
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
-                  Update Name
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Category Modal */}
-      <AnimatePresence>
-        {showCategoryModal && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
-              <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">{editingCategory ? 'Edit Category' : 'New Category'}</span>
-                <button onClick={() => setShowCategoryModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
-              </div>
-
-              <form onSubmit={handleSaveCategory} className="space-y-3">
-                <div>
-                  <label className="text-neutral-400 block mb-1">Category Title *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Milkshakes"
-                    value={categoryName}
-                    onChange={(e) => setCategoryName(e.target.value)}
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
-                  />
-                </div>
-
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
-                  {editingCategory ? 'Update Category' : 'Save Category'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Menu Item Modal */}
+      {/* Menu Item Modal (Add-ons, Pairings & Retail Pack sizes) */}
       <AnimatePresence>
         {showItemModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[90vh] overflow-y-auto custom-gold-scrollbar">
+            <div className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">{editingItem ? 'Edit Dish' : 'Add Dish'}</span>
+                <span className="text-sm font-black text-white uppercase">{editingItem ? 'Edit Dish / Product' : 'Add Dish / Product'}</span>
                 <button onClick={() => setShowItemModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
               </div>
 
-              <form onSubmit={handleSaveItem} className="space-y-3">
+              <form onSubmit={handleSaveItem} className="space-y-3.5">
                 <div>
-                  <label className="text-neutral-400 block mb-1">Dish Name *</label>
+                  <label className="text-neutral-400 block mb-1">Item / Product Name *</label>
                   <input
                     type="text"
                     required
+                    placeholder="e.g. Pomegranate Juice or Afghani Anjeer"
                     value={itemName}
                     onChange={(e) => setItemName(e.target.value)}
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-neutral-400 block mb-1">Price (₹) *</label>
+                    <label className="text-neutral-400 block mb-1">Base Price (₹) *</label>
                     <input
                       type="number"
                       required
@@ -2032,12 +2221,12 @@ export default function LuxuryGoldAdminPanel() {
                       step="0.01"
                       value={itemPrice}
                       onChange={(e) => setItemPrice(e.target.value)}
-                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
                     />
                   </div>
 
                   <div>
-                    <label className="text-neutral-400 block mb-1">Food Type</label>
+                    <label className="text-neutral-400 block mb-1">Food / Item Type</label>
                     <select
                       value={itemFoodType}
                       onChange={(e) => setItemFoodType(e.target.value as any)}
@@ -2050,7 +2239,140 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
 
                 <div>
-                  <label className="text-neutral-400 block mb-1">Dish Image (Up to 3MB)</label>
+                  <label className="text-neutral-400 block mb-1">Category *</label>
+                  <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar p-1 border border-white/10 rounded-xl">
+                    {categories.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setItemCategoryId(c.id)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap border ${
+                          itemCategoryId === c.id ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/5'
+                        }`}
+                      >
+                        {c.name_en || c.name} {c.category_type === 'retail' ? '🛍️' : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 1. Add-ons Linking Checkbox */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={itemHasAddons}
+                        onChange={(e) => setItemHasAddons(e.target.checked)}
+                        className="w-4 h-4 accent-[#D4AF37]"
+                      />
+                      <span className="font-bold text-white">Enable Add-ons (e.g. Ice Cream, Dry Fruits)</span>
+                    </label>
+                    <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  </div>
+
+                  {itemHasAddons && (
+                    <div className="pt-2 border-t border-white/5 space-y-1">
+                      <span className="text-[10px] text-neutral-400 block">Select Add-ons applicable for this item:</span>
+                      <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-gold-scrollbar p-1">
+                        {addons.map(a => {
+                          const isSel = itemAddonIds.includes(a.id);
+                          return (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSel) setItemAddonIds(itemAddonIds.filter(id => id !== a.id));
+                                else setItemAddonIds([...itemAddonIds, a.id]);
+                              }}
+                              className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center ${
+                                isSel ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white' : 'bg-white/[0.02] border-white/5 text-neutral-400'
+                              }`}
+                            >
+                              <span className="truncate">{a.name}</span>
+                              <span className="font-bold text-[#D4AF37]">₹{Number(a.price).toFixed(0)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Cross-Sell Pairings Selection ("Fits Your Order") */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-amber-400" />
+                      Suggested Pairings (e.g. Mojito, Dips, Juices)
+                    </span>
+                    <span className="text-[10px] text-neutral-500">Cross-sell</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-gold-scrollbar p-1">
+                    {menuItems.filter(m => m.id !== editingItem?.id).map(m => {
+                      const isSel = itemSuggestedIds.includes(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            if (isSel) setItemSuggestedIds(itemSuggestedIds.filter(id => id !== m.id));
+                            else setItemSuggestedIds([...itemSuggestedIds, m.id]);
+                          }}
+                          className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center ${
+                            isSel ? 'bg-amber-400/20 border-amber-400 text-white' : 'bg-white/[0.02] border-white/5 text-neutral-400'
+                          }`}
+                        >
+                          <span className="truncate">{m.name_en || m.name}</span>
+                          <span className="font-bold text-amber-300">₹{Number(m.price).toFixed(0)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Retail Gourmet Pack Sizes (Dry fruits, Spices, Chocolates) */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={itemIsRetail}
+                      onChange={(e) => setItemIsRetail(e.target.checked)}
+                      className="w-4 h-4 accent-[#D4AF37]"
+                    />
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                      Retail Item (Pack Sizes: 250g, 500g, 1kg)
+                    </span>
+                  </label>
+
+                  {itemIsRetail && (
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
+                      {itemWeightVariants.map((v, vIdx) => (
+                        <div key={v.size}>
+                          <label className="text-[10px] text-neutral-400 block mb-0.5">{v.size} Price (₹)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Price"
+                            value={v.price || ''}
+                            onChange={(e) => {
+                              const next = [...itemWeightVariants];
+                              next[vIdx].price = parseFloat(e.target.value) || 0;
+                              setItemWeightVariants(next);
+                            }}
+                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-2.5 py-1.5 text-white font-bold"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Photo Upload */}
+                <div>
+                  <label className="text-neutral-400 block mb-1">Photo (Up to 3MB)</label>
                   <input 
                     type="file" 
                     accept="image/*"
@@ -2076,26 +2398,8 @@ export default function LuxuryGoldAdminPanel() {
                   )}
                 </div>
 
-                <div>
-                  <label className="text-neutral-400 block mb-1">Category *</label>
-                  <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar p-1 border border-white/10 rounded-xl">
-                    {categories.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setItemCategoryId(c.id)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap border ${
-                          itemCategoryId === c.id ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/5'
-                        }`}
-                      >
-                        {c.name_en || c.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
-                  {editingItem ? 'Update Dish' : 'Publish Dish'}
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs mt-2">
+                  {editingItem ? 'Update Dish / Product' : 'Publish Dish / Product'}
                 </button>
               </form>
             </div>
@@ -2205,6 +2509,125 @@ export default function LuxuryGoldAdminPanel() {
 
                 <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
                   Publish Combo
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Category Modal with Retail Type */}
+      <AnimatePresence>
+        {showCategoryModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <span className="text-sm font-black text-white uppercase">{editingCategory ? 'Edit Category' : 'New Category'}</span>
+                <button onClick={() => setShowCategoryModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+              </div>
+
+              <form onSubmit={handleSaveCategory} className="space-y-3">
+                <div>
+                  <label className="text-neutral-400 block mb-1">Category Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dry Fruits or Juices"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-neutral-400 block mb-1">Category Type</label>
+                  <select
+                    value={categoryType}
+                    onChange={(e) => setCategoryType(e.target.value as any)}
+                    className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                  >
+                    <option value="dine_in">Dine-in Food / Juice</option>
+                    <option value="retail">Take-Home Retail / Gourmet</option>
+                  </select>
+                </div>
+
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                  {editingCategory ? 'Update Category' : 'Save Category'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Table Modal */}
+      <AnimatePresence>
+        {showAddTableModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <span className="text-sm font-black text-white uppercase">Add Dining Table</span>
+                <button onClick={() => setShowAddTableModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+              </div>
+
+              <form onSubmit={handleAddTable} className="space-y-3">
+                <div>
+                  <label className="text-neutral-400 block mb-1">Table Number *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="e.g. 12"
+                    value={newTableNumber}
+                    onChange={(e) => setNewTableNumber(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-neutral-400 block mb-1">Dedicated Name (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Royal VIP-1"
+                    value={newTableName}
+                    onChange={(e) => setNewTableName(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                  />
+                </div>
+
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                  Deploy Table
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Table Modal */}
+      <AnimatePresence>
+        {showEditTableNameModal && editingTableObj && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <span className="text-sm font-black text-white uppercase">Rename Table #{editingTableObj.table_number}</span>
+                <button onClick={() => setShowEditTableNameModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+              </div>
+
+              <form onSubmit={handleUpdateTableName} className="space-y-3">
+                <div>
+                  <label className="text-neutral-400 block mb-1">Custom Table Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={tempCustomTableName}
+                    onChange={(e) => setTempCustomTableName(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
+                  />
+                </div>
+
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                  Update Name
                 </button>
               </form>
             </div>

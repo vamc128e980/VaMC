@@ -31,37 +31,41 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
     setLoading(true);
 
     try {
-      // 1. Verify current admin record
+      // 1. Fetch current admin record
       const { data: currentAdmin, error: fetchErr } = await supabase
         .from("staff_accounts")
         .select("id, identifier, password_hash")
         .eq("role", "admin")
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (fetchErr || !currentAdmin) {
-        setStatusMsg({ type: "error", text: "Admin account not found." });
+        setStatusMsg({ type: "error", text: "Master Admin account not found in database." });
         setLoading(false);
         return;
       }
 
+      // 2. Verify current password
       if (currentAdmin.password_hash !== currentPassword.trim()) {
-        setStatusMsg({ type: "error", text: "Incorrect current security key." });
+        setStatusMsg({ type: "error", text: "Incorrect current password. Verification failed." });
         setLoading(false);
         return;
       }
 
-      // 2. Prepare payload
-      const updates: { identifier?: string; password_hash?: string } = {};
+      // 3. Prepare payload
+      const updates: { identifier?: string; password_hash?: string; updated_at?: string } = {
+        updated_at: new Date().toISOString()
+      };
       if (newEmail.trim()) updates.identifier = newEmail.trim();
       if (newPassword.trim()) updates.password_hash = newPassword.trim();
 
-      if (Object.keys(updates).length === 0) {
-        setStatusMsg({ type: "error", text: "Please provide an email or new password." });
+      if (!newEmail.trim() && !newPassword.trim()) {
+        setStatusMsg({ type: "error", text: "Please enter a new email or new password." });
         setLoading(false);
         return;
       }
 
-      // 3. Update in Supabase
+      // 4. Update in staff_accounts
       const { error: updateErr } = await supabase
         .from("staff_accounts")
         .update(updates)
@@ -70,45 +74,45 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
       if (updateErr) {
         setStatusMsg({ type: "error", text: updateErr.message });
       } else {
-        setStatusMsg({ type: "success", text: "Credentials updated successfully! Use new login next time." });
+        setStatusMsg({ type: "success", text: "Admin credentials updated! Use your new password next time." });
         setNewPassword("");
         setConfirmPassword("");
         setCurrentPassword("");
         setNewEmail("");
       }
-    } catch {
-      setStatusMsg({ type: "error", text: "Failed to update credentials." });
+    } catch (err: any) {
+      setStatusMsg({ type: "error", text: err.message || "Failed to update admin credentials." });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+      <div className="w-full max-w-md bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-3xl p-6 shadow-2xl relative font-mono text-xs">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition"
+          className="absolute top-4 right-4 p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+        <div className="flex items-center gap-3 mb-5 border-b border-white/10 pb-4">
+          <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] shadow-lg">
             <KeyRound className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Owner Security Vault</h2>
-            <p className="text-xs text-neutral-400">Update Admin access email & password</p>
+            <h2 className="text-base font-black text-white font-sans uppercase">Owner Security Vault</h2>
+            <p className="text-[11px] text-neutral-400 font-mono">Update Master Admin Email & Password</p>
           </div>
         </div>
 
         {statusMsg && (
           <div
-            className={`flex items-center gap-2 p-3 mb-4 rounded-xl text-xs ${
+            className={`flex items-center gap-2 p-3 mb-4 rounded-2xl text-xs ${
               statusMsg.type === "success"
-                ? "bg-emerald-950/60 border border-emerald-800 text-emerald-300"
-                : "bg-red-950/60 border border-red-800 text-red-300"
+                ? "bg-emerald-950/60 border border-emerald-500/50 text-emerald-300"
+                : "bg-rose-950/60 border border-rose-500/50 text-rose-300"
             }`}
           >
             {statusMsg.type === "success" ? (
@@ -122,50 +126,50 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
 
         <form onSubmit={handleUpdateCredentials} className="space-y-3.5">
           <div>
-            <label className="text-xs font-mono text-neutral-400 uppercase">New Admin Email (Optional)</label>
-            <div className="relative flex items-center mt-1">
+            <label className="text-[10px] text-neutral-400 uppercase block mb-1">New Admin Email / Login ID (Optional)</label>
+            <div className="relative flex items-center">
               <Mail className="w-4 h-4 absolute left-3 text-neutral-500" />
               <input
-                type="email"
+                type="text"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="Leave blank to keep existing"
-                className="w-full pl-9 pr-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500 transition"
+                className="w-full pl-9 pr-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white outline-none focus:border-[#D4AF37] transition"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-mono text-neutral-400 uppercase">Current Password (Required)</label>
+            <label className="text-[10px] text-amber-300 uppercase block mb-1">Current Password * (Verification)</label>
             <input
               type="password"
               required
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Enter current password to verify"
-              className="w-full px-3 py-2 mt-1 bg-neutral-950 border border-neutral-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500 transition"
+              placeholder="Enter current master password"
+              className="w-full px-3 py-2 bg-white/[0.03] border border-amber-400/40 rounded-xl text-white outline-none focus:border-[#D4AF37] transition font-mono"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <label className="text-xs font-mono text-neutral-400 uppercase">New Password</label>
+              <label className="text-[10px] text-neutral-400 uppercase block mb-1">New Password</label>
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="New key"
-                className="w-full px-3 py-2 mt-1 bg-neutral-950 border border-neutral-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500 transition"
+                className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white outline-none focus:border-[#D4AF37] transition font-mono"
               />
             </div>
             <div>
-              <label className="text-xs font-mono text-neutral-400 uppercase">Confirm</label>
+              <label className="text-[10px] text-neutral-400 uppercase block mb-1">Confirm New</label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter key"
-                className="w-full px-3 py-2 mt-1 bg-neutral-950 border border-neutral-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500 transition"
+                placeholder="Repeat key"
+                className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white outline-none focus:border-[#D4AF37] transition font-mono"
               />
             </div>
           </div>
@@ -174,17 +178,17 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 rounded-xl bg-neutral-800 text-neutral-300 hover:bg-neutral-700 text-sm font-medium transition"
+              className="flex-1 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-neutral-300 text-xs font-bold transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-black font-semibold text-sm flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs flex items-center justify-center gap-1.5 shadow-lg transition cursor-pointer disabled:opacity-50"
             >
-              <Check className="w-4 h-4" />
-              <span>{loading ? "Saving..." : "Save Changes"}</span>
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>{loading ? "Verifying..." : "Update Vault"}</span>
             </button>
           </div>
         </form>

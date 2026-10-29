@@ -14,19 +14,17 @@ import {
   ChefHat, 
   Receipt, 
   Sparkles, 
-  AlertCircle,
-  Eye, 
   Check, 
   X, 
   LogOut, 
-  User, 
-  Phone,
   MessageSquare,
   Plus,
   Minus,
   Droplets,
   Search,
-  CheckCheck
+  Hash,
+  Trash2,
+  ShieldCheck
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -190,6 +188,7 @@ export default function WaiterPanel() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => {
           triggerHaptic(25);
+          playChimeTone();
           loadWaiterData();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
@@ -216,29 +215,98 @@ export default function WaiterPanel() {
     window.location.replace('/');
   };
 
-  // Acknowledge Batch (Send to Kitchen Ticket Preparation)
-  const handleAcknowledgeBatch = async (batchId: string) => {
-    setActionLoadingBatchId(batchId);
+  // Recalculate Table Session Bill when waiter modifies dishes
+  const recalculateSessionBill = async (sessionId: string) => {
+    try {
+      const { data: liveItems } = await supabase
+        .from('order_items')
+        .select('*, menu_items(price)')
+        .eq('session_id', sessionId)
+        .neq('item_status', 'cancelled');
+
+      const newGross = (liveItems || []).reduce((sum, it) => {
+        if (it.is_complimentary) return sum;
+        const basePr = Number(it.unit_price || it.menu_items?.price || 0);
+        let addOnsSum = 0;
+        if (Array.isArray(it.selected_addons)) {
+          addOnsSum = it.selected_addons.reduce((aSum: number, a: any) => aSum + Number(a.price || 0), 0);
+        }
+        return sum + (it.quantity * (basePr + addOnsSum));
+      }, 0);
+
+      await supabase.from('table_sessions').update({
+        subtotal: newGross,
+        total_amount: newGross,
+        final_payable: newGross
+      }).eq('id', sessionId);
+
+      await loadWaiterData();
+    } catch (err) {
+      console.error('Session recalculate error:', err);
+    }
+  };
+
+  // Waiter edits quantity before kitchen verification
+  const handleModifyQuantity = async (orderItemId: number, currentQty: number, delta: number, sessionId: string) => {
+    const nextQty = currentQty + delta;
+    if (nextQty <= 0) return alert('Dish remove cheyalante "Remove" (Trash) button press cheyandi.');
+    try {
+      setLoading(true);
+      await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      await recalculateSessionBill(sessionId);
+    } catch (err: any) {
+      alert('Qty error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Waiter cancels dish before kitchen verification
+  const handleCancelDish = async (orderItemId: number, dishName: string, sessionId: string) => {
+    if (!confirm(`"${dishName}" dish ni remove cheyala?`)) return;
+    try {
+      setLoading(true);
+      await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      await recalculateSessionBill(sessionId);
+    } catch (err: any) {
+      alert('Cancel failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // DIRECT VISUAL TOKEN VERIFICATION & DISPATCH TO KITCHEN
+  const handleVerifyTokenAndSend = async (batch: any) => {
+    setActionLoadingBatchId(batch.id);
+    triggerHaptic(20);
+
     try {
       await supabase
         .from('order_batches')
-        .update({ status: 'sent_to_kitchen' })
-        .eq('id', batchId);
+        .update({ 
+          status: 'sent_to_kitchen',
+          pin_verified: true,
+          verified_at: new Date().toISOString()
+        })
+        .eq('id', batch.id);
 
       await supabase
         .from('order_items')
         .update({ item_status: 'preparing' })
-        .eq('batch_id', batchId);
+        .eq('batch_id', batch.id)
+        .neq('item_status', 'cancelled');
 
+      alert(`Token #${batch.order_pin || 'ORDER'} Verified for Table #${batch.table_number}! Sent to Kitchen.`);
       await loadWaiterData();
+
       if (selectedTable) {
         setSelectedTable(prev => prev ? {
           ...prev,
-          tableBatches: prev.tableBatches?.map(b => b.id === batchId ? { ...b, status: 'sent_to_kitchen' } : b)
+          tableBatches: prev.tableBatches?.map(b => b.id === batch.id ? { ...b, status: 'sent_to_kitchen' } : b)
         } : null);
       }
     } catch (err: any) {
-      alert('Error updating batch: ' + err.message);
+      alert('Verification error: ' + err.message);
     } finally {
       setActionLoadingBatchId(null);
     }
@@ -315,12 +383,17 @@ export default function WaiterPanel() {
         }).eq('id', sessionId);
       }
 
+      // Punch by waiter is direct
+      const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
         .insert({
           session_id: sessionId,
           table_number: punchTable.table_number,
-          status: 'sent_to_kitchen'
+          status: 'sent_to_kitchen',
+          order_pin: randomPin,
+          pin_verified: true,
+          verified_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -336,7 +409,7 @@ export default function WaiterPanel() {
           station_id: 'kitchen_hot',
           quantity: punchCart[Number(id)],
           unit_price: Number(dish?.price || 0),
-          item_status: 'ordered',
+          item_status: 'preparing',
           cooking_notes: punchNotes.trim() || null
         };
       });
@@ -347,7 +420,7 @@ export default function WaiterPanel() {
       setPunchNotes('');
       setShowPunchOrderModal(false);
       await loadWaiterData();
-      alert(`Order punched to Table #${punchTable.table_number}! Sent directly to kitchen.`);
+      alert(`Order punched to Table #${punchTable.table_number}! Dispatched to Kitchen.`);
     } catch (err: any) {
       alert('Punch error: ' + err.message);
     } finally {
@@ -426,7 +499,7 @@ export default function WaiterPanel() {
         </div>
       </header>
 
-      {/* FLOATING "CALL WAITER" NOTIFICATIONS (WATER & ASSISTANCE ONLY) */}
+      {/* FLOATING "CALL WAITER" NOTIFICATIONS */}
       {waiterCalls.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 space-y-2">
           {waiterCalls.map((call) => {
@@ -483,7 +556,7 @@ export default function WaiterPanel() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#D4AF37] shadow-[0_0_8px_#D4AF37]" /> Dining
             </span>
             <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-ping" /> New Batch
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-ping" /> New Token
             </span>
           </div>
         </div>
@@ -495,7 +568,7 @@ export default function WaiterPanel() {
             const isOccupied = !!activeSession;
 
             const tableBatches = batches.filter(b => b.table_number === t.table_number && b.session_id === activeSession?.id);
-            const hasPendingAction = tableBatches.some(b => b.status === 'pending_waiter');
+            const pendingBatch = tableBatches.find(b => b.status === 'pending_waiter');
             const grossTotal = Number(activeSession?.total_amount || 0);
 
             return (
@@ -505,7 +578,7 @@ export default function WaiterPanel() {
                 whileHover={{ y: -3 }}
                 transition={fluidSpring}
                 className={`p-5 rounded-[28px] bg-gradient-to-b from-[#111114]/90 to-[#08080a]/90 border-[2px] transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
-                  hasPendingAction
+                  pendingBatch
                     ? 'border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.25)] ring-2 ring-amber-400/40'
                     : isOccupied
                     ? 'border-[#D4AF37]/50 shadow-[0_8px_30px_rgba(212,175,55,0.15)]'
@@ -513,7 +586,7 @@ export default function WaiterPanel() {
                 }`}
               >
                 <div className={`absolute top-0 inset-x-0 h-1.5 ${
-                  hasPendingAction ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : isOccupied ? 'bg-[#D4AF37]' : 'bg-emerald-500'
+                  pendingBatch ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : isOccupied ? 'bg-[#D4AF37]' : 'bg-emerald-500'
                 }`} />
 
                 <div>
@@ -524,13 +597,13 @@ export default function WaiterPanel() {
                     </div>
 
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                      hasPendingAction
+                      pendingBatch
                         ? 'bg-amber-500/20 text-amber-300 border-amber-400 animate-pulse'
                         : isOccupied
                         ? 'bg-[#D4AF37]/15 text-[#FCF6BA] border-[#D4AF37]/40'
                         : 'bg-emerald-950/30 text-emerald-300 border-emerald-500/40'
                     }`}>
-                      {hasPendingAction ? 'New Order!' : isOccupied ? 'Dining' : 'Available'}
+                      {pendingBatch ? 'Token Match!' : isOccupied ? 'Dining' : 'Available'}
                     </span>
                   </div>
 
@@ -551,9 +624,16 @@ export default function WaiterPanel() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] font-bold text-[#FCF6BA]">
-                        <span className="font-mono text-neutral-400">{tableBatches.length} Batches Sent</span>
-                      </div>
+                      {pendingBatch && (
+                        <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/40 text-[11px] font-mono text-amber-300 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 font-bold">
+                            <Hash className="w-3.5 h-3.5" /> Token: #{pendingBatch.order_pin || 'NEW'}
+                          </span>
+                          <span className="bg-amber-400 text-black px-1.5 py-0.5 rounded text-[9px] font-black">
+                            CONFIRM
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-6 text-xs text-emerald-400 font-mono flex flex-col items-center gap-1.5">
@@ -570,7 +650,7 @@ export default function WaiterPanel() {
                       onClick={() => setSelectedTable({ ...t, activeSession, tableBatches })}
                       className="flex-1 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-mono font-bold text-white text-center cursor-pointer"
                     >
-                      View Ledger
+                      {pendingBatch ? 'Match & Verify' : 'View Ledger'}
                     </button>
                   )}
                   <button
@@ -592,7 +672,7 @@ export default function WaiterPanel() {
         </div>
       </main>
 
-      {/* MODAL 1: Table Service Ledger & Batch Actions */}
+      {/* MODAL 1: Table Service Ledger, Visual Token Matching & Dish Modifiers */}
       <AnimatePresence>
         {selectedTable && (
           <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
@@ -620,10 +700,10 @@ export default function WaiterPanel() {
                 </button>
               </div>
 
-              {/* Running Orders Breakdown */}
+              {/* Running Batches List */}
               <div className="space-y-4">
                 {selectedTable.tableBatches?.map((batch, bIdx) => {
-                  const bItems = orderItems.filter(oi => oi.batch_id === batch.id);
+                  const bItems = orderItems.filter(oi => oi.batch_id === batch.id && oi.item_status !== 'cancelled');
                   const isPending = batch.status === 'pending_waiter';
 
                   return (
@@ -636,77 +716,150 @@ export default function WaiterPanel() {
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-black text-white font-mono">
-                          Batch #{bIdx + 1}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-white font-mono">
+                            Batch #{bIdx + 1}
+                          </span>
+                          {batch.order_pin && (
+                            <span className="px-2 py-0.5 rounded-md bg-black border border-amber-400/50 text-amber-300 font-mono text-[11px] font-black">
+                              Token #{batch.order_pin}
+                            </span>
+                          )}
+                        </div>
+
                         <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
                           isPending 
                             ? 'bg-amber-500/20 text-amber-300 border-amber-400 animate-pulse' 
                             : 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
                         }`}>
-                          {isPending ? 'Pending Waiter Approval' : 'Sent to Kitchen'}
+                          {isPending ? 'Awaiting Steward Check' : 'In Kitchen'}
                         </span>
                       </div>
 
+                      {/* Dishes in this batch */}
                       <div className="space-y-2 divide-y divide-white/5 text-xs">
-                        {bItems.map(item => (
-                          <div key={item.id} className="pt-2 flex flex-col gap-1">
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-black bg-[#D4AF37] px-1.5 py-0.5 rounded">
-                                  {item.quantity}x
-                                </span>
-                                <span className="text-white font-bold">{item.menu_items?.name_en || item.menu_items?.name || 'Dish'}</span>
-                              </div>
-                              
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-[#FCF6BA]">₹{(Number(item.unit_price) * item.quantity).toFixed(2)}</span>
-                                {item.item_status !== 'served' ? (
-                                  <button
-                                    onClick={() => handleMarkItemServed(item.id)}
-                                    className="px-2 py-0.5 rounded bg-white/[0.06] hover:bg-emerald-950/50 hover:text-emerald-300 text-[10px] font-mono border border-white/10 cursor-pointer"
-                                  >
-                                    Mark Served ✓
-                                  </button>
+                        {bItems.map(item => {
+                          const dPrice = Number(item.unit_price || item.menu_items?.price || 0);
+                          const addOnsCost = Array.isArray(item.selected_addons)
+                            ? item.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
+                            : 0;
+                          const lineTotal = item.is_complimentary ? 0 : (dPrice + addOnsCost) * item.quantity;
+                          const dName = item.menu_items?.name_en || item.menu_items?.name || 'Dish #' + item.menu_item_id;
+
+                          return (
+                            <div key={item.id} className="pt-2 flex flex-col gap-1.5">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-white">
+                                      {dName} {item.selected_weight_variant ? `(${item.selected_weight_variant})` : ''}
+                                    </span>
+                                    {item.is_complimentary && (
+                                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">
+                                        FREE
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="font-mono text-[11px] text-[#FCF6BA]">
+                                    {item.is_complimentary ? 'FREE' : `₹${lineTotal.toFixed(2)}`}
+                                  </span>
+                                </div>
+
+                                {/* Steward modifier buttons for pending items */}
+                                {isPending ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => handleModifyQuantity(item.id, item.quantity, -1, selectedTable.activeSession?.id)}
+                                      className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="font-mono font-bold text-white px-1">{item.quantity}</span>
+                                    <button
+                                      onClick={() => handleModifyQuantity(item.id, item.quantity, 1, selectedTable.activeSession?.id)}
+                                      className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleCancelDish(item.id, dName, selectedTable.activeSession?.id)}
+                                      className="p-1 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-950/70 ml-1"
+                                      title="Remove Dish"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <span className="text-emerald-400 text-[10px] font-mono font-bold">Served</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-bold text-black bg-[#D4AF37] px-1.5 py-0.5 rounded text-[10px]">
+                                      {item.quantity}x
+                                    </span>
+                                    {item.item_status !== 'served' ? (
+                                      <button
+                                        onClick={() => handleMarkItemServed(item.id)}
+                                        className="px-2 py-0.5 rounded bg-white/[0.06] hover:bg-emerald-950/50 hover:text-emerald-300 text-[10px] font-mono border border-white/10 cursor-pointer"
+                                      >
+                                        Mark Served ✓
+                                      </button>
+                                    ) : (
+                                      <span className="text-emerald-400 text-[10px] font-mono font-bold">Served</span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            </div>
 
-                            {item.cooking_notes && (
-                              <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-500/30 font-sans">
-                                <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
-                                <span>Note: {item.cooking_notes}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                              {/* Selected Add-ons Badges */}
+                              {Array.isArray(item.selected_addons) && item.selected_addons.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {item.selected_addons.map((a: any, aIdx: number) => (
+                                    <span key={aIdx} className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-200 text-[9px] font-mono">
+                                      + {a.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {item.cooking_notes && (
+                                <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-500/30 font-sans">
+                                  <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>Note: {item.cooking_notes}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
 
+                      {/* ONE-TAP VERIFY & DISPATCH */}
                       {isPending && (
-                        <motion.button
-                          whileTap={{ scale: 0.97 }}
-                          transition={fluidSpring}
-                          disabled={actionLoadingBatchId === batch.id}
-                          onClick={() => handleAcknowledgeBatch(batch.id)}
-                          className="w-full mt-3 py-2.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black uppercase text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {actionLoadingBatchId === batch.id ? (
-                            <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              <Check className="w-4 h-4 stroke-[3]" /> Send to Kitchen
-                            </>
-                          )}
-                        </motion.button>
+                        <div className="mt-3 pt-3 border-t border-amber-400/30 flex items-center justify-between gap-3">
+                          <span className="text-[11px] font-mono text-neutral-300">
+                            Guest Token: <strong className="text-amber-300 font-black">#{batch.order_pin || 'NEW'}</strong>
+                          </span>
+
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            disabled={actionLoadingBatchId === batch.id}
+                            onClick={() => handleVerifyTokenAndSend(batch)}
+                            className="px-4 py-2.5 rounded-xl bg-amber-400 text-black font-black uppercase text-xs shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {actionLoadingBatchId === batch.id ? (
+                              <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                <span>Verify & Send to Kitchen</span>
+                              </>
+                            )}
+                          </motion.button>
+                        </div>
                       )}
                     </div>
                   );
                 })}
               </div>
 
-              {/* Total Summary (Zero-GST Flat Billing) */}
+              {/* Total Summary */}
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 text-xs font-mono space-y-1">
                 <div className="flex justify-between text-neutral-400">
                   <span>Gross Flat Amount (Zero GST):</span>
