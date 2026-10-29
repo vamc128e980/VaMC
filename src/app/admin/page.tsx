@@ -965,7 +965,7 @@ export default function LuxuryGoldAdminPanel() {
                   <span class="item-total">${it.is_complimentary ? 'FREE' : `₹${lineTotal.toFixed(2)}`}</span>
                 </div>
                 ${Array.isArray(it.selected_addons) && it.selected_addons.length > 0 ? it.selected_addons.map((a: any) => `
-                  <div class="addon-line">+ ${a.name} (+₹${Number(a.price).toFixed(2)})</div>
+                  <div class="addon-line">+ ${a.name} (+₹${(Number(a.price) * it.quantity).toFixed(2)})</div>
                 `).join('') : ''}
               </div>
             `;
@@ -995,10 +995,16 @@ export default function LuxuryGoldAdminPanel() {
   };
 
   const copyToGoogleSheets = () => {
-    const headers = ['Date', 'Time', 'Table #', 'Table Name', 'Customer Name', 'Phone', 'Ordered Dishes', 'Bill Total', 'Payment Mode', 'Status'];
+    const headers = ['Date', 'Time', 'Table #', 'Table Name', 'Customer Name', 'Phone', 'Ordered Dishes & Addons', 'Bill Total', 'Payment Mode', 'Status'];
     const rows = filteredSessions.map(s => {
       const d = new Date(s.created_at);
-      const itemsList = getSessionOrderedItems(s.id).map(i => `${i.quantity}x ${i.name}`).join(', ');
+      const itemsList = getSessionOrderedItems(s.id).map(i => {
+        const extraNames = Array.isArray(i.selected_addons) && i.selected_addons.length > 0
+          ? ` (+ ${i.selected_addons.map(a => a.name).join(', ')})`
+          : '';
+        return `${i.quantity}x ${i.name}${extraNames}`;
+      }).join('; ');
+
       const gross = Number(s.total_amount) || 0;
       const matchingTable = tables.find(t => t.table_number === s.table_number);
 
@@ -1333,13 +1339,33 @@ export default function LuxuryGoldAdminPanel() {
                           Guest: <strong className="text-white">{sess.customer_name || 'Guest'}</strong> ({sess.customer_phone || '-'})
                         </div>
 
+                        {/* ORDER HISTORY ITEMS WITH ADD-ONS DISPLAY */}
                         <div className="space-y-1 text-[11px]">
-                          {items.map((it, idx) => (
-                            <div key={idx} className="flex justify-between text-neutral-300">
-                              <span>{it.quantity}x {it.name}</span>
-                              <span>₹{(it.quantity * it.price).toFixed(2)}</span>
-                            </div>
-                          ))}
+                          {items.map((it, idx) => {
+                            const addOnsCost = Array.isArray(it.selected_addons)
+                              ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
+                              : 0;
+                            const itemNetPrice = it.is_complimentary ? 0 : (it.price + addOnsCost) * it.quantity;
+
+                            return (
+                              <div key={idx} className="space-y-0.5 border-b border-white/5 pb-1 last:border-b-0">
+                                <div className="flex justify-between text-neutral-300 font-bold">
+                                  <span>{it.quantity}x {it.name} {it.selected_weight_variant ? `(${it.selected_weight_variant})` : ''}</span>
+                                  <span>{it.is_complimentary ? 'FREE' : `₹${itemNetPrice.toFixed(2)}`}</span>
+                                </div>
+                                {Array.isArray(it.selected_addons) && it.selected_addons.length > 0 && (
+                                  <div className="pl-3 space-y-0.5">
+                                    {it.selected_addons.map((a: any, aIdx: number) => (
+                                      <div key={aIdx} className="flex justify-between text-[10px] text-amber-300">
+                                        <span>+ {a.name}</span>
+                                        <span>+₹{(Number(a.price) * it.quantity).toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
 
                         <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-white">
@@ -1572,7 +1598,7 @@ export default function LuxuryGoldAdminPanel() {
                           const totalLineCost = it.is_complimentary ? 0 : (dPrice + addOnsCost) * it.quantity;
 
                           return (
-                            <div key={it.id} className={`p-2.5 rounded-2xl border space-y-1 ${isCancelled ? 'bg-rose-950/20 border-rose-500/30' : 'bg-white/[0.02] border-white/5'}`}>
+                            <div key={it.id} className={`p-3 rounded-2xl border space-y-1.5 ${isCancelled ? 'bg-rose-950/20 border-rose-500/30' : 'bg-white/[0.02] border-white/10'}`}>
                               <div className="flex justify-between items-center">
                                 <div>
                                   <div className="flex items-center gap-1.5">
@@ -1585,7 +1611,7 @@ export default function LuxuryGoldAdminPanel() {
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[11px] text-[#D4AF37]">
+                                  <span className="text-xs font-bold text-[#FCF6BA]">
                                     {it.is_complimentary ? '₹0.00' : `₹${totalLineCost.toFixed(2)}`}
                                   </span>
                                 </div>
@@ -1620,20 +1646,21 @@ export default function LuxuryGoldAdminPanel() {
                                 </div>
                               </div>
 
-                              {/* Selected Add-ons Badges */}
+                              {/* Selected Add-ons Breakdown with Extra Price */}
                               {Array.isArray(it.selected_addons) && it.selected_addons.length > 0 && (
-                                <div className="flex flex-wrap gap-1 pt-1">
+                                <div className="pl-3.5 space-y-1 border-l-2 border-[#D4AF37]/60 my-1 pt-0.5">
                                   {it.selected_addons.map((a: any, aIdx: number) => (
-                                    <span key={aIdx} className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[9px] font-mono">
-                                      + {a.name} (₹{Number(a.price).toFixed(0)})
-                                    </span>
+                                    <div key={aIdx} className="flex justify-between items-center text-[11px] font-mono text-[#D4AF37]">
+                                      <span className="font-bold">+ {a.name}</span>
+                                      <span className="font-black">+₹{(Number(a.price) * it.quantity).toFixed(2)}</span>
+                                    </div>
                                   ))}
                                 </div>
                               )}
 
                               {/* Customer Cooking Notes */}
                               {it.cooking_notes && (
-                                <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-500/30 font-sans">
+                                <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2.5 py-1 rounded-lg border border-amber-500/30 font-sans">
                                   <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
                                   <span>Note: {it.cooking_notes}</span>
                                 </div>
