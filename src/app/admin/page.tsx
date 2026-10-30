@@ -90,7 +90,7 @@ export default function LuxuryGoldAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // VaMC Manual Counter POS Modal States & Dedicated Counter Menu
+  // VaMC Manual Counter POS & C+ Customer Quick Bill States
   const [showVaMCModal, setShowVaMCModal] = useState(false);
   const [vamcCounterItems, setVamcCounterItems] = useState<any[]>([]);
   const [showVaMCCrudModal, setShowVaMCCrudModal] = useState(false);
@@ -316,7 +316,6 @@ export default function LuxuryGoldAdminPanel() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Photo Compressor
   const compressAndUploadImage = (file: File, callback: (base64: string) => void) => {
     if (file.size > 5 * 1024 * 1024) {
       alert('Photo 5MB kante thakkuva undali.');
@@ -351,7 +350,6 @@ export default function LuxuryGoldAdminPanel() {
     };
   };
 
-  // Zero-GST Bill Recalculation
   const recalculateSessionBill = async (sessionId: string) => {
     try {
       const { data: liveItems } = await supabase
@@ -412,7 +410,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Settle Bill & Log Loyalty Visit
   const handleSettleOrder = async (sessionId: string, tableNum: number, mode: 'cash' | 'upi') => {
     try {
       setLoading(true);
@@ -488,7 +485,6 @@ export default function LuxuryGoldAdminPanel() {
     window.location.replace('/');
   };
 
-  // Tables CRUD
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
     const tNum = parseInt(newTableNumber);
@@ -553,7 +549,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Category CRUD
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = categoryName.trim();
@@ -602,7 +597,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Add-ons Master CRUD
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = addonName.trim();
@@ -664,7 +658,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Instant Stock Toggle for Dishes
   const handleToggleStock = async (itemId: number, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
     setMenuItems(prev => prev.map(m => m.id === itemId ? { ...m, is_available: nextStatus } : m));
@@ -728,7 +721,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Combos CRUD
   const comboSumActualPrice = useMemo(() => {
     return selectedComboItemIds.reduce((sum, id) => {
       const dish = menuItems.find(m => m.id === id);
@@ -786,7 +778,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Banners
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBannerTitle.trim() || !newBannerImageUrl.trim()) return alert('Banner Title & Image ivvandi.');
@@ -819,7 +810,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Filter
   const filteredSessions = useMemo(() => {
     return sessions.filter(s => {
       const sessionDate = new Date(s.created_at).toISOString().split('T')[0];
@@ -865,7 +855,6 @@ export default function LuxuryGoldAdminPanel() {
     return orderItems.filter(oi => oi.session_id === sessionId);
   };
 
-  // 1. PHYSICAL 80mm KOT WITH ADD-ONS & COMPLIMENTARY TAGS
   const printKitchenOrderTicket = (session: any) => {
     const items = getSessionOrderedItems(session.id);
     const matchingTable = tables.find(t => t.table_number === session.table_number);
@@ -945,7 +934,6 @@ export default function LuxuryGoldAdminPanel() {
     printWindow.document.close();
   };
 
-  // 2. 80mm ESC/POS Customer Receipt With Add-ons Breakdown
   const printThermalSlip = (session: any) => {
     const items = getSessionOrderedItems(session.id);
     const gross = Number(session.total_amount || 0);
@@ -1217,8 +1205,25 @@ export default function LuxuryGoldAdminPanel() {
         </div>
       </header>
 
+      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex items-center justify-between gap-3">
+        <div className="p-2 rounded-2xl bg-[#111115] border border-[#D4AF37]/40 shadow-lg flex items-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowVaMCModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>C+ Customer Quick Bill</span>
+          </motion.button>
+          <span className="text-[11px] font-mono text-neutral-400 hidden sm:inline px-2">
+            Instant individual customer billing via independent counter menu.
+          </span>
+        </div>
+      </div>
+
       {/* FLOATING ACTION DOCK */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 relative z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 relative z-40">
         <div className="p-3 rounded-[28px] bg-gradient-to-b from-[#111114]/90 to-[#0a0a0d]/90 border border-white/[0.1] backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
           
           <div className="flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-1 lg:pb-0 w-full lg:w-auto">
