@@ -112,7 +112,7 @@ export default function LuxuryGoldAdminPanel() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
 
-  // Add-ons Master CRUD
+  // Add-ons Master CRUD (Complete State)
   const [showAddonModal, setShowAddonModal] = useState(false);
   const [editingAddon, setEditingAddon] = useState<any | null>(null);
   const [addonName, setAddonName] = useState('');
@@ -139,7 +139,7 @@ export default function LuxuryGoldAdminPanel() {
   ]);
   const itemFileRef = useRef<HTMLInputElement>(null);
 
-  // Smart Dynamic Combos CRUD
+  // Combos CRUD
   const [showComboModal, setShowComboModal] = useState(false);
   const [editingCombo, setEditingCombo] = useState<any | null>(null);
   const [comboName, setComboName] = useState('');
@@ -566,12 +566,14 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Add-ons Master CRUD
+  // ==========================================
+  // ADD-ONS MASTER CRUD (Complete Implementation)
+  // ==========================================
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = addonName.trim();
     const prNum = parseFloat(addonPrice);
-    if (!cleanName || !prNum || prNum < 0) return alert('Add-on Name & valid Price ivvandi.');
+    if (!cleanName || isNaN(prNum) || prNum < 0) return alert('Add-on Name & valid Price enter cheyandi.');
 
     setLoading(true);
     try {
@@ -583,15 +585,18 @@ export default function LuxuryGoldAdminPanel() {
       };
 
       if (editingAddon) {
-        await supabase.from('menu_addons').update(payload).eq('id', editingAddon.id);
+        const { error } = await supabase.from('menu_addons').update(payload).eq('id', editingAddon.id);
+        if (error) throw error;
       } else {
-        await supabase.from('menu_addons').insert(payload);
+        const { error } = await supabase.from('menu_addons').insert(payload);
+        if (error) throw error;
       }
 
       setShowAddonModal(false);
       setEditingAddon(null);
       setAddonName('');
       setAddonPrice('');
+      setAddonCategory('ice_cream');
       await loadAdminData();
     } catch (err: any) {
       alert('Add-on save error: ' + err.message);
@@ -601,21 +606,31 @@ export default function LuxuryGoldAdminPanel() {
   };
 
   const handleToggleAddon = async (addonId: number, currentStatus: boolean) => {
+    const nextStatus = !currentStatus;
+    setAddons(prev => prev.map(a => a.id === addonId ? { ...a, is_available: nextStatus } : a));
     try {
-      await supabase.from('menu_addons').update({ is_available: !currentStatus }).eq('id', addonId);
-      await loadAdminData();
-    } catch (err) {}
+      await supabase.from('menu_addons').update({ is_available: nextStatus }).eq('id', addonId);
+    } catch (err) {
+      console.error('Addon toggle err:', err);
+      loadAdminData();
+    }
   };
 
   const handleDeleteAddon = async (addonId: number, name: string) => {
     if (!confirm(`"${name}" add-on ni DELETE cheyala?`)) return;
     try {
-      await supabase.from('menu_addons').delete().eq('id', addonId);
+      setLoading(true);
+      const { error } = await supabase.from('menu_addons').delete().eq('id', addonId);
+      if (error) throw error;
       await loadAdminData();
-    } catch (err) {}
+    } catch (err: any) {
+      alert('Delete error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Instant Stock Toggle
+  // Instant Stock Toggle for Dishes
   const handleToggleStock = async (itemId: number, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
     setMenuItems(prev => prev.map(m => m.id === itemId ? { ...m, is_available: nextStatus } : m));
@@ -679,7 +694,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Combos
+  // Combos CRUD
   const comboSumActualPrice = useMemo(() => {
     return selectedComboItemIds.reduce((sum, id) => {
       const dish = menuItems.find(m => m.id === id);
@@ -1839,7 +1854,7 @@ export default function LuxuryGoldAdminPanel() {
                     <span className="text-xs font-mono font-bold text-white uppercase">Categories ({categories.length})</span>
                     <button
                       onClick={() => { setEditingCategory(null); setCategoryName(''); setCategoryType('dine_in'); setShowCategoryModal(true); }}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-black font-bold text-xs flex items-center gap-1"
+                      className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-black font-bold text-xs flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3 stroke-[3]" /> Add Category
                     </button>
@@ -1848,7 +1863,7 @@ export default function LuxuryGoldAdminPanel() {
                   <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-2">
                     <button
                       onClick={() => setSelectedCatId('all')}
-                      className={`px-4 py-2 rounded-2xl text-xs font-mono font-bold whitespace-nowrap border ${
+                      className={`px-4 py-2 rounded-2xl text-xs font-mono font-bold whitespace-nowrap border cursor-pointer ${
                         selectedCatId === 'all' ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/10'
                       }`}
                     >
@@ -1856,7 +1871,7 @@ export default function LuxuryGoldAdminPanel() {
                     </button>
                     {categories.map(c => (
                       <div key={c.id} className="flex items-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 py-1.5 gap-1.5 shrink-0 text-xs font-mono">
-                        <button onClick={() => setSelectedCatId(c.id)} className={selectedCatId === c.id ? 'text-[#D4AF37] font-bold' : 'text-neutral-300'}>
+                        <button onClick={() => setSelectedCatId(c.id)} className={`cursor-pointer ${selectedCatId === c.id ? 'text-[#D4AF37] font-bold' : 'text-neutral-300'}`}>
                           {c.name_en || c.name} {c.category_type === 'retail' ? '🛍️' : ''}
                         </button>
                         <button 
@@ -1866,12 +1881,12 @@ export default function LuxuryGoldAdminPanel() {
                             setCategoryType(c.category_type || 'dine_in');
                             setShowCategoryModal(true);
                           }} 
-                          className="text-neutral-400 hover:text-white ml-1 p-0.5"
+                          className="text-neutral-400 hover:text-white ml-1 p-0.5 cursor-pointer"
                           title="Edit Category Name"
                         >
                           <Edit3 className="w-3 h-3 text-[#D4AF37]" />
                         </button>
-                        <button onClick={() => handleDeleteCategory(c.id, c.name_en || c.name)} className="text-rose-400 hover:text-rose-300 p-0.5">
+                        <button onClick={() => handleDeleteCategory(c.id, c.name_en || c.name)} className="text-rose-400 hover:text-rose-300 p-0.5 cursor-pointer">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -1897,7 +1912,7 @@ export default function LuxuryGoldAdminPanel() {
                         setItemIsRetail(false);
                         setShowItemModal(true); 
                       }}
-                      className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5"
+                      className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-4 h-4 stroke-[3]" /> Add Item / Retail
                     </button>
@@ -1958,11 +1973,11 @@ export default function LuxuryGoldAdminPanel() {
                               ]);
                               setShowItemModal(true);
                             }} 
-                            className="p-1 text-neutral-300 hover:text-white"
+                            className="p-1 text-neutral-300 hover:text-white cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} className="p-1 text-rose-400">
+                          <button onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} className="p-1 text-rose-400 cursor-pointer">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -1973,51 +1988,82 @@ export default function LuxuryGoldAdminPanel() {
               </div>
             )}
 
-            {/* B.2: Add-ons Master Tab */}
+            {/* B.2: Add-ons Master Tab (Full CRUD View) */}
             {menuHubTab === 'addons' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
                     <h4 className="text-sm font-black text-white uppercase font-mono">Add-ons Master ({addons.length})</h4>
-                    <p className="text-xs text-neutral-400 font-mono">Create Ice Cream scoops, Roasted Dry Fruits toppings, Dips, etc.</p>
+                    <p className="text-xs text-neutral-400 font-mono">Manage ice cream scoops, dry fruit toppings, dips, and customization add-ons.</p>
                   </div>
                   <button
                     onClick={() => {
                       setEditingAddon(null);
                       setAddonName('');
                       setAddonPrice('');
+                      setAddonCategory('ice_cream');
                       setShowAddonModal(true);
                     }}
-                    className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5"
+                    className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" /> Add New Add-on
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 font-mono text-xs">
-                  {addons.map(a => (
-                    <div key={a.id} className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-white block">{a.name}</span>
-                        <span className="text-[#D4AF37] font-black text-sm">₹{Number(a.price).toFixed(2)}</span>
-                        <span className="text-[10px] text-neutral-500 block uppercase">[{a.category || 'general'}]</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleToggleAddon(a.id, a.is_available)}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] border ${
-                            a.is_available ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
-                          }`}
-                        >
-                          {a.is_available ? 'Active' : 'Off'}
-                        </button>
-                        <button onClick={() => handleDeleteAddon(a.id, a.name)} className="text-rose-400 p-1">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 font-mono text-xs">
+                  {addons.length === 0 ? (
+                    <div className="col-span-full py-12 text-center text-neutral-500 font-mono text-xs">
+                      No add-ons created yet. Click "+ Add New Add-on" to create.
                     </div>
-                  ))}
+                  ) : (
+                    addons.map(a => (
+                      <div key={a.id} className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center shadow-lg hover:border-[#D4AF37]/40 transition">
+                        <div>
+                          <span className="font-bold text-white block text-sm">{a.name}</span>
+                          <span className="text-[#D4AF37] font-black text-sm mt-0.5 block">+₹{Number(a.price).toFixed(2)}</span>
+                          <span className="text-[10px] text-neutral-500 block uppercase mt-0.5">[{a.category || 'general'}]</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {/* Availability Toggle */}
+                          <button
+                            onClick={() => handleToggleAddon(a.id, a.is_available)}
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase border transition cursor-pointer ${
+                              a.is_available 
+                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25' 
+                                : 'bg-rose-500/15 border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
+                            }`}
+                          >
+                            {a.is_available ? 'Active' : 'Off'}
+                          </button>
+
+                          {/* Edit Add-on */}
+                          <button 
+                            onClick={() => {
+                              setEditingAddon(a);
+                              setAddonName(a.name || '');
+                              setAddonPrice(String(a.price || ''));
+                              setAddonCategory(a.category || 'general');
+                              setShowAddonModal(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-neutral-300 hover:text-white cursor-pointer"
+                            title="Edit Add-on"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-[#D4AF37]" />
+                          </button>
+
+                          {/* Delete Add-on */}
+                          <button 
+                            onClick={() => handleDeleteAddon(a.id, a.name)} 
+                            className="p-1.5 rounded-lg bg-rose-950/30 text-rose-300 hover:bg-rose-950/50 cursor-pointer"
+                            title="Delete Add-on"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -2039,7 +2085,7 @@ export default function LuxuryGoldAdminPanel() {
                       setComboImageUrl('');
                       setShowComboModal(true);
                     }}
-                    className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5"
+                    className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" /> Create New Combo
                   </button>
@@ -2055,7 +2101,7 @@ export default function LuxuryGoldAdminPanel() {
                       )}
                       <div className="flex justify-between items-start">
                         <span className="font-bold text-white text-sm block">{combo.name || combo.name_en}</span>
-                        <button onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} className="text-rose-400">
+                        <button onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} className="text-rose-400 cursor-pointer">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -2111,7 +2157,7 @@ export default function LuxuryGoldAdminPanel() {
                       <button
                         type="button"
                         onClick={() => bannerFileRef.current?.click()}
-                        className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs"
+                        className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs cursor-pointer"
                       >
                         <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
                         <span>{newBannerImageUrl ? 'Change Selected PC Photo' : 'Choose PC Photo (Up to 3MB)'}</span>
@@ -2123,7 +2169,7 @@ export default function LuxuryGoldAdminPanel() {
                         </div>
                       )}
 
-                      <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs">
+                      <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer">
                         Publish Slide
                       </button>
                     </form>
@@ -2137,7 +2183,7 @@ export default function LuxuryGoldAdminPanel() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="font-bold text-white truncate">{b.title}</span>
-                          <button onClick={() => handleDeleteBanner(b.id)} className="text-rose-400">
+                          <button onClick={() => handleDeleteBanner(b.id)} className="text-rose-400 cursor-pointer">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -2152,17 +2198,21 @@ export default function LuxuryGoldAdminPanel() {
       </main>
 
       {/* MODALS */}
-      {/* Add-on Master Modal */}
+      {/* Add-on Master CRUD Modal (Create & Edit) */}
       <AnimatePresence>
         {showAddonModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">{editingAddon ? 'Edit Add-on' : 'New Add-on'}</span>
-                <button onClick={() => setShowAddonModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  {editingAddon ? 'Edit Add-on' : 'Create New Add-on'}
+                </span>
+                <button onClick={() => setShowAddonModal(false)} className="text-neutral-400 hover:text-white cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <form onSubmit={handleSaveAddon} className="space-y-3">
+              <form onSubmit={handleSaveAddon} className="space-y-3.5">
                 <div>
                   <label className="text-neutral-400 block mb-1">Add-on Name *</label>
                   <input
@@ -2171,11 +2221,11 @@ export default function LuxuryGoldAdminPanel() {
                     placeholder="e.g. Vanilla Ice Cream Scoop"
                     value={addonName}
                     onChange={(e) => setAddonName(e.target.value)}
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="text-neutral-400 block mb-1">Extra Price (₹) *</label>
                     <input
@@ -2186,7 +2236,7 @@ export default function LuxuryGoldAdminPanel() {
                       placeholder="e.g. 30"
                       value={addonPrice}
                       onChange={(e) => setAddonPrice(e.target.value)}
-                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold"
+                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold focus:border-[#D4AF37]"
                     />
                   </div>
 
@@ -2195,7 +2245,7 @@ export default function LuxuryGoldAdminPanel() {
                     <select
                       value={addonCategory}
                       onChange={(e) => setAddonCategory(e.target.value as any)}
-                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
                     >
                       <option value="ice_cream">Ice Cream</option>
                       <option value="nuts">Dry Fruits</option>
@@ -2206,8 +2256,12 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
-                  Save Add-on
+                <button 
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-2 cursor-pointer hover:brightness-110"
+                >
+                  {loading ? 'Saving...' : (editingAddon ? 'Update Add-on' : 'Save Add-on')}
                 </button>
               </form>
             </div>
@@ -2222,7 +2276,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">{editingItem ? 'Edit Dish / Product' : 'Add Dish / Product'}</span>
-                <button onClick={() => setShowItemModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <button onClick={() => setShowItemModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
 
               <form onSubmit={handleSaveItem} className="space-y-3.5">
@@ -2273,7 +2327,7 @@ export default function LuxuryGoldAdminPanel() {
                         key={c.id}
                         type="button"
                         onClick={() => setItemCategoryId(c.id)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap border ${
+                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap border cursor-pointer ${
                           itemCategoryId === c.id ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/5'
                         }`}
                       >
@@ -2283,7 +2337,7 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                {/* 1. Add-ons Linking Checkbox */}
+                {/* 1. Add-ons Linking Checkbox & Multi-Select */}
                 <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -2301,18 +2355,19 @@ export default function LuxuryGoldAdminPanel() {
                   {itemHasAddons && (
                     <div className="pt-2 border-t border-white/5 space-y-1">
                       <span className="text-[10px] text-neutral-400 block">Select Add-ons applicable for this item:</span>
-                      <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-gold-scrollbar p-1">
+                      <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto custom-gold-scrollbar p-1">
                         {addons.map(a => {
-                          const isSel = itemAddonIds.includes(a.id);
+                          const isSel = itemAddonIds.includes(Number(a.id));
                           return (
                             <button
                               key={a.id}
                               type="button"
                               onClick={() => {
-                                if (isSel) setItemAddonIds(itemAddonIds.filter(id => id !== a.id));
-                                else setItemAddonIds([...itemAddonIds, a.id]);
+                                const aId = Number(a.id);
+                                if (isSel) setItemAddonIds(itemAddonIds.filter(id => id !== aId));
+                                else setItemAddonIds([...itemAddonIds, aId]);
                               }}
-                              className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center ${
+                              className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center cursor-pointer ${
                                 isSel ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white' : 'bg-white/[0.02] border-white/5 text-neutral-400'
                               }`}
                             >
@@ -2326,7 +2381,7 @@ export default function LuxuryGoldAdminPanel() {
                   )}
                 </div>
 
-                {/* 2. Cross-Sell Pairings Selection ("Fits Your Order") */}
+                {/* 2. Cross-Sell Pairings Selection */}
                 <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-white flex items-center gap-1.5">
@@ -2347,7 +2402,7 @@ export default function LuxuryGoldAdminPanel() {
                             if (isSel) setItemSuggestedIds(itemSuggestedIds.filter(id => id !== m.id));
                             else setItemSuggestedIds([...itemSuggestedIds, m.id]);
                           }}
-                          className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center ${
+                          className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center cursor-pointer ${
                             isSel ? 'bg-amber-400/20 border-amber-400 text-white' : 'bg-white/[0.02] border-white/5 text-neutral-400'
                           }`}
                         >
@@ -2359,7 +2414,7 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                {/* 3. Retail Gourmet Pack Sizes (Dry fruits, Spices, Chocolates) */}
+                {/* 3. Retail Gourmet Pack Sizes */}
                 <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -2413,7 +2468,7 @@ export default function LuxuryGoldAdminPanel() {
                   <button
                     type="button"
                     onClick={() => itemFileRef.current?.click()}
-                    className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs"
+                    className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs cursor-pointer"
                   >
                     <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
                     <span>{itemImageUrl ? 'Change Photo' : 'Choose PC Photo'}</span>
@@ -2425,7 +2480,7 @@ export default function LuxuryGoldAdminPanel() {
                   )}
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs mt-2">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs mt-2 cursor-pointer">
                   {editingItem ? 'Update Dish / Product' : 'Publish Dish / Product'}
                 </button>
               </form>
@@ -2441,7 +2496,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">{editingCombo ? 'Edit Combo' : 'Smart Combo Creator'}</span>
-                <button onClick={() => setShowComboModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <button onClick={() => setShowComboModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
 
               <form onSubmit={handleSaveCombo} className="space-y-3.5">
@@ -2522,7 +2577,7 @@ export default function LuxuryGoldAdminPanel() {
                   <button
                     type="button"
                     onClick={() => comboFileRef.current?.click()}
-                    className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs"
+                    className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs cursor-pointer"
                   >
                     <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
                     <span>{comboImageUrl ? 'Change Photo' : 'Choose PC Photo'}</span>
@@ -2534,7 +2589,7 @@ export default function LuxuryGoldAdminPanel() {
                   )}
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
                   Publish Combo
                 </button>
               </form>
@@ -2550,7 +2605,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">{editingCategory ? 'Edit Category' : 'New Category'}</span>
-                <button onClick={() => setShowCategoryModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <button onClick={() => setShowCategoryModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
 
               <form onSubmit={handleSaveCategory} className="space-y-3">
@@ -2578,7 +2633,7 @@ export default function LuxuryGoldAdminPanel() {
                   </select>
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
                   {editingCategory ? 'Update Category' : 'Save Category'}
                 </button>
               </form>
@@ -2594,7 +2649,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">Add Dining Table</span>
-                <button onClick={() => setShowAddTableModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <button onClick={() => setShowAddTableModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
 
               <form onSubmit={handleAddTable} className="space-y-3">
@@ -2622,7 +2677,7 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
                   Deploy Table
                 </button>
               </form>
@@ -2638,7 +2693,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">Rename Table #{editingTableObj.table_number}</span>
-                <button onClick={() => setShowEditTableNameModal(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <button onClick={() => setShowEditTableNameModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
 
               <form onSubmit={handleUpdateTableName} className="space-y-3">
@@ -2653,7 +2708,7 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
                   Update Name
                 </button>
               </form>
@@ -2669,7 +2724,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">Edit Restaurant Title</span>
-                <button onClick={() => setIsNameModalOpen(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+                <button onClick={() => setIsNameModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
 
               <form onSubmit={async (e) => {
@@ -2698,7 +2753,7 @@ export default function LuxuryGoldAdminPanel() {
                     className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
                   />
                 </div>
-                <button type="submit" className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2">
+                <button type="submit" className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
                   Save Changes
                 </button>
               </form>
