@@ -45,7 +45,9 @@ import {
   Sparkles,
   Layers,
   Scale,
-  Search
+  Search,
+  Settings,
+  CheckCircle2
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -88,8 +90,14 @@ export default function LuxuryGoldAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // VaMC Manual Counter POS Modal States
+  // VaMC Manual Counter POS Modal States & Dedicated Counter Menu
   const [showVaMCModal, setShowVaMCModal] = useState(false);
+  const [vamcCounterItems, setVamcCounterItems] = useState<any[]>([]);
+  const [showVaMCCrudModal, setShowVaMCCrudModal] = useState(false);
+  const [editingVamcItem, setEditingVamcItem] = useState<any | null>(null);
+  const [vamcItemName, setVamcItemName] = useState('');
+  const [vamcItemPrice, setVamcItemPrice] = useState('');
+  
   const [vamcCart, setVamcCart] = useState<any[]>([]);
   const [vamcSearch, setVamcSearch] = useState('');
   const [vamcCustomerName, setVamcCustomerName] = useState('');
@@ -213,6 +221,15 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  const loadVaMCCounterItems = async () => {
+    try {
+      const { data } = await supabase.from('vamc_menu_items').select('*').order('name');
+      if (data) setVamcCounterItems(data);
+    } catch (e) {
+      setVamcCounterItems([]);
+    }
+  };
+
   const loadAdminData = async () => {
     setLoading(true);
     try {
@@ -237,6 +254,8 @@ export default function LuxuryGoldAdminPanel() {
         supabase.from('combos').select('*').order('id', { ascending: true }),
         supabase.from('waiter_calls').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       ]);
+
+      await loadVaMCCounterItems();
 
       try {
         const { data: loyalties } = await supabase.from('customer_loyalty').select('*');
@@ -274,6 +293,7 @@ export default function LuxuryGoldAdminPanel() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadAdminData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => loadVaMCCounterItems())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => loadAdminData())
@@ -2214,7 +2234,9 @@ export default function LuxuryGoldAdminPanel() {
         )}
       </main>
 
-      {/* VaMC Manual POS Counter Modal */}
+      {/* ======================================================== */}
+      {/* VaMC COUNTER POS MODAL (WITH SEPARATE COUNTER MENU & CRUD) */}
+      {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 font-mono">
@@ -2224,6 +2246,7 @@ export default function LuxuryGoldAdminPanel() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
+              {/* Modal Header with CRUD Manage Button */}
               <div className="flex justify-between items-center border-b border-white/10 pb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
@@ -2231,66 +2254,92 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                   <div>
                     <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Counter POS & Ledger</h2>
-                    <span className="text-[10px] text-neutral-400">Manual Item Selector, Cash Change Calculator & PhonePe Tracking</span>
+                    <span className="text-[10px] text-neutral-400">Independent Counter Menu Selector & Cash/UPI Change Calculator</span>
                   </div>
                 </div>
-                <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
-                  <X className="w-5 h-5" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Manage Counter Menu (CRUD) Button */}
+                  <button
+                    onClick={() => setShowVaMCCrudModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer shadow-md"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Manage Counter Menu (CRUD)</span>
+                  </button>
+
+                  <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1">
-                {/* Left: Menu Items Selector */}
+                
+                {/* Left: Interactive Visual Selection Blocks (Tap to Select/Deselect) */}
                 <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden">
                   <div className="relative">
                     <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search items for manual billing..."
+                      placeholder="Search counter items..."
                       value={vamcSearch}
                       onChange={(e) => setVamcSearch(e.target.value)}
                       className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37]"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
-                    {menuItems.filter(m => (m.name_en || m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          setVamcCart(prev => {
-                            const exist = prev.find(ci => ci.id === item.id);
-                            if (exist) return prev.map(ci => ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci);
-                            return [...prev, { ...item, quantity: 1 }];
-                          });
-                        }}
-                        className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 hover:border-[#D4AF37] cursor-pointer transition flex flex-col justify-between"
-                      >
-                        <div>
-                          <span className="text-xs font-bold text-white block line-clamp-1">{item.name_en || item.name}</span>
-                          <span className="text-[10px] text-neutral-400 block mt-0.5">₹{Number(item.price).toFixed(2)}</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
+                    {vamcCounterItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
+                      const isSelected = vamcCart.some(ci => ci.id === item.id);
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            setVamcCart(prev => {
+                              const exist = prev.find(ci => ci.id === item.id);
+                              if (exist) {
+                                // Deselect / Remove if already selected
+                                return prev.filter(ci => ci.id !== item.id);
+                              }
+                              return [...prev, { ...item, quantity: 1 }];
+                            });
+                          }}
+                          className={`p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                            isSelected 
+                              ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-lg' 
+                              : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
+                              {isSelected && <CheckCircle className="w-4 h-4 text-[#D4AF37] shrink-0" />}
+                            </div>
+                            <span className="text-[11px] font-black text-[#D4AF37] block mt-1">₹{Number(item.price).toFixed(2)}</span>
+                          </div>
+                          <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
+                            {isSelected ? '✓ Selected' : 'Tap to Select'}
+                          </span>
                         </div>
-                        <div className="mt-2 text-right">
-                          <span className="px-2.5 py-1 rounded-lg bg-[#D4AF37]/20 text-[#D4AF37] text-[10px] font-black">+ Add</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Right: Cart & Billing Ledger */}
                 <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col justify-between space-y-3">
                   <div>
-                    <h3 className="text-xs font-bold text-[#FCF6BA] uppercase border-b border-white/10 pb-2 mb-3">Current Bill Cart</h3>
+                    <h3 className="text-xs font-bold text-[#FCF6BA] uppercase border-b border-white/10 pb-2 mb-3">Selected Bill Cart</h3>
                     
                     <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
                       {vamcCart.length === 0 ? (
-                        <div className="text-center py-6 text-neutral-500 text-xs">No items selected yet. Tap items on left.</div>
+                        <div className="text-center py-6 text-neutral-500 text-xs">No items selected. Tap blocks on left.</div>
                       ) : (
                         vamcCart.map((ci, idx) => (
                           <div key={ci.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-2">
                             <div className="truncate pr-2">
-                              <span className="text-white font-bold block truncate">{ci.name_en || ci.name}</span>
+                              <span className="text-white font-bold block truncate">{ci.name}</span>
                               <span className="text-[10px] text-[#D4AF37]">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -2308,7 +2357,6 @@ export default function LuxuryGoldAdminPanel() {
                     </div>
                   </div>
 
-                  {/* Customer & Payment Mode */}
                   <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
                     <input
                       type="text"
@@ -2366,7 +2414,6 @@ export default function LuxuryGoldAdminPanel() {
                     )}
                   </div>
 
-                  {/* Total & Submit */}
                   <div className="pt-2 border-t border-white/10 space-y-2">
                     <div className="flex justify-between items-center text-sm font-black text-white">
                       <span>Total Bill:</span>
@@ -2394,10 +2441,11 @@ export default function LuxuryGoldAdminPanel() {
 
                           const itemsPayload = vamcCart.map(ci => ({
                             session_id: sess.id,
-                            menu_item_id: ci.id,
+                            menu_item_id: null,
                             quantity: ci.quantity,
                             unit_price: ci.price,
-                            item_status: 'served'
+                            item_status: 'served',
+                            cooking_notes: `VaMC Counter Item: ${ci.name}`
                           }));
 
                           await supabase.from('order_items').insert(itemsPayload);
@@ -2422,6 +2470,98 @@ export default function LuxuryGoldAdminPanel() {
 
                 </div>
 
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ======================================================== */}
+      {/* VAMC COUNTER MENU CRUD MODAL (ADD, EDIT, DELETE ITEMS) */}
+      {/* ======================================================== */}
+      <AnimatePresence>
+        {showVaMCCrudModal && (
+          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="text-sm font-black text-white uppercase">Manage VaMC Counter Menu Items (CRUD)</h3>
+                <button onClick={() => setShowVaMCCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+              </div>
+
+              {/* Add / Edit Form */}
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const cleanName = vamcItemName.trim();
+                const pr = parseFloat(vamcItemPrice);
+                if (!cleanName || isNaN(pr) || pr <= 0) return alert('Valid Name & Price ivvandi.');
+
+                setLoading(true);
+                try {
+                  if (editingVamcItem) {
+                    await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingVamcItem.id);
+                  } else {
+                    await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
+                  }
+                  setVamcItemName('');
+                  setVamcItemPrice('');
+                  setEditingVamcItem(null);
+                  loadVaMCCounterItems();
+                } catch (err: any) {
+                  alert('Error: ' + err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }} className="grid grid-cols-1 sm:grid-cols-3 gap-2 py-3 border-b border-white/10">
+                <input
+                  type="text"
+                  required
+                  placeholder="Item Name (e.g. Water Bottle)"
+                  value={vamcItemName}
+                  onChange={(e) => setVamcItemName(e.target.value)}
+                  className="bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs"
+                />
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="0.01"
+                  placeholder="Price ₹"
+                  value={vamcItemPrice}
+                  onChange={(e) => setVamcItemPrice(e.target.value)}
+                  className="bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold"
+                />
+                <button type="submit" disabled={loading} className="py-2 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer">
+                  {editingVamcItem ? 'Update Item' : '+ Add Item'}
+                </button>
+              </form>
+
+              {/* Counter Items List */}
+              <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
+                {vamcCounterItems.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-500 text-xs">No items added to VaMC counter menu yet. Add above.</div>
+                ) : (
+                  vamcCounterItems.map(item => (
+                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-white block">{item.name}</span>
+                        <span className="text-[#D4AF37] font-black">₹{Number(item.price).toFixed(2)}</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => { setEditingVamcItem(item); setVamcItemName(item.name); setVamcItemPrice(String(item.price)); }} className="p-1.5 rounded-lg bg-white/5 text-[#D4AF37] cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                        <button onClick={async () => {
+                          if (!confirm(`"${item.name}" delete cheyala?`)) return;
+                          await supabase.from('vamc_menu_items').delete().eq('id', item.id);
+                          loadVaMCCounterItems();
+                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </div>
