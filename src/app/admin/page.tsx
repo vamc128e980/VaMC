@@ -382,11 +382,13 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Settle Bill & Log Loyalty Visit
+  // Settle Bill & Log Loyalty Visit (₹180+ condition check)
   const handleSettleOrder = async (sessionId: string, tableNum: number, mode: 'cash' | 'upi') => {
     try {
       setLoading(true);
       const activeSess = sessions.find(s => s.id === sessionId);
+      const finalAmt = Number(activeSess?.total_amount || 0);
+
       if (activeSess && activeSess.customer_phone && activeSess.customer_phone.length === 10) {
         try {
           const { data: existingLoyal } = await supabase
@@ -395,9 +397,13 @@ export default function LuxuryGoldAdminPanel() {
             .eq('phone', activeSess.customer_phone)
             .maybeSingle();
 
+          const isQualifyingVisit = finalAmt >= 180;
+          const prevVisits = existingLoyal?.total_visits || 0;
+          const newVisitCount = isQualifyingVisit ? prevVisits + 1 : prevVisits;
+
           if (existingLoyal) {
             await supabase.from('customer_loyalty').update({
-              total_visits: (existingLoyal.total_visits || 1) + 1,
+              total_visits: newVisitCount,
               customer_name: activeSess.customer_name || existingLoyal.customer_name,
               last_visited_at: new Date().toISOString()
             }).eq('phone', activeSess.customer_phone);
@@ -405,7 +411,7 @@ export default function LuxuryGoldAdminPanel() {
             await supabase.from('customer_loyalty').insert({
               phone: activeSess.customer_phone,
               customer_name: activeSess.customer_name || 'Guest',
-              total_visits: 1,
+              total_visits: isQualifyingVisit ? 1 : 0,
               rewards_claimed: 0
             });
           }
@@ -1354,7 +1360,6 @@ export default function LuxuryGoldAdminPanel() {
                           Guest: <strong className="text-white">{sess.customer_name || 'Guest'}</strong> ({sess.customer_phone || '-'})
                         </div>
 
-                        {/* ORDER HISTORY ITEMS WITH ADD-ONS DISPLAY */}
                         <div className="space-y-1 text-[11px]">
                           {items.map((it, idx) => {
                             const addOnsCost = Array.isArray(it.selected_addons)
@@ -1636,19 +1641,19 @@ export default function LuxuryGoldAdminPanel() {
                                     <>
                                       <button
                                         onClick={() => handleUpdateItemQuantity(it.id, it.quantity, -1, curSession.id)}
-                                        className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white"
+                                        className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer"
                                       >
                                         <Minus className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={() => handleUpdateItemQuantity(it.id, it.quantity, 1, curSession.id)}
-                                        className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white"
+                                        className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer"
                                       >
                                         <Plus className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={() => handleCancelOrderItem(it.id, curSession.id, dName)}
-                                        className="px-2.5 py-1 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 font-bold text-[10px]"
+                                        className="px-2.5 py-1 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 font-bold text-[10px] cursor-pointer"
                                       >
                                         Cancel
                                       </button>
@@ -1698,7 +1703,7 @@ export default function LuxuryGoldAdminPanel() {
                         <button
                           type="button"
                           onClick={() => setPaymentMethods({ ...paymentMethods, [curSession.id]: 'cash' })}
-                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition ${
+                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition cursor-pointer ${
                             curMode === 'cash'
                               ? 'bg-amber-400 text-black border-transparent shadow-md'
                               : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white'
@@ -1711,7 +1716,7 @@ export default function LuxuryGoldAdminPanel() {
                         <button
                           type="button"
                           onClick={() => setPaymentMethods({ ...paymentMethods, [curSession.id]: 'upi' })}
-                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition ${
+                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition cursor-pointer ${
                             curMode === 'upi'
                               ? 'bg-emerald-400 text-black border-transparent shadow-md'
                               : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white'
@@ -1749,7 +1754,7 @@ export default function LuxuryGoldAdminPanel() {
                                     key={amt}
                                     type="button"
                                     onClick={() => setCustomerHandedAmounts({ ...customerHandedAmounts, [curSession.id]: String(amt) })}
-                                    className="px-2 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-amber-200 text-[10px] font-bold border border-white/5"
+                                    className="px-2 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-amber-200 text-[10px] font-bold border border-white/5 cursor-pointer"
                                   >
                                     ₹{amt}
                                   </button>
@@ -1757,7 +1762,7 @@ export default function LuxuryGoldAdminPanel() {
                                 <button
                                   type="button"
                                   onClick={() => setCustomerHandedAmounts({ ...customerHandedAmounts, [curSession.id]: String(grossTotal) })}
-                                  className="px-2 py-1 rounded-lg bg-white/[0.05] text-neutral-300 text-[10px]"
+                                  className="px-2 py-1 rounded-lg bg-white/[0.05] text-neutral-300 text-[10px] cursor-pointer"
                                 >
                                   Exact
                                 </button>
@@ -1794,7 +1799,7 @@ export default function LuxuryGoldAdminPanel() {
                       <motion.button
                         whileTap={{ scale: 0.95 }}
                         onClick={() => printKitchenOrderTicket(curSession)}
-                        className="px-4 py-3.5 rounded-[20px] border border-amber-400/40 bg-amber-400/10 text-amber-200 font-bold text-xs uppercase flex items-center gap-1.5 hover:bg-amber-400/20"
+                        className="px-4 py-3.5 rounded-[20px] border border-amber-400/40 bg-amber-400/10 text-amber-200 font-bold text-xs uppercase flex items-center gap-1.5 hover:bg-amber-400/20 cursor-pointer"
                         title="Print Kitchen Order Ticket (Dishes & Add-ons)"
                       >
                         <ChefHat className="w-4 h-4 text-amber-400" />
@@ -1804,7 +1809,7 @@ export default function LuxuryGoldAdminPanel() {
                       <motion.button
                         whileTap={{ scale: 0.95 }}
                         onClick={() => printThermalSlip(curSession)}
-                        className="px-4 py-3.5 rounded-[20px] border border-white/10 bg-white/[0.05] text-white font-bold text-xs uppercase flex items-center gap-1.5"
+                        className="px-4 py-3.5 rounded-[20px] border border-white/10 bg-white/[0.05] text-white font-bold text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                       >
                         <Printer className="w-4 h-4 text-[#D4AF37]" />
                         <span>Receipt</span>
@@ -1823,7 +1828,7 @@ export default function LuxuryGoldAdminPanel() {
             <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto custom-gold-scrollbar">
               {[
                 { id: 'items', label: '1. Dishes & Retail', icon: UtensilsCrossed },
-                { id: 'addons', label: '2. Add-ons Master', icon: Sparkles },
+                { id: 'addons', label: '2. Add-ons Master (Full CRUD)', icon: Sparkles },
                 { id: 'combos', label: '3. Smart Combos', icon: PackagePlus },
                 { id: 'promos', label: '4. Slider Banners', icon: ImageIcon }
               ].map(sub => {
@@ -1833,7 +1838,7 @@ export default function LuxuryGoldAdminPanel() {
                   <button
                     key={sub.id}
                     onClick={() => setMenuHubTab(sub.id as any)}
-                    className={`px-5 py-2.5 rounded-[20px] text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition shrink-0 ${
+                    className={`px-5 py-2.5 rounded-[20px] text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
                       isCur
                         ? 'bg-[#D4AF37] text-black font-black shadow-md'
                         : 'bg-white/[0.02] border border-white/10 text-neutral-400 hover:text-white'
@@ -1988,13 +1993,13 @@ export default function LuxuryGoldAdminPanel() {
               </div>
             )}
 
-            {/* B.2: Add-ons Master Tab (Full CRUD View) */}
+            {/* B.2: Add-ons Master Tab (FULL CRUD VIEW) */}
             {menuHubTab === 'addons' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="text-sm font-black text-white uppercase font-mono">Add-ons Master ({addons.length})</h4>
-                    <p className="text-xs text-neutral-400 font-mono">Manage ice cream scoops, dry fruit toppings, dips, and customization add-ons.</p>
+                    <h4 className="text-sm font-black text-white uppercase font-mono">Add-ons Master CRUD ({addons.length})</h4>
+                    <p className="text-xs text-neutral-400 font-mono">Add, Edit Name & Price, Toggle Floor Stock, or Delete Add-ons.</p>
                   </div>
                   <button
                     onClick={() => {
@@ -2006,39 +2011,34 @@ export default function LuxuryGoldAdminPanel() {
                     }}
                     className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
-                    <Plus className="w-4 h-4 stroke-[3]" /> Add New Add-on
+                    <Plus className="w-4 h-4 stroke-[3]" /> Add New Addon
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 font-mono text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 font-mono text-xs">
                   {addons.length === 0 ? (
                     <div className="col-span-full py-12 text-center text-neutral-500 font-mono text-xs">
-                      No add-ons created yet. Click "+ Add New Add-on" to create.
+                      No add-ons created yet. Click "+ Add New Addon" to create.
                     </div>
                   ) : (
                     addons.map(a => (
-                      <div key={a.id} className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center shadow-lg hover:border-[#D4AF37]/40 transition">
+                      <div key={a.id} className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center shadow-lg hover:border-[#D4AF37]/50 transition">
                         <div>
-                          <span className="font-bold text-white block text-sm">{a.name}</span>
+                          <span className="font-bold text-white text-sm block">{a.name}</span>
                           <span className="text-[#D4AF37] font-black text-sm mt-0.5 block">+₹{Number(a.price).toFixed(2)}</span>
-                          <span className="text-[10px] text-neutral-500 block uppercase mt-0.5">[{a.category || 'general'}]</span>
+                          <span className="text-[10px] text-neutral-500 uppercase block mt-0.5">[{a.category || 'general'}]</span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          {/* Availability Toggle */}
                           <button
                             onClick={() => handleToggleAddon(a.id, a.is_available)}
-                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase border transition cursor-pointer ${
-                              a.is_available 
-                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25' 
-                                : 'bg-rose-500/15 border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase border cursor-pointer ${
+                              a.is_available ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
                             }`}
                           >
                             {a.is_available ? 'Active' : 'Off'}
                           </button>
-
-                          {/* Edit Add-on */}
-                          <button 
+                          <button
                             onClick={() => {
                               setEditingAddon(a);
                               setAddonName(a.name || '');
@@ -2046,17 +2046,15 @@ export default function LuxuryGoldAdminPanel() {
                               setAddonCategory(a.category || 'general');
                               setShowAddonModal(true);
                             }}
-                            className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-neutral-300 hover:text-white cursor-pointer"
-                            title="Edit Add-on"
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[#D4AF37] cursor-pointer"
+                            title="Edit Name & Price"
                           >
-                            <Edit3 className="w-3.5 h-3.5 text-[#D4AF37]" />
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
-
-                          {/* Delete Add-on */}
-                          <button 
-                            onClick={() => handleDeleteAddon(a.id, a.name)} 
+                          <button
+                            onClick={() => handleDeleteAddon(a.id, a.name)}
                             className="p-1.5 rounded-lg bg-rose-950/30 text-rose-300 hover:bg-rose-950/50 cursor-pointer"
-                            title="Delete Add-on"
+                            title="Delete Addon"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2221,13 +2219,13 @@ export default function LuxuryGoldAdminPanel() {
                     placeholder="e.g. Vanilla Ice Cream Scoop"
                     value={addonName}
                     onChange={(e) => setAddonName(e.target.value)}
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
+                    className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="text-neutral-400 block mb-1">Extra Price (₹) *</label>
+                    <label className="text-neutral-400 block mb-1">Price (₹) *</label>
                     <input
                       type="number"
                       required
@@ -2236,7 +2234,7 @@ export default function LuxuryGoldAdminPanel() {
                       placeholder="e.g. 30"
                       value={addonPrice}
                       onChange={(e) => setAddonPrice(e.target.value)}
-                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold focus:border-[#D4AF37]"
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37] font-bold"
                     />
                   </div>
 
@@ -2259,7 +2257,7 @@ export default function LuxuryGoldAdminPanel() {
                 <button 
                   type="submit" 
                   disabled={loading} 
-                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-2 cursor-pointer hover:brightness-110"
+                  className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-2 cursor-pointer hover:brightness-110"
                 >
                   {loading ? 'Saving...' : (editingAddon ? 'Update Add-on' : 'Save Add-on')}
                 </button>
