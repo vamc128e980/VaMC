@@ -58,7 +58,7 @@ export default function LuxuryCustomerTablePage() {
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   
-  // Banners State (Strictly Uploaded Images Only - No Title Overlays)
+  // Banners State (Strictly Uploaded Images Only - Full Width Wide Layout)
   const [banners, setBanners] = useState<any[]>([
     {
       id: 999,
@@ -459,7 +459,7 @@ export default function LuxuryCustomerTablePage() {
     addToCartDirect(drink, false, [], null, true);
     setIsRewardClaimedThisSession(true);
     setShowRewardModal(false);
-    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE for your 10th Visit!`);
+    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE as your 10th Visit Gift!`);
     setTimeout(() => setWaiterToast(null), 4000);
   };
 
@@ -484,7 +484,7 @@ export default function LuxuryCustomerTablePage() {
     triggerHaptic(30);
     if (!realTableNumber) return alert('Invalid table.');
     if (!activeSessionId && (customerName.trim().length < 2 || customerPhone.length !== 10)) {
-      return alert('Please enter Guest Name & 10-digit Phone.');
+      return alert('Please enter Guest Name and 10-digit Phone.');
     }
 
     setLoading(true);
@@ -593,7 +593,7 @@ export default function LuxuryCustomerTablePage() {
       
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#060608]/90 backdrop-blur-2xl px-4 pt-3.5 pb-3 border-b border-white/[0.08] shadow-2xl">
-        <div className="max-w-md md:max-w-3xl lg:max-w-5xl mx-auto flex items-center justify-between gap-2">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div>
             <span className="text-[9px] tracking-[0.2em] font-mono uppercase text-[#D4AF37] block font-bold">ROYAL FINE-DINE</span>
             <h1 className="text-base font-black text-amber-200 tracking-wide mt-0.5">{displayTableName}</h1>
@@ -614,8 +614,8 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-md md:max-w-3xl lg:max-w-5xl mx-auto px-4 pt-4 space-y-4">
+      {/* Main Container */}
+      <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
 
         {/* 10th Visit Reward Card */}
         {is10thVisitMilestone && !isRewardClaimedThisSession && (
@@ -654,9 +654,9 @@ export default function LuxuryCustomerTablePage() {
           </div>
         )}
 
-        {/* CLEAN BANNER CAROUSEL (STRICTLY UPLOADED IMAGES ONLY - NO TITLES) */}
+        {/* RESTORED FULL-WIDTH WIDE BANNER (EXACTLY LIKE 1ST IMAGE - NO TITLES/NAMES, JUST RAW UPLOADED IMAGES) */}
         {banners.length > 0 && (
-          <div className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden rounded-[28px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
+          <div className="relative w-full h-48 sm:h-56 overflow-hidden rounded-[24px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
             <AnimatePresence mode="wait">
               {banners[currentBannerIndex] && (
                 <motion.div
@@ -664,8 +664,8 @@ export default function LuxuryCustomerTablePage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className="w-full h-full relative"
+                  transition={{ duration: 0.4 }}
+                  className="w-full h-full"
                 >
                   <img
                     src={banners[currentBannerIndex].image_url}
@@ -678,14 +678,14 @@ export default function LuxuryCustomerTablePage() {
 
             {/* Pagination Dots */}
             {banners.length > 1 && (
-              <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+              <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
                 {banners.map((_, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setCurrentBannerIndex(idx)}
                     className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      idx === currentBannerIndex ? 'w-6 bg-[#D4AF37]' : 'w-1.5 bg-white/40'
+                      idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'
                     }`}
                   />
                 ))}
@@ -736,7 +736,7 @@ export default function LuxuryCustomerTablePage() {
         </div>
 
         {/* Dishes Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {filteredMenuItems.map((item) => {
             const inCart = cart.find(ci => ci.menuItem.id === item.id);
             const dishTitle = item.name_en || item.name;
@@ -744,7 +744,7 @@ export default function LuxuryCustomerTablePage() {
             return (
               <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[24px] p-3 flex flex-col justify-between shadow-xl relative">
                 <div>
-                  <div className="h-28 sm:h-32 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2 relative">
+                  <div className="h-28 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2 relative">
                     {item.image_url ? (
                       <img src={item.image_url} alt={dishTitle} className="w-full h-full object-cover" />
                     ) : (
@@ -783,10 +783,10 @@ export default function LuxuryCustomerTablePage() {
       </main>
 
       {/* Floating Bottom Action Dock */}
-      <div className="fixed bottom-4 inset-x-4 max-w-md md:max-w-xl mx-auto z-50 pointer-events-none">
-        <div className="pointer-events-auto p-2 rounded-[28px] bg-[#0c0c0e]/95 border border-[#D4AF37]/50 shadow-[0_12px_40px_rgba(0,0,0,0.9)] backdrop-blur-2xl flex items-center justify-between gap-2">
+      <div className="fixed bottom-4 inset-x-4 max-w-md mx-auto z-40">
+        <div className="p-2 rounded-[28px] bg-[#0c0c0e]/95 border border-[#D4AF37]/50 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex items-center justify-between gap-2">
+          
           <button
-            type="button"
             onClick={() => handleCallWaiter('water')}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer"
           >
@@ -796,7 +796,6 @@ export default function LuxuryCustomerTablePage() {
 
           {cartItemCount > 0 ? (
             <button
-              type="button"
               onClick={() => setIsCartOpen(true)}
               className="flex-1 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black py-2.5 px-4 rounded-2xl flex items-center justify-between font-black text-xs font-mono shadow-lg cursor-pointer"
             >
@@ -808,9 +807,8 @@ export default function LuxuryCustomerTablePage() {
             </button>
           ) : (
             <button
-              type="button"
               onClick={() => setIsTotalBillModalOpen(true)}
-              className="flex-1 py-2 rounded-2xl text-xs font-mono text-neutral-400 hover:text-white text-right pr-3 cursor-pointer"
+              className="flex-1 py-2 rounded-2xl text-xs font-mono text-neutral-400 hover:text-white text-right pr-2 cursor-pointer"
             >
               Running Bill: <strong className="text-[#D4AF37]">₹{runningGrandTotal.toFixed(2)}</strong>
             </button>
@@ -997,31 +995,6 @@ export default function LuxuryCustomerTablePage() {
               <button onClick={() => setIsTotalBillModalOpen(false)} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase cursor-pointer">
                 Close Ledger
               </button>
-            </div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Reward Claim Modal */}
-      <AnimatePresence>
-        {showRewardModal && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0f0e12] border border-[#D4AF37] rounded-[28px] p-5 space-y-3 font-mono text-xs">
-              <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                <span className="font-black text-white uppercase">Claim 10th Visit Reward</span>
-                <button onClick={() => setShowRewardModal(false)} className="text-neutral-400 cursor-pointer"><X className="w-4 h-4" /></button>
-              </div>
-              <p className="text-neutral-300 text-[11px]">Pick any drink below completely FREE (₹0.00)!</p>
-              <div className="space-y-2">
-                {freeRewardDrinks.map(d => (
-                  <div key={d.id} className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 flex justify-between items-center">
-                    <span className="font-bold text-white">{d.name_en || d.name}</span>
-                    <button onClick={() => handleClaimFreeReward(d)} className="px-3 py-1.5 rounded-lg bg-emerald-400 text-black font-black uppercase text-[10px] cursor-pointer">
-                      Pick Free
-                    </button>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         )}
