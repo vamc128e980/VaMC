@@ -461,7 +461,7 @@ export default function LuxuryCustomerTablePage() {
       
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#060608]/90 backdrop-blur-2xl px-4 pt-3.5 pb-3 border-b border-white/[0.08] shadow-2xl">
-        <div className="max-w-md md:max-w-3xl lg:max-w-5xl mx-auto flex items-center justify-between gap-2">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div>
             <span className="text-[9px] tracking-[0.2em] font-mono uppercase text-[#D4AF37] block font-bold">ROYAL FINE-DINE</span>
             <h1 className="text-base font-black text-amber-200 tracking-wide mt-0.5">{displayTableName}</h1>
@@ -483,7 +483,7 @@ export default function LuxuryCustomerTablePage() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-md md:max-w-3xl lg:max-w-5xl mx-auto px-4 pt-4 space-y-4">
+      <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
 
         {/* 10th Visit Reward Card */}
         {is10thVisitMilestone && !isRewardClaimedThisSession && (
@@ -522,7 +522,7 @@ export default function LuxuryCustomerTablePage() {
           </div>
         )}
 
-        {/* RESTORED WIDE BANNER (NO TITLES - ONLY CLEAN UPLOADED IMAGES WITH DOTS) */}
+        {/* CLEAN WIDE BANNER (NO NAMES, NO TITLES - ONLY UPLOADED IMAGES WITH DOTS) */}
         {banners.length > 0 && (
           <div className="relative w-full h-48 sm:h-56 overflow-hidden rounded-[24px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
             <AnimatePresence mode="wait">
@@ -602,12 +602,11 @@ export default function LuxuryCustomerTablePage() {
           </div>
         </div>
 
-        {/* DISHES GRID (UPDATED TO 3 COLUMNS) WITH VEG (GREEN CIRCLE) & NON-VEG (RED TRIANGLE) INDICATORS */}
+        {/* Dishes Grid (3 Columns Layout) */}
         <div className="grid grid-cols-3 gap-2.5">
           {filteredMenuItems.map((item) => {
             const inCart = cart.find(ci => ci.menuItem.id === item.id);
             const dishTitle = item.name_en || item.name;
-            const isNonVeg = item.food_type === 'non_veg';
 
             return (
               <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[20px] p-2.5 flex flex-col justify-between shadow-xl relative">
@@ -618,15 +617,7 @@ export default function LuxuryCustomerTablePage() {
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-5 h-5" /></div>
                     )}
-                    
-                    {/* VEG GREEN CIRCLE / NON-VEG RED TRIANGLE INDICATOR */}
-                    <div className="absolute top-1.5 left-1.5 w-3 h-3 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center p-0.5">
-                      {isNonVeg ? (
-                        <div className="w-0 h-0 border-x-[3px] border-x-transparent border-b-[5px] border-b-rose-500" />
-                      ) : (
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      )}
-                    </div>
+                    <span className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
                   </div>
                   <h4 className="text-[11px] font-bold text-white line-clamp-1">{dishTitle}</h4>
                 </div>
@@ -660,6 +651,7 @@ export default function LuxuryCustomerTablePage() {
       {/* Floating Bottom Action Dock */}
       <div className="fixed bottom-4 inset-x-4 max-w-md mx-auto z-40">
         <div className="p-2 rounded-[28px] bg-[#0c0c0e]/95 border border-[#D4AF37]/50 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex items-center justify-between gap-2">
+          
           <button
             onClick={() => handleCallWaiter('water')}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer"
@@ -690,7 +682,7 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* Cart Drawer (With Ajio / Flipkart style highlighed free item & low visibility condition) */}
+      {/* Cart Drawer */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -762,13 +754,14 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* PROFESSIONAL E-COMMERCE STYLE: HIGHLIGHTED FREE ITEM & LOW VISIBILITY CONDITION */}
+              {/* Ajio / Flipkart Style Highlighted Free Item with Low Visibility Condition */}
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3">
                 <div className="flex justify-between text-white font-black text-sm">
                   <span>Payable at Counter:</span>
                   <span className="text-[#D4AF37] text-base">₹{cartGrandTotal.toFixed(2)}</span>
                 </div>
 
+                {/* Professional E-Commerce Highlight Technique */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/30 to-[#12110c] border border-amber-400/30 space-y-1">
                   <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
