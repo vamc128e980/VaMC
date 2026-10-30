@@ -87,6 +87,15 @@ export default function LuxuryGoldAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
+  // VaMC Manual Counter POS Modal States
+  const [showVaMCModal, setShowVaMCModal] = useState(false);
+  const [vamcCart, setVamcCart] = useState<any[]>([]);
+  const [vamcSearch, setVamcSearch] = useState('');
+  const [vamcCustomerName, setVamcCustomerName] = useState('');
+  const [vamcCustomerPhone, setVamcCustomerPhone] = useState('');
+  const [vamcPaymentMode, setVamcPaymentMode] = useState<'cash' | 'upi'>('cash');
+  const [vamcCustomerHanded, setVamcCustomerHanded] = useState('');
+
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
@@ -382,7 +391,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Settle Bill & Log Loyalty Visit (₹180+ condition check)
+  // Settle Bill & Log Loyalty Visit
   const handleSettleOrder = async (sessionId: string, tableNum: number, mode: 'cash' | 'upi') => {
     try {
       setLoading(true);
@@ -572,9 +581,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // ==========================================
-  // ADD-ONS MASTER CRUD (Complete Implementation)
-  // ==========================================
+  // Add-ons Master CRUD
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = addonName.trim();
@@ -1134,6 +1141,17 @@ export default function LuxuryGoldAdminPanel() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* VaMC Manual POS Counter Button */}
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => setShowVaMCModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[#D4AF37]/50 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer shadow-md"
+              title="Vujwala Simha Master Counter (VaMC)"
+            >
+              <Calculator className="w-4 h-4 text-[#D4AF37]" />
+              <span>VaMC</span>
+            </motion.button>
+
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={() => {
@@ -2194,6 +2212,220 @@ export default function LuxuryGoldAdminPanel() {
           </div>
         )}
       </main>
+
+      {/* VaMC Manual POS Counter Modal */}
+      <AnimatePresence>
+        {showVaMCModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                    <Calculator className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Counter POS & Ledger</h2>
+                    <span className="text-[10px] text-neutral-400">Manual Item Selector, Cash Change Calculator & PhonePe Tracking</span>
+                  </div>
+                </div>
+                <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1">
+                {/* Left: Menu Items Selector */}
+                <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search items for manual billing..."
+                      value={vamcSearch}
+                      onChange={(e) => setVamcSearch(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
+                    {menuItems.filter(m => (m.name_en || m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setVamcCart(prev => {
+                            const exist = prev.find(ci => ci.id === item.id);
+                            if (exist) return prev.map(ci => ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci);
+                            return [...prev, { ...item, quantity: 1 }];
+                          });
+                        }}
+                        className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 hover:border-[#D4AF37] cursor-pointer transition flex flex-col justify-between"
+                      >
+                        <div>
+                          <span className="text-xs font-bold text-white block line-clamp-1">{item.name_en || item.name}</span>
+                          <span className="text-[10px] text-neutral-400 block mt-0.5">₹{Number(item.price).toFixed(2)}</span>
+                        </div>
+                        <div className="mt-2 text-right">
+                          <span className="px-2.5 py-1 rounded-lg bg-[#D4AF37]/20 text-[#D4AF37] text-[10px] font-black">+ Add</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right: Cart & Billing Ledger */}
+                <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-[#FCF6BA] uppercase border-b border-white/10 pb-2 mb-3">Current Bill Cart</h3>
+                    
+                    <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
+                      {vamcCart.length === 0 ? (
+                        <div className="text-center py-6 text-neutral-500 text-xs">No items selected yet. Tap items on left.</div>
+                      ) : (
+                        vamcCart.map((ci, idx) => (
+                          <div key={ci.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-2">
+                            <div className="truncate pr-2">
+                              <span className="text-white font-bold block truncate">{ci.name_en || ci.name}</span>
+                              <span className="text-[10px] text-[#D4AF37]">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button onClick={() => {
+                                setVamcCart(prev => prev.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0));
+                              }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Minus className="w-3 h-3" /></button>
+                              <span className="px-1 text-white font-bold">{ci.quantity}</span>
+                              <button onClick={() => {
+                                setVamcCart(prev => prev.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item));
+                              }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Plus className="w-3 h-3" /></button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer & Payment Mode */}
+                  <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
+                    <input
+                      type="text"
+                      placeholder="Customer Name (Optional)"
+                      value={vamcCustomerName}
+                      onChange={(e) => setVamcCustomerName(e.target.value)}
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                    />
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      placeholder="Phone Number (Optional)"
+                      value={vamcCustomerPhone}
+                      onChange={(e) => setVamcCustomerPhone(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-mono"
+                    />
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setVamcPaymentMode('cash')}
+                        className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
+                          vamcPaymentMode === 'cash' ? 'bg-amber-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
+                        }`}
+                      >
+                        <Banknote className="w-3.5 h-3.5" /> Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVamcPaymentMode('upi')}
+                        className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
+                          vamcPaymentMode === 'upi' ? 'bg-emerald-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
+                        }`}
+                      >
+                        <Smartphone className="w-3.5 h-3.5" /> PhonePe / Paid
+                      </button>
+                    </div>
+
+                    {vamcPaymentMode === 'cash' && (
+                      <div className="p-2.5 rounded-xl bg-black/40 border border-amber-400/30 space-y-1">
+                        <input
+                          type="number"
+                          placeholder="Customer Handed Cash ₹"
+                          value={vamcCustomerHanded}
+                          onChange={(e) => setVamcCustomerHanded(e.target.value)}
+                          className="w-full bg-[#161619] border border-amber-400/40 rounded-lg px-2.5 py-1.5 text-white font-bold outline-none"
+                        />
+                        <div className="flex justify-between text-[11px] pt-1">
+                          <span className="text-neutral-400">Change to return:</span>
+                          <span className="text-emerald-400 font-bold">
+                            ₹{((parseFloat(vamcCustomerHanded) || 0) >= (vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(vamcCustomerHanded) || 0) - (vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Total & Submit */}
+                  <div className="pt-2 border-t border-white/10 space-y-2">
+                    <div className="flex justify-between items-center text-sm font-black text-white">
+                      <span>Total Bill:</span>
+                      <span className="text-[#D4AF37] text-base">₹{vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
+                    </div>
+                    <button
+                      disabled={loading || vamcCart.length === 0}
+                      onClick={async () => {
+                        const total = vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0);
+                        setLoading(true);
+                        try {
+                          const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
+                            table_number: 0,
+                            customer_name: vamcCustomerName.trim() || 'VaMC Counter',
+                            customer_phone: vamcCustomerPhone.trim() || '0000000000',
+                            subtotal: total,
+                            total_amount: total,
+                            final_payable: total,
+                            status: 'completed',
+                            payment_status: 'paid',
+                            payment_mode: vamcPaymentMode
+                          }).select().single();
+
+                          if (sErr) throw sErr;
+
+                          const itemsPayload = vamcCart.map(ci => ({
+                            session_id: sess.id,
+                            menu_item_id: ci.id,
+                            quantity: ci.quantity,
+                            unit_price: ci.price,
+                            item_status: 'served'
+                          }));
+
+                          await supabase.from('order_items').insert(itemsPayload);
+                          alert(`VaMC Sale Complete! Total: ₹${total.toFixed(2)} (${vamcPaymentMode.toUpperCase()})`);
+                          setVamcCart([]);
+                          setVamcCustomerName('');
+                          setVamcCustomerPhone('');
+                          setVamcCustomerHanded('');
+                          setShowVaMCModal(false);
+                          loadAdminData();
+                        } catch (err: any) {
+                          alert('Error: ' + err.message);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+                    >
+                      {loading ? 'Processing...' : 'Complete Sale & Log Ledger'}
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* MODALS */}
       {/* Add-on Master CRUD Modal (Create & Edit) */}
