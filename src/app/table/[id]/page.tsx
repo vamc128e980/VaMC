@@ -45,20 +45,17 @@ export default function LuxuryCustomerTablePage() {
   const params = useParams();
   const rawTableParam = decodeURIComponent((params.id as string) || '');
 
-  // Language & Table Identity
   const [activeLang, setActiveLang] = useState<'en' | 'te' | 'hi'>('en');
   const [realTableNumber, setRealTableNumber] = useState<number | null>(null);
   const [displayTableName, setDisplayTableName] = useState<string>('');
   const [tableResolved, setTableResolved] = useState<boolean>(false);
   const [tableNotFound, setTableNotFound] = useState<boolean>(false);
 
-  // Core Data
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   
-  // Banners State (Strictly Uploaded Images Only - Full Width Wide Layout)
   const [banners, setBanners] = useState<any[]>([
     {
       id: 999,
@@ -68,29 +65,24 @@ export default function LuxuryCustomerTablePage() {
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [topPickDishIds, setTopPickDishIds] = useState<number[]>([]);
 
-  // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'combos' | null>(null);
   const [foodFilter, setFoodFilter] = useState<'all' | 'veg' | 'non_veg'>('all');
 
-  // Add-ons Customization Bottom Sheet
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [selectedWeightVariant, setSelectedWeightVariant] = useState<any | null>(null);
 
-  // Cart & Item-wise Cooking Notes
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Active Dining Session & Customer Loyalty
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerVisitCount, setCustomerVisitCount] = useState<number>(1);
   const [isRewardClaimedThisSession, setIsRewardClaimedThisSession] = useState(false);
   const [showRewardModal, setShowRewardModal] = useState(false);
 
-  // Active Live Order Token / PIN
   const [activeOrderToken, setActiveOrderToken] = useState<string | null>(null);
   const [activeBatchStatus, setActiveBatchStatus] = useState<string | null>(null);
 
@@ -99,14 +91,12 @@ export default function LuxuryCustomerTablePage() {
   const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
   const [isTotalBillModalOpen, setIsTotalBillModalOpen] = useState(false);
 
-  // Waiter Call Feature
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [waiterToast, setWaiterToast] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
 
-  // Language Trigger
   const triggerGoogleTranslate = (langCode: 'en' | 'te' | 'hi') => {
     setActiveLang(langCode);
     triggerHaptic(15);
@@ -125,7 +115,6 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Dynamic Identity Resolver
   const resolveTableIdentity = async () => {
     if (!rawTableParam) return;
     try {
@@ -134,93 +123,44 @@ export default function LuxuryCustomerTablePage() {
       let matched = null;
 
       if (isNumeric) {
-        const { data } = await supabase
-          .from('restaurant_tables')
-          .select('*')
-          .eq('table_number', parseInt(cleanParam))
-          .maybeSingle();
+        const { data } = await supabase.from('restaurant_tables').select('*').eq('table_number', parseInt(cleanParam)).maybeSingle();
         matched = data;
       } else {
-        const { data } = await supabase
-          .from('restaurant_tables')
-          .select('*')
-          .ilike('table_name', cleanParam)
-          .maybeSingle();
+        const { data } = await supabase.from('restaurant_tables').select('*').ilike('table_name', cleanParam).maybeSingle();
         matched = data;
       }
 
       if (matched) {
-        const tNum = matched.table_number;
-        const assignedName = matched.table_name || `Table #${tNum}`;
-        setRealTableNumber(tNum);
-        setDisplayTableName(assignedName);
+        setRealTableNumber(matched.table_number);
+        setDisplayTableName(matched.table_name || `Table #${matched.table_number}`);
         setTableResolved(true);
         setTableNotFound(false);
-
-        if (typeof window !== 'undefined' && matched.table_name && matched.table_name.trim() !== '') {
-          const targetPath = `/table/${encodeURIComponent(matched.table_name.trim())}`;
-          if (window.location.pathname !== targetPath) {
-            window.history.replaceState(null, '', targetPath);
-          }
-        }
-        return;
-      } else {
-        if (isNumeric) {
-          const fallbackNum = parseInt(cleanParam);
-          setRealTableNumber(fallbackNum);
-          setDisplayTableName(`Table #${fallbackNum}`);
-          setTableResolved(true);
-          setTableNotFound(false);
-        } else {
-          setTableNotFound(true);
-          setTableResolved(false);
-        }
-      }
-    } catch (err) {
-      if (/^\d+$/.test(rawTableParam.trim())) {
-        const fallbackNum = parseInt(rawTableParam.trim());
-        setRealTableNumber(fallbackNum);
-        setDisplayTableName(`Table #${fallbackNum}`);
+      } else if (isNumeric) {
+        setRealTableNumber(parseInt(cleanParam));
+        setDisplayTableName(`Table #${cleanParam}`);
         setTableResolved(true);
-        setTableNotFound(false);
       } else {
         setTableNotFound(true);
-        setTableResolved(false);
       }
+    } catch (err) {
+      setTableNotFound(true);
     }
   };
 
   useEffect(() => {
     resolveTableIdentity();
-    if (typeof document !== 'undefined') {
-      const cookies = document.cookie || '';
-      if (cookies.includes('googtrans=/en/te')) setActiveLang('te');
-      else if (cookies.includes('googtrans=/en/hi')) setActiveLang('hi');
-      else setActiveLang('en');
-    }
   }, [rawTableParam]);
 
   const fetchSessionItems = async (sessionId: string) => {
     try {
-      const { data } = await supabase
-        .from('order_items')
-        .select('*, menu_items(name_en, name, price)')
-        .eq('session_id', sessionId)
-        .neq('item_status', 'cancelled');
+      const { data } = await supabase.from('order_items').select('*, menu_items(name_en, name, price)').eq('session_id', sessionId).neq('item_status', 'cancelled');
       if (data) setSessionOrderedItems(data);
     } catch (e) {}
   };
 
   const fetchLatestOrderToken = async (sessionId: string) => {
     try {
-      const { data } = await supabase
-        .from('order_batches')
-        .select('id, order_pin, status')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
+      const { data } = await supabase.from('order_batches').select('id, order_pin, status').eq('session_id', sessionId).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (data) {
         setActiveOrderToken(data.order_pin);
         setActiveBatchStatus(data.status);
@@ -230,14 +170,7 @@ export default function LuxuryCustomerTablePage() {
 
   const syncSessionData = async () => {
     if (!realTableNumber) return;
-    const { data: session } = await supabase
-      .from('table_sessions')
-      .select('*')
-      .eq('table_number', realTableNumber)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: session } = await supabase.from('table_sessions').select('*').eq('table_number', realTableNumber).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle();
 
     if (session) {
       setActiveSessionId(session.id);
@@ -246,37 +179,20 @@ export default function LuxuryCustomerTablePage() {
       setCustomerPhone(session.customer_phone || '');
       fetchSessionItems(session.id);
       fetchLatestOrderToken(session.id);
-      localStorage.setItem(`table_sess_${realTableNumber}`, session.id);
-
-      if (session.customer_phone) {
-        checkLoyaltyProfile(session.customer_phone);
-      }
+      if (session.customer_phone) checkLoyaltyProfile(session.customer_phone);
     } else {
       setActiveSessionId(null);
       setActiveSessionTotal(0);
-      setCustomerName('');
-      setCustomerPhone('');
       setSessionOrderedItems([]);
       setActiveOrderToken(null);
-      setActiveBatchStatus(null);
-      localStorage.removeItem(`table_sess_${realTableNumber}`);
     }
   };
 
   const checkLoyaltyProfile = async (phone: string) => {
     if (!phone || phone.length !== 10) return;
     try {
-      const { data } = await supabase
-        .from('customer_loyalty')
-        .select('*')
-        .eq('phone', phone.trim())
-        .maybeSingle();
-
-      if (data) {
-        setCustomerVisitCount(data.total_visits || 1);
-      } else {
-        setCustomerVisitCount(1);
-      }
+      const { data } = await supabase.from('customer_loyalty').select('*').eq('phone', phone.trim()).maybeSingle();
+      if (data) setCustomerVisitCount(data.total_visits || 1);
     } catch (e) {}
   };
 
@@ -297,11 +213,7 @@ export default function LuxuryCustomerTablePage() {
 
     if (cats && cats.length > 0) {
       setCategories(cats);
-      setSelectedCategory((prev) => {
-        if (prev === 'combos') return 'combos';
-        const exists = cats.some((c) => c.id === prev);
-        return exists ? prev : cats[0].id;
-      });
+      setSelectedCategory(prev => prev || cats[0].id);
     }
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
@@ -310,30 +222,6 @@ export default function LuxuryCustomerTablePage() {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
     }
-
-    try {
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-
-      const { data: recentOrders } = await supabase
-        .from('order_items')
-        .select('menu_item_id, quantity')
-        .gte('created_at', startOfMonth.toISOString())
-        .neq('item_status', 'cancelled');
-
-      if (recentOrders && recentOrders.length > 0) {
-        const counts: Record<number, number> = {};
-        recentOrders.forEach(o => {
-          counts[o.menu_item_id] = (counts[o.menu_item_id] || 0) + (o.quantity || 1);
-        });
-        const sortedIds = Object.keys(counts)
-          .map(Number)
-          .sort((a, b) => counts[b] - counts[a])
-          .slice(0, 3);
-        setTopPickDishIds(sortedIds);
-      }
-    } catch (e) {}
   };
 
   useEffect(() => {
@@ -342,7 +230,7 @@ export default function LuxuryCustomerTablePage() {
     fetchMenuData();
 
     const channel = supabase
-      .channel(`table-${realTableNumber}-realtime-hub`)
+      .channel(`table-${realTableNumber}-rt`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
       .subscribe();
@@ -350,11 +238,10 @@ export default function LuxuryCustomerTablePage() {
     return () => { supabase.removeChannel(channel); };
   }, [realTableNumber, tableResolved]);
 
-  // Auto-Slide Interval for Promo Banners
   useEffect(() => {
     if (banners.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentBannerIndex((prev) => (prev + 1) % banners.length);
+      setCurrentBannerIndex(prev => (prev + 1) % banners.length);
     }, 4500);
     return () => clearInterval(timer);
   }, [banners.length]);
@@ -367,11 +254,7 @@ export default function LuxuryCustomerTablePage() {
     if (hasAddons || hasRetailVariants) {
       setCustomizingItem(item);
       setSelectedAddonIds([]);
-      if (hasRetailVariants) {
-        setSelectedWeightVariant(item.weight_variants[0]);
-      } else {
-        setSelectedWeightVariant(null);
-      }
+      setSelectedWeightVariant(hasRetailVariants ? item.weight_variants[0] : null);
     } else {
       addToCartDirect(item, false);
     }
@@ -381,8 +264,8 @@ export default function LuxuryCustomerTablePage() {
     triggerHaptic(15);
     const effectivePrice = isFree ? 0 : (chosenVariant ? chosenVariant.price : item.price);
 
-    setCart((prev) => {
-      const existing = prev.find((ci) => 
+    setCart(prev => {
+      const existing = prev.find(ci => 
         ci.menuItem.id === item.id && 
         ci.isCombo === isCombo && 
         ci.isComplimentary === isFree &&
@@ -391,7 +274,7 @@ export default function LuxuryCustomerTablePage() {
       );
 
       if (existing) {
-        return prev.map((ci) => ci === existing ? { ...ci, quantity: ci.quantity + 1 } : ci);
+        return prev.map(ci => ci === existing ? { ...ci, quantity: ci.quantity + 1 } : ci);
       }
       return [...prev, { 
         menuItem: { ...item, price: effectivePrice }, 
@@ -413,15 +296,15 @@ export default function LuxuryCustomerTablePage() {
     setSelectedWeightVariant(null);
   };
 
-  const removeFromCart = (cartItemIndex: number) => {
+  const removeFromCart = (index: number) => {
     triggerHaptic(12);
-    setCart((prev) => {
-      const target = prev[cartItemIndex];
+    setCart(prev => {
+      const target = prev[index];
       if (!target) return prev;
       if (target.quantity > 1) {
-        return prev.map((ci, idx) => idx === cartItemIndex ? { ...ci, quantity: ci.quantity - 1 } : ci);
+        return prev.map((ci, i) => i === index ? { ...ci, quantity: ci.quantity - 1 } : ci);
       }
-      return prev.filter((_, idx) => idx !== cartItemIndex);
+      return prev.filter((_, i) => i !== index);
     });
   };
 
@@ -437,17 +320,6 @@ export default function LuxuryCustomerTablePage() {
   const cartItemCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
   const runningGrandTotal = activeSessionTotal + cartGrandTotal;
 
-  const cartSuggestedItems = useMemo(() => {
-    const suggestedIds = new Set<number>();
-    cart.forEach(ci => {
-      if (Array.isArray(ci.menuItem.suggested_item_ids)) {
-        ci.menuItem.suggested_item_ids.forEach(id => suggestedIds.add(Number(id)));
-      }
-    });
-    const currentCartDishIds = new Set(cart.map(ci => Number(ci.menuItem.id)));
-    return menuItems.filter(m => suggestedIds.has(Number(m.id)) && !currentCartDishIds.has(Number(m.id)));
-  }, [cart, menuItems]);
-
   const freeRewardDrinks = useMemo(() => {
     return menuItems.filter(m => Number(m.price) <= 70 && m.food_type !== 'non_veg').slice(0, 4);
   }, [menuItems]);
@@ -459,7 +331,7 @@ export default function LuxuryCustomerTablePage() {
     addToCartDirect(drink, false, [], null, true);
     setIsRewardClaimedThisSession(true);
     setShowRewardModal(false);
-    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE as your 10th Visit Gift!`);
+    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE for your 10th Visit!`);
     setTimeout(() => setWaiterToast(null), 4000);
   };
 
@@ -484,7 +356,7 @@ export default function LuxuryCustomerTablePage() {
     triggerHaptic(30);
     if (!realTableNumber) return alert('Invalid table.');
     if (!activeSessionId && (customerName.trim().length < 2 || customerPhone.length !== 10)) {
-      return alert('Please enter Guest Name and 10-digit Phone.');
+      return alert('Please enter Guest Name & 10-digit Phone.');
     }
 
     setLoading(true);
@@ -563,10 +435,6 @@ export default function LuxuryCustomerTablePage() {
       setLoading(false);
     }
   };
-
-  const topListDishes = useMemo(() => {
-    return menuItems.filter(m => topPickDishIds.includes(m.id) || m.is_special).slice(0, 3);
-  }, [menuItems, topPickDishIds]);
 
   const filteredMenuItems = useMemo(() => {
     return menuItems.filter(item => {
@@ -654,7 +522,7 @@ export default function LuxuryCustomerTablePage() {
           </div>
         )}
 
-        {/* RESTORED FULL-WIDTH WIDE BANNER (EXACTLY LIKE 1ST IMAGE - NO TITLES/NAMES, JUST RAW UPLOADED IMAGES) */}
+        {/* CLEAN WIDE BANNER (NO NAMES, NO TITLES - ONLY UPLOADED IMAGES WITH DOTS) */}
         {banners.length > 0 && (
           <div className="relative w-full h-48 sm:h-56 overflow-hidden rounded-[24px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
             <AnimatePresence mode="wait">
@@ -676,7 +544,6 @@ export default function LuxuryCustomerTablePage() {
               )}
             </AnimatePresence>
 
-            {/* Pagination Dots */}
             {banners.length > 1 && (
               <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
                 {banners.map((_, idx) => (
@@ -735,44 +602,43 @@ export default function LuxuryCustomerTablePage() {
           </div>
         </div>
 
-        {/* Dishes Grid */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Dishes Grid (3 Columns Layout) */}
+        <div className="grid grid-cols-3 gap-2.5">
           {filteredMenuItems.map((item) => {
             const inCart = cart.find(ci => ci.menuItem.id === item.id);
             const dishTitle = item.name_en || item.name;
 
             return (
-              <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[24px] p-3 flex flex-col justify-between shadow-xl relative">
+              <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[20px] p-2.5 flex flex-col justify-between shadow-xl relative">
                 <div>
-                  <div className="h-28 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2 relative">
+                  <div className="h-24 w-full rounded-xl overflow-hidden bg-neutral-950 mb-2 relative">
                     {item.image_url ? (
                       <img src={item.image_url} alt={dishTitle} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-6 h-6" /></div>
+                      <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-5 h-5" /></div>
                     )}
-                    <span className={`absolute top-2 left-2 w-2 h-2 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                    <span className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
                   </div>
-                  <h4 className="text-xs font-bold text-white line-clamp-1">{dishTitle}</h4>
+                  <h4 className="text-[11px] font-bold text-white line-clamp-1">{dishTitle}</h4>
                 </div>
 
-                <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
+                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/[0.06]">
                   <div>
-                    <span className="font-mono text-xs font-black text-[#D4AF37]">₹{Number(item.price).toFixed(0)}</span>
-                    {item.has_addons && <span className="text-[8px] font-mono text-amber-300 block">+ Addons</span>}
+                    <span className="font-mono text-[11px] font-black text-[#D4AF37]">₹{Number(item.price).toFixed(0)}</span>
                   </div>
 
                   {inCart ? (
-                    <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-xl p-0.5">
-                      <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-1 text-[#FCF6BA] cursor-pointer"><Minus className="w-3 h-3" /></button>
-                      <span className="font-mono font-bold text-[11px] text-white px-1.5">{inCart.quantity}</span>
-                      <button onClick={() => handleItemAddClick(item)} className="p-1 text-[#FCF6BA] cursor-pointer"><Plus className="w-3 h-3" /></button>
+                    <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-lg p-0.5">
+                      <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-0.5 text-[#FCF6BA] cursor-pointer"><Minus className="w-2.5 h-2.5" /></button>
+                      <span className="font-mono font-bold text-[10px] text-white px-1">{inCart.quantity}</span>
+                      <button onClick={() => handleItemAddClick(item)} className="p-0.5 text-[#FCF6BA] cursor-pointer"><Plus className="w-2.5 h-2.5" /></button>
                     </div>
                   ) : (
                     <button
                       onClick={() => handleItemAddClick(item)}
-                      className="w-7 h-7 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md"
+                      className="w-6 h-6 rounded-lg bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md"
                     >
-                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                      <Plus className="w-3 h-3 stroke-[3]" />
                     </button>
                   )}
                 </div>
@@ -888,18 +754,22 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2.5">
+              {/* Ajio / Flipkart Style Highlighted Free Item with Low Visibility Condition */}
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3">
                 <div className="flex justify-between text-white font-black text-sm">
-                  <span>Payable at Counter (Flat Zero GST):</span>
+                  <span>Payable at Counter:</span>
                   <span className="text-[#D4AF37] text-base">₹{cartGrandTotal.toFixed(2)}</span>
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/40 via-[#181610] to-black border border-amber-400/40 flex items-start gap-2.5 text-[10px] text-amber-200">
-                  <Award className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="font-bold block text-[#FCF6BA] uppercase">10-Visit Royal Fresh Juice Gift:</span>
-                    <span>Every 10 visits ki <strong>1 Free Fresh Juice</strong>! (Condition: Ochina prathi sari min. <strong>₹180+</strong> bill cheyali).</span>
+                {/* Professional E-Commerce Highlight Technique */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/30 to-[#12110c] border border-amber-400/30 space-y-1">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Unlocked: 1 Free Fresh Juice on 10th Visit!</span>
                   </div>
+                  <p className="text-[9px] text-neutral-400 pl-5 font-sans leading-relaxed">
+                    *(Condition: Applicable only when per visit billing is min. ₹180+).*
+                  </p>
                 </div>
               </div>
 
