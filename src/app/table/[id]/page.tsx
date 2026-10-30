@@ -57,10 +57,11 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
+  
+  // Banners State (Strictly Uploaded Images Only - No Title Overlays)
   const [banners, setBanners] = useState<any[]>([
     {
       id: 999,
-      title: 'Royal Dry Fruit Shakes & Fresh Juices',
       image_url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1200&auto=format&fit=crop'
     }
   ]);
@@ -82,7 +83,7 @@ export default function LuxuryCustomerTablePage() {
   const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Active Dining Session & Customer Loyalty (₹180+ qualifying condition)
+  // Active Dining Session & Customer Loyalty
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerVisitCount, setCustomerVisitCount] = useState<number>(1);
@@ -262,7 +263,6 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Check 10th Visit Loyalty Status (Counts qualifying visits)
   const checkLoyaltyProfile = async (phone: string) => {
     if (!phone || phone.length !== 10) return;
     try {
@@ -336,7 +336,6 @@ export default function LuxuryCustomerTablePage() {
     } catch (e) {}
   };
 
-  // Realtime Sync Listener
   useEffect(() => {
     if (!tableResolved || !realTableNumber) return;
     syncSessionData();
@@ -344,38 +343,14 @@ export default function LuxuryCustomerTablePage() {
 
     const channel = supabase
       .channel(`table-${realTableNumber}-realtime-hub`)
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'restaurant_tables', 
-        filter: `table_number=eq.${realTableNumber}` 
-      }, (payload) => {
-        if (payload.new && payload.new.table_name) {
-          const newName = payload.new.table_name.trim();
-          setDisplayTableName(newName);
-          if (typeof window !== 'undefined') {
-            window.history.replaceState(null, '', `/table/${encodeURIComponent(newName)}`);
-          }
-        }
-      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => {
-        if (activeSessionId) fetchLatestOrderToken(activeSessionId);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
-        if (activeSessionId) fetchSessionItems(activeSessionId);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [realTableNumber, tableResolved, activeSessionId]);
+  }, [realTableNumber, tableResolved]);
 
-  // RESTORED OLD BANNER LAYOUT: 2:1 Landscape Carousel with Dots
+  // Auto-Slide Interval for Promo Banners
   useEffect(() => {
     if (banners.length <= 1) return;
     const timer = setInterval(() => {
@@ -384,7 +359,6 @@ export default function LuxuryCustomerTablePage() {
     return () => clearInterval(timer);
   }, [banners.length]);
 
-  // Open Customization or Instant Add
   const handleItemAddClick = (item: MenuItem) => {
     triggerHaptic(15);
     const hasAddons = item.has_addons;
@@ -451,7 +425,6 @@ export default function LuxuryCustomerTablePage() {
     });
   };
 
-  // Zero-GST Totals Computation with Addons
   const cartGrandTotal = useMemo(() => {
     return cart.reduce((sum, ci) => {
       if (ci.isComplimentary) return sum;
@@ -462,18 +435,8 @@ export default function LuxuryCustomerTablePage() {
   }, [cart]);
 
   const cartItemCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
+  const runningGrandTotal = activeSessionTotal + cartGrandTotal;
 
-  const orderedItemsComputedTotal = sessionOrderedItems.reduce((sum, it) => {
-    if (it.is_complimentary) return sum;
-    const pr = Number(it.unit_price || it.menu_items?.price || 0);
-    const aTotal = Array.isArray(it.selected_addons) ? it.selected_addons.reduce((aSum: number, a: any) => aSum + Number(a.price || 0), 0) : 0;
-    return sum + (it.quantity * (pr + aTotal));
-  }, 0);
-
-  const liveSessionBaseTotal = activeSessionTotal > 0 ? activeSessionTotal : orderedItemsComputedTotal;
-  const runningGrandTotal = liveSessionBaseTotal + cartGrandTotal;
-
-  // Cross-sell Suggested Items
   const cartSuggestedItems = useMemo(() => {
     const suggestedIds = new Set<number>();
     cart.forEach(ci => {
@@ -485,23 +448,21 @@ export default function LuxuryCustomerTablePage() {
     return menuItems.filter(m => suggestedIds.has(Number(m.id)) && !currentCartDishIds.has(Number(m.id)));
   }, [cart, menuItems]);
 
-  // Complimentary Fresh Juices (Under ₹70) for 10th Visit Reward
   const freeRewardDrinks = useMemo(() => {
     return menuItems.filter(m => Number(m.price) <= 70 && m.food_type !== 'non_veg').slice(0, 4);
   }, [menuItems]);
 
-  const is10thVisitMilestone = customerVisitCount === 10 || (customerVisitCount > 0 && customerVisitCount % 10 === 0);
+  const is10thVisitMilestone = customerVisitCount >= 10 && customerVisitCount % 10 === 0;
 
   const handleClaimFreeReward = (drink: MenuItem) => {
     triggerHaptic(25);
     addToCartDirect(drink, false, [], null, true);
     setIsRewardClaimedThisSession(true);
     setShowRewardModal(false);
-    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE as your 10th Visit Gift!`);
+    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE for your 10th Visit!`);
     setTimeout(() => setWaiterToast(null), 4000);
   };
 
-  // Waiter Call Functionality
   const handleCallWaiter = async (callType: 'water' | 'waiter') => {
     if (!realTableNumber) return;
     triggerHaptic(25);
@@ -512,26 +473,24 @@ export default function LuxuryCustomerTablePage() {
         status: 'pending'
       });
       setIsWaiterModalOpen(false);
-      const textMap = { water: 'Drinking Water requested', waiter: 'Steward called to table' };
-      setWaiterToast(`🔔 ${textMap[callType]} for ${displayTableName}! Staff notified.`);
+      setWaiterToast(`🔔 Steward notified for ${displayTableName}!`);
       setTimeout(() => setWaiterToast(null), 4000);
     } catch (e) {
-      alert('Unable to notify waiter. Please contact counter staff.');
+      alert('Unable to notify waiter.');
     }
   };
 
-  // Place Order / Add to Running Table Bill (Generates #Token)
   const handlePlaceOrder = async () => {
     triggerHaptic(30);
-    if (!realTableNumber) return alert('Invalid table. Re-scan QR.');
+    if (!realTableNumber) return alert('Invalid table.');
     if (!activeSessionId && (customerName.trim().length < 2 || customerPhone.length !== 10)) {
-      return alert('Please enter Guest Name and 10-digit Phone.');
+      return alert('Please enter Guest Name & 10-digit Phone.');
     }
 
     setLoading(true);
     try {
       let sessionId = activeSessionId;
-      const newTotal = liveSessionBaseTotal + cartGrandTotal;
+      const newTotal = activeSessionTotal + cartGrandTotal;
 
       if (!sessionId) {
         const { data: newSession, error: sErr } = await supabase
@@ -541,11 +500,7 @@ export default function LuxuryCustomerTablePage() {
             customer_name: customerName.trim(),
             customer_phone: customerPhone.trim(),
             subtotal: cartGrandTotal,
-            cgst_amount: 0,
-            sgst_amount: 0,
-            gst_rate: 0,
             total_amount: cartGrandTotal,
-            discount_amount: 0,
             final_payable: cartGrandTotal,
             status: 'active',
             payment_status: 'unpaid'
@@ -564,13 +519,10 @@ export default function LuxuryCustomerTablePage() {
           total_amount: newTotal,
           final_payable: newTotal
         }).eq('id', sessionId);
-
         setActiveSessionTotal(newTotal);
       }
 
-      // Generate Random 4-Digit Token (e.g. 1234)
       const randomToken = Math.floor(1000 + Math.random() * 9000).toString();
-
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
         .insert({
@@ -583,29 +535,24 @@ export default function LuxuryCustomerTablePage() {
         .single();
 
       if (bErr) throw bErr;
-
       setActiveOrderToken(batch.order_pin || randomToken);
       setActiveBatchStatus('pending_waiter');
 
-      const orderPayload = cart.map((ci, idx) => {
-        const itemKey = `${ci.isCombo ? 'c-' : 'i-'}${ci.menuItem.id}-${idx}`;
-        return {
-          batch_id: batch.id,
-          session_id: sessionId,
-          menu_item_id: ci.menuItem.id,
-          station_id: 'kitchen_hot',
-          quantity: ci.quantity,
-          unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
-          item_status: 'ordered',
-          cooking_notes: cartNotes[itemKey] || null,
-          selected_addons: ci.selectedAddons || [],
-          is_complimentary: Boolean(ci.isComplimentary),
-          selected_weight_variant: ci.selectedWeightVariant?.size || null
-        };
-      });
+      const orderPayload = cart.map((ci, idx) => ({
+        batch_id: batch.id,
+        session_id: sessionId,
+        menu_item_id: ci.menuItem.id,
+        station_id: 'kitchen_hot',
+        quantity: ci.quantity,
+        unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
+        item_status: 'ordered',
+        cooking_notes: cartNotes[`${ci.menuItem.id}-${idx}`] || null,
+        selected_addons: ci.selectedAddons || [],
+        is_complimentary: Boolean(ci.isComplimentary),
+        selected_weight_variant: ci.selectedWeightVariant?.size || null
+      }));
 
       await supabase.from('order_items').insert(orderPayload);
-
       setCart([]);
       setCartNotes({});
       setIsCartOpen(false);
@@ -622,11 +569,9 @@ export default function LuxuryCustomerTablePage() {
   }, [menuItems, topPickDishIds]);
 
   const filteredMenuItems = useMemo(() => {
-    return menuItems.filter((item) => {
+    return menuItems.filter(item => {
       const dishName = (item.name_en || item.name || '').toLowerCase();
-      if (searchQuery.trim()) {
-        return dishName.includes(searchQuery.toLowerCase());
-      }
+      if (searchQuery.trim()) return dishName.includes(searchQuery.toLowerCase());
       if (selectedCategory === 'combos') return false;
       if (foodFilter === 'veg') return item.food_type === 'veg';
       if (foodFilter === 'non_veg') return item.food_type === 'non_veg';
@@ -638,208 +583,100 @@ export default function LuxuryCustomerTablePage() {
     return (
       <div className="min-h-screen bg-[#060608] text-[#FCF6BA] flex flex-col items-center justify-center p-6 text-center">
         <AlertTriangle className="w-12 h-12 text-[#D4AF37] mb-3" />
-        <h2 className="text-xl font-bold uppercase tracking-wider text-white">Table QR Invalid</h2>
-        <p className="text-xs text-neutral-400 mt-1">Please scan physical table QR code again.</p>
+        <h2 className="text-xl font-bold uppercase text-white">Table QR Invalid</h2>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#060608] text-[#FCF6BA] pb-36 font-sans selection:bg-[#D4AF37] selection:text-black antialiased relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#060608] text-[#FCF6BA] pb-36 font-sans antialiased relative overflow-x-hidden">
       
-      {/* Hidden Translate */}
-      <div id="google_translate_element" style={{ display: 'none' }} />
-      <Script
-        id="google-translate-script"
-        strategy="afterInteractive"
-        src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
-      />
-      <Script id="google-translate-init" strategy="afterInteractive">
-        {`
-          function googleTranslateElementInit() {
-            new google.translate.TranslateElement({
-              pageLanguage: 'en',
-              includedLanguages: 'en,te,hi',
-              autoDisplay: false
-            }, 'google_translate_element');
-          }
-        `}
-      </Script>
-
-      {/* Floating Waiter Toast */}
-      <AnimatePresence>
-        {waiterToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            transition={butterSpring}
-            className="fixed top-16 inset-x-4 max-w-sm mx-auto z-50 p-3.5 rounded-[22px] bg-gradient-to-r from-[#18181b] to-[#0c0c0e] border border-[#D4AF37]/80 text-[#FCF6BA] text-xs font-mono font-bold shadow-2xl flex items-center gap-2.5 backdrop-blur-2xl"
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{waiterToast}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 1. TOP HEADER */}
+      {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#060608]/90 backdrop-blur-2xl px-4 pt-3.5 pb-3 border-b border-white/[0.08] shadow-2xl">
         <div className="max-w-md md:max-w-3xl lg:max-w-5xl mx-auto flex items-center justify-between gap-2">
           <div>
-            <span className="text-[9px] tracking-[0.2em] font-mono uppercase text-[#D4AF37] block font-bold">
-              ROYAL FINE-DINE
-            </span>
-            <h1 className="text-base font-black text-amber-200 tracking-wide mt-0.5">
-              {displayTableName || (realTableNumber ? `Table #${realTableNumber}` : 'Loading...')}
-            </h1>
+            <span className="text-[9px] tracking-[0.2em] font-mono uppercase text-[#D4AF37] block font-bold">ROYAL FINE-DINE</span>
+            <h1 className="text-base font-black text-amber-200 tracking-wide mt-0.5">{displayTableName}</h1>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-white/[0.04] p-1 rounded-2xl border border-white/[0.1] backdrop-blur-md">
-              {[
-                { code: 'en', label: 'EN' },
-                { code: 'te', label: 'తెలుగు' },
-                { code: 'hi', label: 'हिंदी' },
-              ].map((l) => (
-                <button
-                  key={l.code}
-                  onClick={() => triggerGoogleTranslate(l.code as any)}
-                  className={`px-2 py-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
-                    activeLang === l.code
-                      ? 'bg-[#D4AF37] text-black font-black shadow-md'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              transition={tapSpring}
-              onClick={() => {
-                triggerHaptic(15);
-                setIsTotalBillModalOpen(true);
-              }}
+            <button
+              onClick={() => setIsTotalBillModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/[0.04] border border-[#D4AF37]/40 text-left shadow-lg cursor-pointer"
             >
               <Receipt className="w-3.5 h-3.5 text-[#D4AF37]" />
               <div>
                 <span className="text-[8px] block uppercase font-mono text-neutral-400">LEDGER</span>
-                <span className="text-xs font-mono font-black text-[#FCF6BA]">
-                  ₹{runningGrandTotal.toFixed(2)}
-                </span>
+                <span className="text-xs font-mono font-black text-[#FCF6BA]">₹{runningGrandTotal.toFixed(2)}</span>
               </div>
-            </motion.button>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* 2. MAIN CONTAINER */}
+      {/* Main Content */}
       <main className="max-w-md md:max-w-3xl lg:max-w-5xl mx-auto px-4 pt-4 space-y-4">
-        
-        {/* 10th Visit Reward Celebration Card */}
+
+        {/* 10th Visit Reward Card */}
         {is10thVisitMilestone && !isRewardClaimedThisSession && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={butterSpring}
-            className="p-4 rounded-[26px] bg-gradient-to-r from-[#211a0c] via-[#17140b] to-[#0a0907] border border-[#D4AF37] shadow-[0_4px_25px_rgba(212,175,55,0.25)] flex items-center justify-between gap-3"
-          >
+          <div className="p-4 rounded-[26px] bg-gradient-to-r from-[#211a0c] via-[#17140b] to-[#0a0907] border border-[#D4AF37] shadow-xl flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center shrink-0">
-                <Gift className="w-5 h-5 text-[#D4AF37] animate-bounce" />
-              </div>
+              <Gift className="w-6 h-6 text-[#D4AF37] animate-bounce shrink-0" />
               <div>
-                <span className="text-xs font-black text-[#FCF6BA] block">
-                  🎉 10th Royal Visit Milestone!
-                </span>
-                <span className="text-[10px] text-neutral-300 font-sans block">
-                  Enjoy a complimentary fresh juice (Min ₹180 spend reached)!
-                </span>
+                <span className="text-xs font-black text-[#FCF6BA] block">🎉 10th Qualifying Visit Milestone!</span>
+                <span className="text-[10px] text-neutral-300 block">Claim 1 Free Fresh Juice (Min ₹180 spend per visit reached).</span>
               </div>
             </div>
-
-            <motion.button
-              whileTap={{ scale: 0.92 }}
+            <button
               onClick={() => setShowRewardModal(true)}
-              className="px-3 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-[10px] uppercase font-mono tracking-wider shrink-0 shadow-md cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-[10px] uppercase font-mono tracking-wider shrink-0 cursor-pointer"
             >
               Claim Drink
-            </motion.button>
-          </motion.div>
+            </button>
+          </div>
         )}
 
-        {/* ORDER TOKEN BADGE */}
+        {/* Token Badge */}
         {activeOrderToken && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={butterSpring}
-            className={`p-3.5 rounded-[24px] border shadow-xl flex items-center justify-between gap-3 font-mono ${
-              activeBatchStatus === 'pending_waiter'
-                ? 'bg-gradient-to-r from-[#1c180e] to-[#0f0e0c] border-[#D4AF37]'
-                : 'bg-[#0f1712] border-emerald-500/50'
-            }`}
-          >
+          <div className="p-3.5 rounded-[24px] bg-[#16140e] border border-[#D4AF37] shadow-xl flex items-center justify-between font-mono">
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black ${
-                activeBatchStatus === 'pending_waiter' ? 'bg-[#D4AF37] text-black' : 'bg-emerald-400 text-black'
-              }`}>
+              <div className="w-8 h-8 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black">
                 <Hash className="w-4 h-4 stroke-[3]" />
               </div>
               <div>
-                <span className="text-[10px] text-neutral-400 uppercase block font-sans">
-                  {activeBatchStatus === 'pending_waiter' ? 'Order Token (Share with Steward)' : 'Status'}
-                </span>
-                <span className="text-base font-black text-white">
-                  #{activeOrderToken}
-                </span>
+                <span className="text-[10px] text-neutral-400 uppercase block">Order Token</span>
+                <span className="text-base font-black text-white">#{activeOrderToken}</span>
               </div>
             </div>
-
-            <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-              activeBatchStatus === 'pending_waiter'
-                ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40 animate-pulse'
-                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-            }`}>
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/40">
               {activeBatchStatus === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen 👨‍🍳'}
             </span>
-          </motion.div>
+          </div>
         )}
 
-        {/* RESTORED OLD BANNER LAYOUT (2:1 WIDE CAROUSEL WITH DOTS) */}
+        {/* CLEAN BANNER CAROUSEL (STRICTLY UPLOADED IMAGES ONLY - NO TITLES) */}
         {banners.length > 0 && (
-          <div className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden rounded-[28px] border border-[#D4AF37]/60 shadow-[0_10px_35px_rgba(0,0,0,0.8)] bg-neutral-950">
+          <div className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden rounded-[28px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
             <AnimatePresence mode="wait">
               {banners[currentBannerIndex] && (
                 <motion.div
                   key={banners[currentBannerIndex].id}
-                  initial={{ opacity: 0, scale: 1.02 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.5, ease: "easeInOut" }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5 }}
                   className="w-full h-full relative"
                 >
                   <img
                     src={banners[currentBannerIndex].image_url}
-                    alt={banners[currentBannerIndex].title || 'Promo Banner'}
+                    alt="Promo Banner"
                     className="w-full h-full object-cover object-center"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                  
-                  {banners[currentBannerIndex].title && (
-                    <div className="absolute bottom-4 left-4 z-10 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl border border-white/10">
-                      <span className="text-xs font-mono font-bold text-[#FCF6BA]">
-                        {banners[currentBannerIndex].title}
-                      </span>
-                    </div>
-                  )}
                 </motion.div>
               )}
             </AnimatePresence>
 
+            {/* Pagination Dots */}
             {banners.length > 1 && (
               <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
                 {banners.map((_, idx) => (
@@ -848,9 +685,7 @@ export default function LuxuryCustomerTablePage() {
                     type="button"
                     onClick={() => setCurrentBannerIndex(idx)}
                     className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      idx === currentBannerIndex 
-                        ? 'w-6 bg-[#D4AF37]' 
-                        : 'w-1.5 bg-white/40 hover:bg-white/70'
+                      idx === currentBannerIndex ? 'w-6 bg-[#D4AF37]' : 'w-1.5 bg-white/40'
                     }`}
                   />
                 ))}
@@ -859,7 +694,7 @@ export default function LuxuryCustomerTablePage() {
           </div>
         )}
 
-        {/* SEARCH BAR */}
+        {/* Search Bar */}
         <div className="relative">
           <Search className="w-4 h-4 text-[#D4AF37]/80 absolute left-4 top-1/2 -translate-y-1/2" />
           <input
@@ -867,114 +702,19 @@ export default function LuxuryCustomerTablePage() {
             placeholder="Search our handcrafted delights..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08] focus:border-[#D4AF37]/50 transition font-sans"
+            className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08]"
           />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
-        {/* TOP LIST */}
-        {!searchQuery && topListDishes.length > 0 && selectedCategory !== 'combos' && (
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-black text-white tracking-wide">Top List</h3>
-                <span className="text-[10px] text-neutral-400 font-mono">Our highest ordered delicacies</span>
-              </div>
-              <Flame className="w-4 h-4 text-amber-400" />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2.5">
-              {topListDishes.map((dish) => {
-                const inCart = cart.find(ci => ci.menuItem.id === dish.id && !ci.isCombo);
-                return (
-                  <div
-                    key={'top-' + dish.id}
-                    className="p-2.5 rounded-[24px] bg-gradient-to-b from-[#181612] via-[#100f0c] to-[#0a0a09] border border-[#D4AF37]/35 flex flex-col justify-between shadow-xl relative overflow-hidden"
-                  >
-                    <div className="flex flex-col items-center text-center">
-                      <div className="w-16 h-16 rounded-full overflow-hidden border border-[#D4AF37]/50 shadow-md bg-neutral-900 mb-1.5 shrink-0">
-                        {dish.image_url ? (
-                          <img src={dish.image_url} alt={dish.name_en} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-neutral-600">
-                            <ImgIcon className="w-5 h-5" />
-                          </div>
-                        )}
-                      </div>
-
-                      <span className="text-[10px] font-bold text-amber-300 font-mono flex items-center gap-0.5">
-                        ★ Top Pick
-                      </span>
-                      <h4 className="text-[11px] font-black text-white leading-tight truncate w-full mt-0.5">
-                        {dish.name_en || dish.name}
-                      </h4>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/10">
-                      <span className="font-mono text-xs font-black text-[#D4AF37]">
-                        ₹{Number(dish.price).toFixed(0)}
-                      </span>
-
-                      {inCart ? (
-                        <div className="flex items-center bg-white/[0.08] rounded-xl px-1 py-0.5">
-                          <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="text-[#FCF6BA] cursor-pointer"><Minus className="w-2.5 h-2.5" /></button>
-                          <span className="font-mono font-bold text-[10px] text-white px-1">{inCart.quantity}</span>
-                          <button onClick={() => addToCartDirect(dish, false)} className="text-[#FCF6BA] cursor-pointer"><Plus className="w-2.5 h-2.5" /></button>
-                        </div>
-                      ) : (
-                        <motion.button
-                          whileTap={{ scale: 0.88 }}
-                          onClick={() => handleItemAddClick(dish)}
-                          className="w-6 h-6 rounded-full bg-[#D4AF37] text-black flex items-center justify-center font-black shadow-md cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                        </motion.button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 4. STICKY CATEGORIES BAR (Hidden Scrollbar & Sleek Overflow) */}
+        {/* Categories Bar */}
         <div className="sticky top-[58px] z-30 py-2 bg-[#060608]/95 backdrop-blur-xl border-b border-white/[0.05]">
           <div 
             ref={categoryScrollRef}
             className="p-1.5 rounded-[26px] bg-white/[0.03] border border-white/[0.08] flex gap-2 overflow-x-auto select-none items-center scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {combos.length > 0 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  triggerHaptic(15);
-                  setSelectedCategory('combos');
-                  e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                }}
-                className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5 transition cursor-pointer ${
-                  selectedCategory === 'combos' ? 'text-black font-black' : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                {selectedCategory === 'combos' && (
-                  <motion.div
-                    layoutId="custPill"
-                    className="absolute inset-0 bg-[#D4AF37] rounded-2xl shadow-md"
-                    transition={butterSpring}
-                  />
-                )}
-                <Sparkles className="w-3.5 h-3.5 relative z-10" />
-                <span className="relative z-10">Combos ({combos.length})</span>
-              </button>
-            )}
-
             {categories.map((cat) => {
-              const isSelected = selectedCategory === cat.id && selectedCategory !== 'combos';
+              const isSelected = selectedCategory === cat.id;
               return (
                 <button
                   type="button"
@@ -985,185 +725,69 @@ export default function LuxuryCustomerTablePage() {
                     e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                   }}
                   className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${
-                    isSelected ? 'text-black font-black' : 'text-neutral-400 hover:text-white'
+                    isSelected ? 'text-black font-black bg-[#D4AF37] shadow-md' : 'text-neutral-400 hover:text-white'
                   }`}
                 >
-                  {isSelected && (
-                    <motion.div
-                      layoutId="custPill"
-                      className="absolute inset-0 bg-[#D4AF37] rounded-2xl shadow-md"
-                      transition={butterSpring}
-                    />
-                  )}
-                  <span className="relative z-10">
-                    {cat.name_en || cat.name} {cat.category_type === 'retail' ? '🛍️' : ''}
-                  </span>
+                  <span>{cat.name_en || cat.name} {cat.category_type === 'retail' ? '🛍️' : ''}</span>
                 </button>
               );
             })}
           </div>
-
-          {selectedCategory !== 'combos' && (
-            <div className="flex gap-1.5 text-[10px] font-mono mt-2 px-1">
-              <button
-                onClick={() => setFoodFilter('all')}
-                className={`px-3 py-1 rounded-xl border transition ${foodFilter === 'all' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/5 text-neutral-400'}`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFoodFilter('veg')}
-                className={`px-3 py-1 rounded-xl border transition flex items-center gap-1.5 ${foodFilter === 'veg' ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-white/[0.02] border-white/5 text-neutral-400'}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Veg Only
-              </button>
-              <button
-                onClick={() => setFoodFilter('non_veg')}
-                className={`px-3 py-1 rounded-xl border transition flex items-center gap-1.5 ${foodFilter === 'non_veg' ? 'bg-rose-950/40 border-rose-500 text-rose-300' : 'bg-white/[0.02] border-white/5 text-neutral-400'}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" /> Non-Veg
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* 5. DISHES & COMBOS GRID (Responsive Multi-Column) */}
-        {selectedCategory === 'combos' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {combos.map((combo) => {
-              const inCart = cart.find((ci) => ci.menuItem.id === combo.id && ci.isCombo);
-              const saveAmt = Number(combo.original_price || 0) > Number(combo.price) ? (Number(combo.original_price) - Number(combo.price)) : 0;
+        {/* Dishes Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {filteredMenuItems.map((item) => {
+            const inCart = cart.find(ci => ci.menuItem.id === item.id);
+            const dishTitle = item.name_en || item.name;
 
-              return (
-                <div key={'cmb-' + combo.id} className="bg-gradient-to-b from-[#131210] to-[#09090b] border border-[#D4AF37]/40 rounded-[28px] p-4 shadow-xl space-y-3 flex flex-col justify-between">
-                  <div>
-                    {combo.image_url && (
-                      <div className="h-40 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2">
-                        <img src={combo.image_url} alt={combo.name} className="w-full h-full object-cover" />
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-base font-black text-white">{combo.name_en || combo.name}</h4>
-                      {saveAmt > 0 && (
-                        <span className="px-2 py-0.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
-                          Save ₹{saveAmt.toFixed(0)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-neutral-400 font-sans mt-1">
-                      {combo.description || 'Includes handcrafted delights.'}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-mono text-base font-black text-[#D4AF37]">₹{Number(combo.price).toFixed(2)}</span>
-                      {combo.original_price > combo.price && (
-                        <span className="line-through text-neutral-500 text-xs font-mono">₹{Number(combo.original_price).toFixed(2)}</span>
-                      )}
-                    </div>
-
-                    {inCart ? (
-                      <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-xl p-0.5">
-                        <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-1.5 text-[#FCF6BA] cursor-pointer"><Minus className="w-3.5 h-3.5" /></button>
-                        <span className="font-mono font-bold text-xs text-white px-2">{inCart.quantity}</span>
-                        <button onClick={() => addToCartDirect(combo, true)} className="p-1.5 text-[#FCF6BA] cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
-                      </div>
+            return (
+              <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[24px] p-3 flex flex-col justify-between shadow-xl relative">
+                <div>
+                  <div className="h-28 sm:h-32 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2 relative">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={dishTitle} className="w-full h-full object-cover" />
                     ) : (
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => addToCartDirect(combo, true)}
-                        className="px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase cursor-pointer"
-                      >
-                        + Add Combo
-                      </motion.button>
+                      <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-6 h-6" /></div>
                     )}
+                    <span className={`absolute top-2 left-2 w-2 h-2 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
                   </div>
+                  <h4 className="text-xs font-bold text-white line-clamp-1">{dishTitle}</h4>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {filteredMenuItems.map((item) => {
-              const inCart = cart.find(ci => ci.menuItem.id === item.id && !ci.isCombo);
-              const dishTitle = item.name_en || item.name;
-              const isSpecial = item.is_special;
-              const hasAddons = item.has_addons;
-              const isRetail = item.is_retail_item;
 
-              return (
-                <div key={item.id} className="bg-gradient-to-b from-[#111114] to-[#08080a] border border-white/[0.08] rounded-[24px] p-3 flex flex-col justify-between shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
                   <div>
-                    <div className="h-28 sm:h-32 w-full rounded-2xl overflow-hidden bg-neutral-950 mb-2 relative">
-                      {item.image_url ? (
-                        <img src={item.image_url} alt={dishTitle} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-neutral-600">
-                          <ImgIcon className="w-6 h-6" />
-                        </div>
-                      )}
-                      <span className={`absolute top-2 left-2 w-2 h-2 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                      {isSpecial && (
-                        <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-[#D4AF37] text-black font-mono text-[8px] font-black uppercase flex items-center gap-0.5">
-                          <Crown className="w-2.5 h-2.5" /> Special
-                        </span>
-                      )}
-                      {isRetail && (
-                        <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-amber-950/80 border border-amber-500/40 text-amber-200 font-mono text-[8px] font-bold">
-                          🛍️ Gourmet
-                        </span>
-                      )}
-                    </div>
-
-                    <h4 className="text-xs font-bold text-white line-clamp-1">{dishTitle}</h4>
-                    {item.description_en && (
-                      <p className="text-[10px] text-neutral-400 font-sans line-clamp-1 mt-0.5">{item.description_en}</p>
-                    )}
+                    <span className="font-mono text-xs font-black text-[#D4AF37]">₹{Number(item.price).toFixed(0)}</span>
+                    {item.has_addons && <span className="text-[8px] font-mono text-amber-300 block">+ Addons</span>}
                   </div>
 
-                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/[0.06]">
-                    <div>
-                      <span className="font-mono text-xs font-black text-[#D4AF37]">₹{Number(item.price).toFixed(0)}</span>
-                      {hasAddons && (
-                        <span className="text-[8px] font-mono text-amber-300 block">+ Addons</span>
-                      )}
+                  {inCart ? (
+                    <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-xl p-0.5">
+                      <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-1 text-[#FCF6BA] cursor-pointer"><Minus className="w-3 h-3" /></button>
+                      <span className="font-mono font-bold text-[11px] text-white px-1.5">{inCart.quantity}</span>
+                      <button onClick={() => handleItemAddClick(item)} className="p-1 text-[#FCF6BA] cursor-pointer"><Plus className="w-3 h-3" /></button>
                     </div>
-
-                    {inCart ? (
-                      <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-xl p-0.5">
-                        <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-1 text-[#FCF6BA] cursor-pointer"><Minus className="w-3 h-3" /></button>
-                        <span className="font-mono font-bold text-[11px] text-white px-1.5">{inCart.quantity}</span>
-                        <button onClick={() => handleItemAddClick(item)} className="p-1 text-[#FCF6BA] cursor-pointer"><Plus className="w-3 h-3" /></button>
-                      </div>
-                    ) : (
-                      <motion.button
-                        whileTap={{ scale: 0.88 }}
-                        onClick={() => handleItemAddClick(item)}
-                        className="w-7 h-7 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md"
-                      >
-                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                      </motion.button>
-                    )}
-                  </div>
+                  ) : (
+                    <button
+                      onClick={() => handleItemAddClick(item)}
+                      className="w-7 h-7 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    </button>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
       </main>
 
-      {/* 6. ALWAYS FLOATING BOTTOM SERVICES DOCK (FIXED AT SCREEN BOTTOM) */}
+      {/* Floating Bottom Action Dock */}
       <div className="fixed bottom-4 inset-x-4 max-w-md md:max-w-xl mx-auto z-50 pointer-events-none">
         <div className="pointer-events-auto p-2 rounded-[28px] bg-[#0c0c0e]/95 border border-[#D4AF37]/50 shadow-[0_12px_40px_rgba(0,0,0,0.9)] backdrop-blur-2xl flex items-center justify-between gap-2">
-          
           <button
             type="button"
-            onClick={() => {
-              triggerHaptic(15);
-              setIsWaiterModalOpen(true);
-            }}
+            onClick={() => handleCallWaiter('water')}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer"
           >
             <BellRing className="w-4 h-4 text-[#D4AF37]" />
@@ -1171,23 +795,17 @@ export default function LuxuryCustomerTablePage() {
           </button>
 
           {cartItemCount > 0 ? (
-            <motion.button
+            <button
               type="button"
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                triggerHaptic(20);
-                setIsCartOpen(true);
-              }}
+              onClick={() => setIsCartOpen(true)}
               className="flex-1 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black py-2.5 px-4 rounded-2xl flex items-center justify-between font-black text-xs font-mono shadow-lg cursor-pointer"
             >
               <div className="flex items-center gap-2">
-                <span className="bg-black text-[#FCF6BA] px-2 py-0.5 rounded-lg text-[10px]">
-                  {cartItemCount}
-                </span>
+                <span className="bg-black text-[#FCF6BA] px-2 py-0.5 rounded-lg text-[10px]">{cartItemCount}</span>
                 <span>View Cart</span>
               </div>
               <span>₹{cartGrandTotal.toFixed(2)} ➔</span>
-            </motion.button>
+            </button>
           ) : (
             <button
               type="button"
@@ -1200,23 +818,17 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* 7. CART DRAWER (WITH LOYALTY CONDITION UNDER FINAL PRICE) */}
+      {/* Cart Drawer */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsCartOpen(false)} 
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm cursor-pointer" 
-            />
-            <motion.div 
+            <div onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm cursor-pointer" />
+            <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={butterSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[88vh] overflow-y-auto custom-gold-scrollbar shadow-2xl"
+              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[88vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -1226,103 +838,33 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* Cart Items List */}
               <div className="space-y-3 divide-y divide-white/5">
                 {cart.map((ci, idx) => {
-                  const itemKey = `${ci.isCombo ? 'c-' : 'i-'}${ci.menuItem.id}-${idx}`;
                   const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
                   const singleUnitPrice = ci.isComplimentary ? 0 : (Number(ci.menuItem.price || 0) + addOnsCost);
-                  const lineTotal = singleUnitPrice * ci.quantity;
-
                   return (
-                    <div key={itemKey} className="pt-2 space-y-2 text-xs">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-white">
-                              {ci.menuItem.name_en || ci.menuItem.name} {ci.selectedWeightVariant ? `(${ci.selectedWeightVariant.size})` : ''}
-                            </span>
-                            {ci.isComplimentary && (
-                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">
-                                10th VISIT FREE
-                              </span>
-                            )}
+                    <div key={idx} className="pt-2 flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-white block">{ci.menuItem.name_en || ci.menuItem.name}</span>
+                        {ci.selectedAddons && ci.selectedAddons.length > 0 && (
+                          <div className="text-[10px] text-amber-300 mt-0.5">
+                            {ci.selectedAddons.map(a => `+ ${a.name}`).join(', ')}
                           </div>
-                          
-                          {ci.selectedAddons && ci.selectedAddons.length > 0 && (
-                            <div className="text-[10px] text-amber-300 font-mono mt-0.5">
-                              {ci.selectedAddons.map(a => `+ ${a.name} (₹${a.price})`).join(', ')}
-                            </div>
-                          )}
-                          <span className="font-mono text-[#D4AF37] block mt-0.5">
-                            {ci.isComplimentary ? 'FREE' : `₹${singleUnitPrice.toFixed(2)} each`}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-white">
-                            {ci.isComplimentary ? '₹0.00' : `₹${lineTotal.toFixed(2)}`}
-                          </span>
-                          <div className="flex items-center bg-white/[0.05] border border-white/[0.1] rounded-xl p-0.5">
-                            <button onClick={() => removeFromCart(idx)} className="p-1 text-[#D4AF37] cursor-pointer"><Minus className="w-3 h-3" /></button>
-                            <span className="px-2 font-mono font-bold text-white">{ci.quantity}</span>
-                            <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary)} className="p-1 text-[#D4AF37] cursor-pointer"><Plus className="w-3 h-3" /></button>
-                          </div>
-                        </div>
+                        )}
+                        <span className="text-[#D4AF37]">{ci.isComplimentary ? 'FREE' : `₹${singleUnitPrice.toFixed(2)}`}</span>
                       </div>
-
-                      <div className="flex items-center gap-2 bg-white/[0.02] border border-white/10 rounded-xl px-2.5 py-1.5">
-                        <MessageSquare className="w-3 h-3 text-[#D4AF37]" />
-                        <input
-                          type="text"
-                          placeholder="Note: Less ice, no sugar, extra spicy..."
-                          value={cartNotes[itemKey] || ''}
-                          onChange={(e) => setCartNotes({ ...cartNotes, [itemKey]: e.target.value })}
-                          className="w-full bg-transparent text-white outline-none text-[11px] placeholder-neutral-500 font-sans"
-                        />
+                      <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5">
+                        <button onClick={() => removeFromCart(idx)} className="p-1 text-[#D4AF37] cursor-pointer"><Minus className="w-3 h-3" /></button>
+                        <span className="px-2 font-bold text-white">{ci.quantity}</span>
+                        <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary)} className="p-1 text-[#D4AF37] cursor-pointer"><Plus className="w-3 h-3" /></button>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* CROSS-SELL PAIRINGS CAROUSEL */}
-              {cartSuggestedItems.length > 0 && (
-                <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-950/20 via-black to-black border border-amber-500/30 space-y-2">
-                  <span className="text-[11px] font-mono font-bold text-amber-300 uppercase flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-amber-400" /> Pairs Best With Your Order 🔥
-                  </span>
-
-                  <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1">
-                    {cartSuggestedItems.map(sItem => (
-                      <div key={sItem.id} className="p-2 rounded-xl bg-white/[0.04] border border-white/10 flex items-center gap-2 shrink-0 min-w-[170px]">
-                        <div className="w-9 h-9 rounded-lg overflow-hidden bg-neutral-900 shrink-0">
-                          {sItem.image_url ? (
-                            <img src={sItem.image_url} alt={sItem.name_en} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-3.5 h-3.5" /></div>
-                          )}
-                        </div>
-                        <div className="truncate flex-1">
-                          <span className="text-[10px] font-bold text-white block truncate">{sItem.name_en || sItem.name}</span>
-                          <span className="text-[10px] font-mono text-[#D4AF37]">₹{Number(sItem.price).toFixed(0)}</span>
-                        </div>
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => addToCartDirect(sItem, false)}
-                          className="px-2 py-1 rounded-lg bg-[#D4AF37] text-black font-black text-[9px] uppercase cursor-pointer"
-                        >
-                          + Add
-                        </motion.button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Guest Identification */}
               {!activeSessionId && (
-                <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
+                <div className="space-y-2 pt-2 border-t border-white/10">
                   <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
                   <input
                     type="text"
@@ -1343,349 +885,147 @@ export default function LuxuryCustomerTablePage() {
                       setCustomerPhone(clean);
                       if (clean.length === 10) checkLoyaltyProfile(clean);
                     }}
-                    className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none font-mono"
+                    className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none"
                   />
                 </div>
               )}
 
-              {/* FINAL PAYABLE & 10-VISITS CRITERIA CARD */}
-              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2.5 text-xs font-mono">
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-2.5">
                 <div className="flex justify-between text-white font-black text-sm">
                   <span>Payable at Counter (Flat Zero GST):</span>
                   <span className="text-[#D4AF37] text-base">₹{cartGrandTotal.toFixed(2)}</span>
                 </div>
 
-                {/* PROMINENT LOYALTY CONDITION BADGE */}
                 <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/40 via-[#181610] to-black border border-amber-400/40 flex items-start gap-2.5 text-[10px] text-amber-200">
                   <Award className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
-                    <span className="font-bold block text-[#FCF6BA] uppercase tracking-wide">
-                      10-Visit Royal Fresh Juice Gift:
-                    </span>
-                    <span className="text-neutral-300 font-sans block">
-                      Every 10 qualifying visits ki <strong>1 Free Fresh Juice</strong>!
-                    </span>
-                    <span className="text-[#D4AF37] font-sans font-semibold block">
-                      👉 Condition: Ochina prathi sari min. <strong>₹180+</strong> bill cheyali.
-                    </span>
+                    <span className="font-bold block text-[#FCF6BA] uppercase">10-Visit Royal Fresh Juice Gift:</span>
+                    <span>Every 10 visits ki <strong>1 Free Fresh Juice</strong>! (Condition: Ochina prathi sari min. <strong>₹180+</strong> bill cheyali).</span>
                   </div>
-                </div>
-              </div>
-
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                disabled={loading}
-                onClick={handlePlaceOrder}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer font-mono"
-              >
-                {loading ? 'Generating Order Token...' : (activeSessionId ? 'Add to Running Order' : 'Submit Order & Get Token')}
-              </motion.button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 8. 10th VISIT REWARD CLAIM MODAL */}
-      <AnimatePresence>
-        {showRewardModal && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={butterSpring}
-              className="w-full max-w-sm bg-[#0f0e12] border border-[#D4AF37] rounded-[28px] p-5 space-y-3.5 shadow-2xl font-mono text-xs"
-            >
-              <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                <span className="font-black text-white uppercase flex items-center gap-1.5">
-                  <Gift className="w-4 h-4 text-[#D4AF37]" /> Claim 10th Visit Gift
-                </span>
-                <button onClick={() => setShowRewardModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
-              </div>
-
-              <p className="text-neutral-300 text-[11px] font-sans">
-                As a royal guest who reached 10 qualifying visits (₹180+ each), pick any fresh juice below completely <strong>FREE (₹0.00)</strong>!
-              </p>
-
-              <div className="space-y-2">
-                {freeRewardDrinks.map(d => (
-                  <div key={d.id} className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 flex justify-between items-center">
-                    <div>
-                      <span className="font-bold text-white block">{d.name_en || d.name}</span>
-                      <span className="text-[10px] text-neutral-400 line-through">₹{Number(d.price).toFixed(0)}</span>
-                    </div>
-                    <button
-                      onClick={() => handleClaimFreeReward(d)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-400 text-black font-black uppercase text-[10px] cursor-pointer"
-                    >
-                      Pick Free
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 9. TABLE LEDGER MODAL */}
-      <AnimatePresence>
-        {isTotalBillModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 15 }}
-              transition={butterSpring}
-              className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-3xl p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-[#D4AF37]" />
-                  <h3 className="font-black text-white text-base font-mono">Table Ledger & Bill</h3>
-                </div>
-                <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-              </div>
-
-              {activeOrderToken && (
-                <div className="p-2.5 rounded-xl bg-[#161619] border border-[#D4AF37]/40 flex justify-between items-center font-mono text-xs">
-                  <span className="text-neutral-400">Order Token:</span>
-                  <span className="text-[#D4AF37] font-black text-sm">#{activeOrderToken}</span>
-                </div>
-              )}
-
-              <div className="space-y-2 max-h-56 overflow-y-auto custom-gold-scrollbar p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs font-mono">
-                {sessionOrderedItems.length === 0 ? (
-                  <div className="text-center py-4 text-neutral-500">No active kitchen orders.</div>
-                ) : (
-                  sessionOrderedItems.map((item, idx) => (
-                    <div key={idx} className="space-y-0.5 border-b border-white/5 pb-1.5 last:border-b-0">
-                      <div className="flex justify-between items-center">
-                        <span>{item.quantity}x {item.menu_items?.name_en || item.menu_items?.name}</span>
-                        <span className="font-black text-white">
-                          {item.is_complimentary ? 'FREE' : `₹${(item.quantity * Number(item.unit_price || item.menu_items?.price || 0)).toFixed(2)}`}
-                        </span>
-                      </div>
-                      {item.cooking_notes && (
-                        <div className="text-[10px] text-amber-300 italic">
-                          &gt;&gt; {item.cooking_notes}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-[#D4AF37]/40 text-xs font-mono space-y-1">
-                <div className="flex justify-between font-black text-white text-sm">
-                  <span>Net Payable (Flat Zero GST):</span>
-                  <span className="text-[#D4AF37] text-base">₹{runningGrandTotal.toFixed(2)}</span>
                 </div>
               </div>
 
               <button
-                onClick={() => setIsTotalBillModalOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase cursor-pointer"
+                disabled={loading}
+                onClick={handlePlaceOrder}
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
               >
-                Close Ledger
+                {loading ? 'Submitting Order...' : 'Submit Order & Get Token'}
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* 10. CALL WAITER MODAL */}
-      <AnimatePresence>
-        {isWaiterModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={butterSpring}
-              className="w-full max-w-xs bg-[#0f0e12] border border-[#D4AF37]/60 rounded-[28px] p-5 space-y-4 shadow-2xl font-mono text-xs text-center"
-            >
-              <div className="flex justify-between items-center border-b border-white/10 pb-2.5">
-                <span className="font-black text-white uppercase flex items-center gap-1.5">
-                  <BellRing className="w-4 h-4 text-[#D4AF37]" /> Call Staff
-                </span>
-                <button onClick={() => setIsWaiterModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4 text-neutral-400" /></button>
-              </div>
-
-              <p className="text-neutral-400 text-[11px]">
-                What can our staff assist you with at <strong>{displayTableName}</strong>?
-              </p>
-
-              <div className="space-y-2">
-                <button
-                  onClick={() => handleCallWaiter('water')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-cyan-400 text-cyan-300 font-bold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Droplets className="w-4 h-4" /> Need Drinking Water
-                </button>
-                <button
-                  onClick={() => handleCallWaiter('waiter')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-amber-400 text-amber-300 font-bold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <ChefHat className="w-4 h-4" /> Call Steward / Order Help
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 11. ADD-ONS CUSTOMIZATION BOTTOM SHEET */}
+      {/* Add-ons Bottom Sheet */}
       <AnimatePresence>
         {customizingItem && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                setCustomizingItem(null);
-                setSelectedAddonIds([]);
-              }} 
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm cursor-pointer" 
-            />
-            <motion.div 
+            <div onClick={() => setCustomizingItem(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm cursor-pointer" />
+            <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={butterSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/60 rounded-t-[36px] p-5 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl"
+              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/60 rounded-t-[36px] p-5 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
             >
-              <div className="flex justify-between items-start border-b border-white/10 pb-3">
-                <div>
-                  <span className="text-[10px] uppercase font-mono tracking-wider text-[#D4AF37] block font-bold">
-                    Customize Handcrafted Delight
-                  </span>
-                  <h3 className="font-black text-white text-base">
-                    {customizingItem.name_en || customizingItem.name}
-                  </h3>
-                </div>
-                <button 
-                  onClick={() => {
-                    setCustomizingItem(null);
-                    setSelectedAddonIds([]);
-                  }} 
-                  className="text-neutral-400 hover:text-white p-1 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">{customizingItem.name_en || customizingItem.name}</h3>
+                <button onClick={() => setCustomizingItem(null)} className="text-neutral-400 cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {customizingItem.is_retail_item && Array.isArray(customizingItem.weight_variants) && customizingItem.weight_variants.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-xs font-mono font-bold text-neutral-300 flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-emerald-400" /> Select Pack Weight:
-                  </span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {customizingItem.weight_variants.map((v) => {
-                      const isSel = selectedWeightVariant?.size === v.size;
-                      return (
-                        <button
-                          key={v.size}
-                          type="button"
-                          onClick={() => {
-                            triggerHaptic(10);
-                            setSelectedWeightVariant(v);
-                          }}
-                          className={`p-2.5 rounded-xl text-center border font-mono transition cursor-pointer ${
-                            isSel 
-                              ? 'bg-[#D4AF37] text-black font-black border-transparent shadow-md' 
-                              : 'bg-white/[0.03] border-white/10 text-neutral-400'
-                          }`}
-                        >
-                          <span className="block text-xs">{v.size}</span>
-                          <span className="text-[11px] block mt-0.5">₹{Number(v.price).toFixed(0)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Add-ons List Block View */}
-              <div className="space-y-2.5">
-                <span className="text-xs font-mono font-bold text-neutral-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" /> Upgrade with Add-ons (Optional):
-                </span>
-
-                <div className="space-y-2 max-h-56 overflow-y-auto custom-gold-scrollbar pr-1">
-                  {(() => {
-                    const itemAddonList = Array.isArray(customizingItem.addon_ids) && customizingItem.addon_ids.length > 0
-                      ? addons.filter(a => customizingItem.addon_ids.map(Number).includes(Number(a.id)))
-                      : addons;
-
-                    if (!itemAddonList || itemAddonList.length === 0) {
-                      return (
-                        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 text-center text-neutral-500 font-mono text-xs">
-                          No add-ons available for this item.
+              <div className="space-y-2">
+                <span className="text-neutral-400 block mb-1">Upgrade with Add-ons (Optional):</span>
+                {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).map(addon => {
+                  const isChecked = selectedAddonIds.includes(Number(addon.id));
+                  return (
+                    <div
+                      key={addon.id}
+                      onClick={() => {
+                        const aId = Number(addon.id);
+                        if (isChecked) setSelectedAddonIds(selectedAddonIds.filter(id => id !== aId));
+                        else setSelectedAddonIds([...selectedAddonIds, aId]);
+                      }}
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${
+                        isChecked ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white shadow-md' : 'bg-white/[0.02] border-white/10 text-neutral-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${
+                          isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'
+                        }`}>
+                          {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                         </div>
-                      );
-                    }
-
-                    return itemAddonList.map((addon) => {
-                      const isChecked = selectedAddonIds.includes(Number(addon.id));
-                      return (
-                        <div
-                          key={addon.id}
-                          onClick={() => {
-                            triggerHaptic(12);
-                            const aId = Number(addon.id);
-                            if (isChecked) {
-                              setSelectedAddonIds(selectedAddonIds.filter(id => id !== aId));
-                            } else {
-                              setSelectedAddonIds([...selectedAddonIds, aId]);
-                            }
-                          }}
-                          className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${
-                            isChecked 
-                              ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white shadow-md' 
-                              : 'bg-white/[0.02] border-white/10 text-neutral-300 hover:border-[#D4AF37]/50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black text-xs font-black ${
-                              isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30 bg-black/40'
-                            }`}>
-                              {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                            </div>
-                            <span className="text-xs font-bold text-white">{addon.name}</span>
-                          </div>
-                          <span className="font-mono text-xs font-black text-[#D4AF37]">
-                            +₹{Number(addon.price).toFixed(0)}
-                          </span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
+                        <span className="font-bold">{addon.name}</span>
+                      </div>
+                      <span className="text-[#D4AF37] font-black">+₹{Number(addon.price).toFixed(0)}</span>
+                    </div>
+                  );
+                })}
               </div>
 
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.96 }}
+              <button
                 onClick={confirmCustomizationAndAdd}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer flex justify-between px-5 font-mono"
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-lg mt-2"
               >
-                <span>Add to Dining Cart</span>
-                <span>
-                  ₹{(
-                    (selectedWeightVariant ? Number(selectedWeightVariant.price) : Number(customizingItem?.price || 0)) +
-                    addons
-                      .filter(a => selectedAddonIds.includes(Number(a.id)))
-                      .reduce((s, a) => s + Number(a.price || 0), 0)
-                  ).toFixed(2)}
-                </span>
-              </motion.button>
+                Add to Dining Cart
+              </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
+      {/* Table Ledger Modal */}
+      <AnimatePresence>
+        {isTotalBillModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-3xl p-6 shadow-2xl space-y-4 font-mono text-xs">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="font-black text-white text-base">Table Ledger & Bill</h3>
+                <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 cursor-pointer"><X className="w-5 h-5" /></button>
+              </div>
+              {activeOrderToken && (
+                <div className="p-2.5 rounded-xl bg-[#161619] border border-[#D4AF37]/40 flex justify-between items-center">
+                  <span className="text-neutral-400">Order Token:</span>
+                  <span className="text-[#D4AF37] font-black text-sm">#{activeOrderToken}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-black text-white text-sm pt-2 border-t border-white/10">
+                <span>Net Payable:</span>
+                <span className="text-[#D4AF37]">₹{runningGrandTotal.toFixed(2)}</span>
+              </div>
+              <button onClick={() => setIsTotalBillModalOpen(false)} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase cursor-pointer">
+                Close Ledger
+              </button>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reward Claim Modal */}
+      <AnimatePresence>
+        {showRewardModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-[#0f0e12] border border-[#D4AF37] rounded-[28px] p-5 space-y-3 font-mono text-xs">
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <span className="font-black text-white uppercase">Claim 10th Visit Reward</span>
+                <button onClick={() => setShowRewardModal(false)} className="text-neutral-400 cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+              <p className="text-neutral-300 text-[11px]">Pick any drink below completely FREE (₹0.00)!</p>
+              <div className="space-y-2">
+                {freeRewardDrinks.map(d => (
+                  <div key={d.id} className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 flex justify-between items-center">
+                    <span className="font-bold text-white">{d.name_en || d.name}</span>
+                    <button onClick={() => handleClaimFreeReward(d)} className="px-3 py-1.5 rounded-lg bg-emerald-400 text-black font-black uppercase text-[10px] cursor-pointer">
+                      Pick Free
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
