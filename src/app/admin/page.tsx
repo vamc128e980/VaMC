@@ -90,20 +90,20 @@ export default function LuxuryGoldAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // VaMC Manual Counter POS & C+ Customer Quick Bill States
+  // VaMC Manual Counter POS & Multi-Customer Tabs States
   const [showVaMCModal, setShowVaMCModal] = useState(false);
   const [vamcCounterItems, setVamcCounterItems] = useState<any[]>([]);
   const [showVaMCCrudModal, setShowVaMCCrudModal] = useState(false);
   const [editingVamcItem, setEditingVamcItem] = useState<any | null>(null);
   const [vamcItemName, setVamcItemName] = useState('');
   const [vamcItemPrice, setVamcItemPrice] = useState('');
-  
-  const [vamcCart, setVamcCart] = useState<any[]>([]);
+
+  // Multi-Customer Tabs State (Default C1, with C+ tab adding capability)
+  const [vamcTabs, setVamcTabs] = useState<any[]>([
+    { id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }
+  ]);
+  const [activeVamcTabId, setActiveVamcTabId] = useState('C1');
   const [vamcSearch, setVamcSearch] = useState('');
-  const [vamcCustomerName, setVamcCustomerName] = useState('');
-  const [vamcCustomerPhone, setVamcCustomerPhone] = useState('');
-  const [vamcPaymentMode, setVamcPaymentMode] = useState<'cash' | 'upi'>('cash');
-  const [vamcCustomerHanded, setVamcCustomerHanded] = useState('');
 
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -130,7 +130,7 @@ export default function LuxuryGoldAdminPanel() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
 
-  // Add-ons Master CRUD (Complete State)
+  // Add-ons Master CRUD
   const [showAddonModal, setShowAddonModal] = useState(false);
   const [editingAddon, setEditingAddon] = useState<any | null>(null);
   const [addonName, setAddonName] = useState('');
@@ -485,6 +485,7 @@ export default function LuxuryGoldAdminPanel() {
     window.location.replace('/');
   };
 
+  // Tables CRUD
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
     const tNum = parseInt(newTableNumber);
@@ -549,6 +550,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Category CRUD
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = categoryName.trim();
@@ -597,6 +599,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Add-ons Master CRUD
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = addonName.trim();
@@ -658,6 +661,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Instant Stock Toggle for Dishes
   const handleToggleStock = async (itemId: number, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
     setMenuItems(prev => prev.map(m => m.id === itemId ? { ...m, is_available: nextStatus } : m));
@@ -721,6 +725,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Combos CRUD
   const comboSumActualPrice = useMemo(() => {
     return selectedComboItemIds.reduce((sum, id) => {
       const dish = menuItems.find(m => m.id === id);
@@ -778,6 +783,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Banners
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBannerTitle.trim() || !newBannerImageUrl.trim()) return alert('Banner Title & Image ivvandi.');
@@ -810,6 +816,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  // Filter
   const filteredSessions = useMemo(() => {
     return sessions.filter(s => {
       const sessionDate = new Date(s.created_at).toISOString().split('T')[0];
@@ -855,6 +862,7 @@ export default function LuxuryGoldAdminPanel() {
     return orderItems.filter(oi => oi.session_id === sessionId);
   };
 
+  // 1. PHYSICAL 80mm KOT WITH ADD-ONS & COMPLIMENTARY TAGS
   const printKitchenOrderTicket = (session: any) => {
     const items = getSessionOrderedItems(session.id);
     const matchingTable = tables.find(t => t.table_number === session.table_number);
@@ -934,6 +942,7 @@ export default function LuxuryGoldAdminPanel() {
     printWindow.document.close();
   };
 
+  // 2. 80mm ESC/POS Customer Receipt With Add-ons Breakdown
   const printThermalSlip = (session: any) => {
     const items = getSessionOrderedItems(session.id);
     const gross = Number(session.total_amount || 0);
@@ -1205,25 +1214,8 @@ export default function LuxuryGoldAdminPanel() {
         </div>
       </header>
 
-      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex items-center justify-between gap-3">
-        <div className="p-2 rounded-2xl bg-[#111115] border border-[#D4AF37]/40 shadow-lg flex items-center gap-2">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowVaMCModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>C+ Customer Quick Bill</span>
-          </motion.button>
-          <span className="text-[11px] font-mono text-neutral-400 hidden sm:inline px-2">
-            Instant individual customer billing via independent counter menu.
-          </span>
-        </div>
-      </div>
-
       {/* FLOATING ACTION DOCK */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 relative z-40">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 relative z-50">
         <div className="p-3 rounded-[28px] bg-gradient-to-b from-[#111114]/90 to-[#0a0a0d]/90 border border-white/[0.1] backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
           
           <div className="flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-1 lg:pb-0 w-full lg:w-auto">
@@ -2240,7 +2232,7 @@ export default function LuxuryGoldAdminPanel() {
       </main>
 
       {/* ======================================================== */}
-      {/* VaMC COUNTER POS MODAL (WITH SEPARATE COUNTER MENU & CRUD) */}
+      {/* VAMC COUNTER POS MODAL (CHROME-LIKE TABS FOR MULTI-CUSTOMER C1, C+) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCModal && (
@@ -2251,231 +2243,304 @@ export default function LuxuryGoldAdminPanel() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
-              {/* Modal Header with CRUD Manage Button */}
-              <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
-                    <Calculator className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Counter POS & Ledger</h2>
-                    <span className="text-[10px] text-neutral-400">Independent Counter Menu Selector & Cash/UPI Change Calculator</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Manage Counter Menu (CRUD) Button */}
-                  <button
-                    onClick={() => setShowVaMCCrudModal(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer shadow-md"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Manage Counter Menu (CRUD)</span>
-                  </button>
-
-                  <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1">
-                
-                {/* Left: Interactive Visual Selection Blocks (Tap to Select/Deselect) */}
-                <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden">
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search counter items..."
-                      value={vamcSearch}
-                      onChange={(e) => setVamcSearch(e.target.value)}
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
-                    {vamcCounterItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
-                      const isSelected = vamcCart.some(ci => ci.id === item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => {
-                            setVamcCart(prev => {
-                              const exist = prev.find(ci => ci.id === item.id);
-                              if (exist) {
-                                // Deselect / Remove if already selected
-                                return prev.filter(ci => ci.id !== item.id);
-                              }
-                              return [...prev, { ...item, quantity: 1 }];
-                            });
-                          }}
-                          className={`p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
-                            isSelected 
-                              ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-lg' 
-                              : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50'
-                          }`}
-                        >
-                          <div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
-                              {isSelected && <CheckCircle className="w-4 h-4 text-[#D4AF37] shrink-0" />}
-                            </div>
-                            <span className="text-[11px] font-black text-[#D4AF37] block mt-1">₹{Number(item.price).toFixed(2)}</span>
-                          </div>
-                          <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
-                            {isSelected ? '✓ Selected' : 'Tap to Select'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Right: Cart & Billing Ledger */}
-                <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col justify-between space-y-3">
-                  <div>
-                    <h3 className="text-xs font-bold text-[#FCF6BA] uppercase border-b border-white/10 pb-2 mb-3">Selected Bill Cart</h3>
-                    
-                    <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
-                      {vamcCart.length === 0 ? (
-                        <div className="text-center py-6 text-neutral-500 text-xs">No items selected. Tap blocks on left.</div>
-                      ) : (
-                        vamcCart.map((ci, idx) => (
-                          <div key={ci.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-2">
-                            <div className="truncate pr-2">
-                              <span className="text-white font-bold block truncate">{ci.name}</span>
-                              <span className="text-[10px] text-[#D4AF37]">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button onClick={() => {
-                                setVamcCart(prev => prev.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0));
-                              }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Minus className="w-3 h-3" /></button>
-                              <span className="px-1 text-white font-bold">{ci.quantity}</span>
-                              <button onClick={() => {
-                                setVamcCart(prev => prev.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item));
-                              }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Plus className="w-3 h-3" /></button>
-                            </div>
-                          </div>
-                        ))
-                      )}
+              {/* Modal Header with Chrome-like C1 / C+ Tabs */}
+              <div className="flex flex-col gap-3 border-b border-white/10 pb-3">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                      <Calculator className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
+                      <span className="text-[10px] text-neutral-400">Switch tabs like Chrome to manage separate customer bills simultaneously</span>
                     </div>
                   </div>
 
-                  <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
-                    <input
-                      type="text"
-                      placeholder="Customer Name (Optional)"
-                      value={vamcCustomerName}
-                      onChange={(e) => setVamcCustomerName(e.target.value)}
-                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
-                    />
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      placeholder="Phone Number (Optional)"
-                      value={vamcCustomerPhone}
-                      onChange={(e) => setVamcCustomerPhone(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-mono"
-                    />
-
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setVamcPaymentMode('cash')}
-                        className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
-                          vamcPaymentMode === 'cash' ? 'bg-amber-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
-                        }`}
-                      >
-                        <Banknote className="w-3.5 h-3.5" /> Cash
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setVamcPaymentMode('upi')}
-                        className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
-                          vamcPaymentMode === 'upi' ? 'bg-emerald-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
-                        }`}
-                      >
-                        <Smartphone className="w-3.5 h-3.5" /> PhonePe / Paid
-                      </button>
-                    </div>
-
-                    {vamcPaymentMode === 'cash' && (
-                      <div className="p-2.5 rounded-xl bg-black/40 border border-amber-400/30 space-y-1">
-                        <input
-                          type="number"
-                          placeholder="Customer Handed Cash ₹"
-                          value={vamcCustomerHanded}
-                          onChange={(e) => setVamcCustomerHanded(e.target.value)}
-                          className="w-full bg-[#161619] border border-amber-400/40 rounded-lg px-2.5 py-1.5 text-white font-bold outline-none"
-                        />
-                        <div className="flex justify-between text-[11px] pt-1">
-                          <span className="text-neutral-400">Change to return:</span>
-                          <span className="text-emerald-400 font-bold">
-                            ₹{((parseFloat(vamcCustomerHanded) || 0) >= (vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(vamcCustomerHanded) || 0) - (vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-white/10 space-y-2">
-                    <div className="flex justify-between items-center text-sm font-black text-white">
-                      <span>Total Bill:</span>
-                      <span className="text-[#D4AF37] text-base">₹{vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
-                    </div>
+                  <div className="flex items-center gap-2">
                     <button
-                      disabled={loading || vamcCart.length === 0}
-                      onClick={async () => {
-                        const total = vamcCart.reduce((s, i) => s + (i.price * i.quantity), 0);
-                        setLoading(true);
-                        try {
-                          const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
-                            table_number: 0,
-                            customer_name: vamcCustomerName.trim() || 'VaMC Counter',
-                            customer_phone: vamcCustomerPhone.trim() || '0000000000',
-                            subtotal: total,
-                            total_amount: total,
-                            final_payable: total,
-                            status: 'completed',
-                            payment_status: 'paid',
-                            payment_mode: vamcPaymentMode
-                          }).select().single();
-
-                          if (sErr) throw sErr;
-
-                          const itemsPayload = vamcCart.map(ci => ({
-                            session_id: sess.id,
-                            menu_item_id: null,
-                            quantity: ci.quantity,
-                            unit_price: ci.price,
-                            item_status: 'served',
-                            cooking_notes: `VaMC Counter Item: ${ci.name}`
-                          }));
-
-                          await supabase.from('order_items').insert(itemsPayload);
-                          alert(`VaMC Sale Complete! Total: ₹${total.toFixed(2)} (${vamcPaymentMode.toUpperCase()})`);
-                          setVamcCart([]);
-                          setVamcCustomerName('');
-                          setVamcCustomerPhone('');
-                          setVamcCustomerHanded('');
-                          setShowVaMCModal(false);
-                          loadAdminData();
-                        } catch (err: any) {
-                          alert('Error: ' + err.message);
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                      className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+                      onClick={() => setShowVaMCCrudModal(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer shadow-md"
                     >
-                      {loading ? 'Processing...' : 'Complete Sale & Log Ledger'}
+                      <Settings className="w-3.5 h-3.5" />
+                      <span>Manage Counter Menu</span>
+                    </button>
+
+                    <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
+                      <X className="w-5 h-5" />
                     </button>
                   </div>
-
                 </div>
 
+                {/* CHROME-LIKE TABS BAR (C1, C2, ... + C+ Button) */}
+                <div className="flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pt-1">
+                  {vamcTabs.map((tab) => {
+                    const isActive = tab.id === activeVamcTabId;
+                    return (
+                      <div
+                        key={tab.id}
+                        onClick={() => setActiveVamcTabId(tab.id)}
+                        className={`flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl border-t border-x cursor-pointer transition select-none ${
+                          isActive 
+                            ? 'bg-[#18181c] border-[#D4AF37] text-white font-black' 
+                            : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{tab.name} ({tab.cart.reduce((s, i) => s + i.quantity, 0)})</span>
+                        {vamcTabs.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nextTabs = vamcTabs.filter(t => t.id !== tab.id);
+                              setVamcTabs(nextTabs);
+                              if (isActive) setActiveVamcTabId(nextTabs[0].id);
+                            }}
+                            className="p-0.5 hover:text-rose-400"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* C+ Button to Add New Customer Tab */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextId = `C${vamcTabs.length + 1}`;
+                      setVamcTabs([...vamcTabs, { id: nextId, name: `Customer ${nextId}`, cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
+                      setActiveVamcTabId(nextId);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37] text-[#FCF6BA] font-black text-xs hover:bg-[#D4AF37]/30 cursor-pointer flex items-center gap-1 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>C+</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Active Tab Content */}
+              {(() => {
+                const currentTab = vamcTabs.find(t => t.id === activeVamcTabId) || vamcTabs[0];
+
+                const updateCurrentTab = (updates: any) => {
+                  setVamcTabs(prev => prev.map(t => t.id === currentTab.id ? { ...t, ...updates } : t));
+                };
+
+                const tabCart = currentTab.cart;
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1">
+                    
+                    {/* Left: Interactive Visual Selection Blocks */}
+                    <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden">
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search counter items..."
+                          value={vamcSearch}
+                          onChange={(e) => setVamcSearch(e.target.value)}
+                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37]"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
+                        {vamcCounterItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
+                          const isSelected = tabCart.some(ci => ci.id === item.id);
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => {
+                                const newCart = (() => {
+                                  const exist = tabCart.find(ci => ci.id === item.id);
+                                  if (exist) {
+                                    return tabCart.filter(ci => ci.id !== item.id);
+                                  }
+                                  return [...tabCart, { ...item, quantity: 1 }];
+                                })();
+                                updateCurrentTab({ cart: newCart });
+                              }}
+                              className={`p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                                isSelected 
+                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-lg' 
+                                  : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
+                                  {isSelected && <CheckCircle className="w-4 h-4 text-[#D4AF37] shrink-0" />}
+                                </div>
+                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1">₹{Number(item.price).toFixed(2)}</span>
+                              </div>
+                              <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
+                                {isSelected ? '✓ Selected' : 'Tap to Select'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Right: Cart & Billing Ledger for Current Tab */}
+                    <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
+                          <h3 className="text-xs font-bold text-[#FCF6BA] uppercase">Bill Cart ({currentTab.name})</h3>
+                        </div>
+                        
+                        <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
+                          {tabCart.length === 0 ? (
+                            <div className="text-center py-6 text-neutral-500 text-xs">No items selected. Tap blocks on left.</div>
+                          ) : (
+                            tabCart.map((ci, idx) => (
+                              <div key={ci.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-2">
+                                <div className="truncate pr-2">
+                                  <span className="text-white font-bold block truncate">{ci.name}</span>
+                                  <span className="text-[10px] text-[#D4AF37]">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button onClick={() => {
+                                    const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0);
+                                    updateCurrentTab({ cart: newCart });
+                                  }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Minus className="w-3 h-3" /></button>
+                                  <span className="px-1 text-white font-bold">{ci.quantity}</span>
+                                  <button onClick={() => {
+                                    const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
+                                    updateCurrentTab({ cart: newCart });
+                                  }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Plus className="w-3 h-3" /></button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
+                        <input
+                          type="text"
+                          placeholder="Customer Name (Optional)"
+                          value={currentTab.customerName}
+                          onChange={(e) => updateCurrentTab({ customerName: e.target.value })}
+                          className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                        />
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          placeholder="Phone Number (Optional)"
+                          value={currentTab.customerPhone}
+                          onChange={(e) => updateCurrentTab({ customerPhone: e.target.value.replace(/\D/g, '') })}
+                          className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-mono"
+                        />
+
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => updateCurrentTab({ paymentMode: 'cash' })}
+                            className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
+                              currentTab.paymentMode === 'cash' ? 'bg-amber-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
+                            }`}
+                          >
+                            <Banknote className="w-3.5 h-3.5" /> Cash
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateCurrentTab({ paymentMode: 'upi' })}
+                            className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
+                              currentTab.paymentMode === 'upi' ? 'bg-emerald-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
+                            }`}
+                          >
+                            <Smartphone className="w-3.5 h-3.5" /> PhonePe / Paid
+                          </button>
+                        </div>
+
+                        {currentTab.paymentMode === 'cash' && (
+                          <div className="p-2.5 rounded-xl bg-black/40 border border-amber-400/30 space-y-1">
+                            <input
+                              type="number"
+                              placeholder="Customer Handed Cash ₹"
+                              value={currentTab.customerHanded}
+                              onChange={(e) => updateCurrentTab({ customerHanded: e.target.value })}
+                              className="w-full bg-[#161619] border border-amber-400/40 rounded-lg px-2.5 py-1.5 text-white font-bold outline-none"
+                            />
+                            <div className="flex justify-between text-[11px] pt-1">
+                              <span className="text-neutral-400">Change to return:</span>
+                              <span className="text-emerald-400 font-bold">
+                                ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-white/10 space-y-2">
+                        <div className="flex justify-between items-center text-sm font-black text-white">
+                          <span>Total Bill:</span>
+                          <span className="text-[#D4AF37] text-base">₹{tabCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
+                        </div>
+                        <button
+                          disabled={loading || tabCart.length === 0}
+                          onClick={async () => {
+                            const total = tabCart.reduce((s, i) => s + (i.price * i.quantity), 0);
+                            setLoading(true);
+                            try {
+                              const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
+                                table_number: 0,
+                                customer_name: currentTab.customerName.trim() || `${currentTab.name} Counter`,
+                                customer_phone: currentTab.customerPhone.trim() || '0000000000',
+                                subtotal: total,
+                                total_amount: total,
+                                final_payable: total,
+                                status: 'completed',
+                                payment_status: 'paid',
+                                payment_mode: currentTab.paymentMode
+                              }).select().single();
+
+                              if (sErr) throw sErr;
+
+                              const itemsPayload = tabCart.map(ci => ({
+                                session_id: sess.id,
+                                menu_item_id: null,
+                                quantity: ci.quantity,
+                                unit_price: ci.price,
+                                item_status: 'served',
+                                cooking_notes: `VaMC Counter Item: ${ci.name}`
+                              }));
+
+                              await supabase.from('order_items').insert(itemsPayload);
+                              alert(`${currentTab.name} Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
+                              
+                              // Remove current tab or clear it
+                              const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
+                              if (nextTabs.length === 0) {
+                                setVamcTabs([{ id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
+                                setActiveVamcTabId('C1');
+                              } else {
+                                setVamcTabs(nextTabs);
+                                setActiveVamcTabId(nextTabs[0].id);
+                              }
+
+                              setShowVaMCModal(false);
+                              loadAdminData();
+                            } catch (err: any) {
+                              alert('Error: ' + err.message);
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+                        >
+                          {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
+                        </button>
+                      </div>
+
+                    </div>
+
+                  </div>
+                );
+              })()}
             </motion.div>
           </div>
         )}
