@@ -44,7 +44,8 @@ import {
   Bell,
   Sparkles,
   Layers,
-  Scale
+  Scale,
+  Search
 } from 'lucide-react';
 
 const fluidSpring = {
