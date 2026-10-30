@@ -57,7 +57,13 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
-  const [banners, setBanners] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>([
+    {
+      id: 999,
+      title: 'Royal Dry Fruit Shakes & Fresh Juices',
+      image_url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1200&auto=format&fit=crop'
+    }
+  ]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [topPickDishIds, setTopPickDishIds] = useState<number[]>([]);
 
@@ -300,7 +306,7 @@ export default function LuxuryCustomerTablePage() {
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
     if (cmbs) setCombos(cmbs);
-    if (bnrs) {
+    if (bnrs && bnrs.length > 0) {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
     }
@@ -484,7 +490,7 @@ export default function LuxuryCustomerTablePage() {
     return menuItems.filter(m => Number(m.price) <= 70 && m.food_type !== 'non_veg').slice(0, 4);
   }, [menuItems]);
 
-  const is10thVisitMilestone = customerVisitCount >= 10 && customerVisitCount % 10 === 0;
+  const is10thVisitMilestone = customerVisitCount === 10 || (customerVisitCount > 0 && customerVisitCount % 10 === 0);
 
   const handleClaimFreeReward = (drink: MenuItem) => {
     triggerHaptic(25);
@@ -803,32 +809,39 @@ export default function LuxuryCustomerTablePage() {
           </motion.div>
         )}
 
-        {/* 3. RESTORED PROMO BANNER CAROUSEL (OLD 2:1 RATIO LAYOUT) */}
+        {/* RESTORED OLD BANNER LAYOUT (2:1 WIDE CAROUSEL WITH DOTS) */}
         {banners.length > 0 && (
-          <div className="relative w-full h-44 sm:h-52 overflow-hidden rounded-[26px] border border-[#D4AF37]/50 shadow-[0_8px_30px_rgba(0,0,0,0.7)] bg-neutral-950">
+          <div className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden rounded-[28px] border border-[#D4AF37]/60 shadow-[0_10px_35px_rgba(0,0,0,0.8)] bg-neutral-950">
             <AnimatePresence mode="wait">
               {banners[currentBannerIndex] && (
                 <motion.div
                   key={banners[currentBannerIndex].id}
-                  initial={{ opacity: 0, scale: 0.98 }}
+                  initial={{ opacity: 0, scale: 1.02 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.4 }}
-                  className="w-full h-full"
+                  transition={{ duration: 0.5, ease: "easeInOut" }}
+                  className="w-full h-full relative"
                 >
                   <img
                     src={banners[currentBannerIndex].image_url}
                     alt={banners[currentBannerIndex].title || 'Promo Banner'}
                     className="w-full h-full object-cover object-center"
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                  
+                  {banners[currentBannerIndex].title && (
+                    <div className="absolute bottom-4 left-4 z-10 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl border border-white/10">
+                      <span className="text-xs font-mono font-bold text-[#FCF6BA]">
+                        {banners[currentBannerIndex].title}
+                      </span>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
-
             {banners.length > 1 && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+              <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
                 {banners.map((_, idx) => (
                   <button
                     key={idx}
@@ -836,7 +849,7 @@ export default function LuxuryCustomerTablePage() {
                     onClick={() => setCurrentBannerIndex(idx)}
                     className={`h-1.5 rounded-full transition-all cursor-pointer ${
                       idx === currentBannerIndex 
-                        ? 'w-5 bg-[#D4AF37]' 
+                        ? 'w-6 bg-[#D4AF37]' 
                         : 'w-1.5 bg-white/40 hover:bg-white/70'
                     }`}
                   />
@@ -1522,7 +1535,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* 11. ADD-ONS CUSTOMIZATION BOTTOM SHEET (NEAT BLOCK VIEW & CRASH PROOF) */}
+      {/* 11. ADD-ONS CUSTOMIZATION BOTTOM SHEET */}
       <AnimatePresence>
         {customizingItem && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
