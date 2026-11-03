@@ -97,13 +97,15 @@ export default function LuxuryGoldAdminPanel() {
   const [editingVamcItem, setEditingVamcItem] = useState<any | null>(null);
   const [vamcItemName, setVamcItemName] = useState('');
   const [vamcItemPrice, setVamcItemPrice] = useState('');
+  const [vamcCrudSearch, setVamcCrudSearch] = useState(''); // Search state for Manage Counter Menu CRUD
+  
+  const [vamcSearch, setVamcSearch] = useState('');
 
   // Multi-Customer Tabs State (Default C1, with C+ tab adding capability)
   const [vamcTabs, setVamcTabs] = useState<any[]>([
     { id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }
   ]);
   const [activeVamcTabId, setActiveVamcTabId] = useState('C1');
-  const [vamcSearch, setVamcSearch] = useState('');
 
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -130,7 +132,7 @@ export default function LuxuryGoldAdminPanel() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
 
-  // Add-ons Master CRUD
+  // Add-ons Master CRUD (Complete State)
   const [showAddonModal, setShowAddonModal] = useState(false);
   const [editingAddon, setEditingAddon] = useState<any | null>(null);
   const [addonName, setAddonName] = useState('');
@@ -264,7 +266,9 @@ export default function LuxuryGoldAdminPanel() {
           loyalties.forEach((l: any) => { map[l.phone] = l; });
           setLoyaltyData(map);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Loyalty load err:', e);
+      }
 
       if (tbls) setTables(tbls);
       if (sess) setSessions(sess);
@@ -485,7 +489,6 @@ export default function LuxuryGoldAdminPanel() {
     window.location.replace('/');
   };
 
-  // Tables CRUD
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
     const tNum = parseInt(newTableNumber);
@@ -550,7 +553,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Category CRUD
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = categoryName.trim();
@@ -599,7 +601,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Add-ons Master CRUD
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = addonName.trim();
@@ -661,7 +662,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Instant Stock Toggle for Dishes
   const handleToggleStock = async (itemId: number, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
     setMenuItems(prev => prev.map(m => m.id === itemId ? { ...m, is_available: nextStatus } : m));
@@ -725,7 +725,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Combos CRUD
   const comboSumActualPrice = useMemo(() => {
     return selectedComboItemIds.reduce((sum, id) => {
       const dish = menuItems.find(m => m.id === id);
@@ -783,7 +782,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Banners
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBannerTitle.trim() || !newBannerImageUrl.trim()) return alert('Banner Title & Image ivvandi.');
@@ -816,7 +814,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Filter
   const filteredSessions = useMemo(() => {
     return sessions.filter(s => {
       const sessionDate = new Date(s.created_at).toISOString().split('T')[0];
@@ -843,19 +840,30 @@ export default function LuxuryGoldAdminPanel() {
 
   const activeSessions = useMemo(() => sessions.filter(s => s.status === 'active'), [sessions]);
 
+  // FIX FOR "Dish #null" ISSUE: Properly resolve counter item name from cooking_notes or joined relations
   const getSessionOrderedItems = (sessionId: string) => {
     return orderItems
       .filter(oi => oi.session_id === sessionId && oi.item_status !== 'cancelled')
-      .map(oi => ({
-        id: oi.id,
-        name: oi.menu_items?.name_en || oi.menu_items?.name || 'Dish #' + oi.menu_item_id,
-        quantity: oi.quantity || 1,
-        price: Number(oi.unit_price || oi.menu_items?.price || 0),
-        cooking_notes: oi.cooking_notes || null,
-        selected_addons: oi.selected_addons || [],
-        is_complimentary: oi.is_complimentary || false,
-        selected_weight_variant: oi.selected_weight_variant || null
-      }));
+      .map(oi => {
+        let resolvedName = oi.menu_items?.name_en || oi.menu_items?.name;
+        if (!resolvedName && oi.cooking_notes && oi.cooking_notes.includes('VaMC Counter Item:')) {
+          resolvedName = oi.cooking_notes.replace('VaMC Counter Item:', '').trim();
+        }
+        if (!resolvedName) {
+          resolvedName = 'Counter Item';
+        }
+
+        return {
+          id: oi.id,
+          name: resolvedName,
+          quantity: oi.quantity || 1,
+          price: Number(oi.unit_price || oi.menu_items?.price || 0),
+          cooking_notes: oi.cooking_notes || null,
+          selected_addons: oi.selected_addons || [],
+          is_complimentary: oi.is_complimentary || false,
+          selected_weight_variant: oi.selected_weight_variant || null
+        };
+      });
   };
 
   const getSessionItemsDetailed = (sessionId: string) => {
@@ -1019,7 +1027,7 @@ export default function LuxuryGoldAdminPanel() {
           <div class="divider"></div>
           <div class="total-row">
             <span>NET PAYABLE (Zero GST):</span>
-            <span>₹${gross.toFixed(2)}</span>
+            <span>₹{gross.toFixed(2)}</span>
           </div>
           <div class="divider"></div>
           <div class="footer">
@@ -1478,7 +1486,17 @@ export default function LuxuryGoldAdminPanel() {
                           <span className="text-base font-black text-white">#{t.table_number}</span>
                           <span className={`w-2 h-2 rounded-full ${isOccupied ? 'bg-rose-500' : 'bg-emerald-500'}`} />
                         </div>
-                        <span className="text-[11px] text-[#D4AF37] block mt-1 truncate">{t.table_name || `Table-${t.table_number}`}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const finalName = t.table_name ? t.table_name.trim() : `Table-${t.table_number}`;
+                            router.push(`/table/${encodeURIComponent(finalName)}`);
+                          }}
+                          className="text-[11px] text-[#D4AF37] block mt-1 truncate hover:underline text-left cursor-pointer w-full"
+                          title="Click to open customer menu"
+                        >
+                          {t.table_name || `Table #${t.table_number}`}
+                        </button>
                         <span className="text-[10px] text-neutral-500">{t.capacity || 4} Seats</span>
                       </div>
 
@@ -2232,7 +2250,7 @@ export default function LuxuryGoldAdminPanel() {
       </main>
 
       {/* ======================================================== */}
-      {/* VAMC COUNTER POS MODAL (CHROME-LIKE TABS FOR MULTI-CUSTOMER C1, C+) */}
+      {/* VAMC COUNTER POS MODAL (WITH CHROME-LIKE TABS C1, C+ & SEARCH IN CRUD) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCModal && (
@@ -2512,7 +2530,6 @@ export default function LuxuryGoldAdminPanel() {
                               await supabase.from('order_items').insert(itemsPayload);
                               alert(`${currentTab.name} Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
                               
-                              // Remove current tab or clear it
                               const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
                               if (nextTabs.length === 0) {
                                 setVamcTabs([{ id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
@@ -2547,7 +2564,7 @@ export default function LuxuryGoldAdminPanel() {
       </AnimatePresence>
 
       {/* ======================================================== */}
-      {/* VAMC COUNTER MENU CRUD MODAL (ADD, EDIT, DELETE ITEMS) */}
+      {/* VAMC COUNTER MENU CRUD MODAL (WITH SEARCH BAR) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCCrudModal && (
@@ -2610,12 +2627,24 @@ export default function LuxuryGoldAdminPanel() {
                 </button>
               </form>
 
+              {/* Search Bar for CRUD Items */}
+              <div className="relative mt-3">
+                <Search className="w-4 h-4 text-[#D4AF37] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search in counter menu..."
+                  value={vamcCrudSearch}
+                  onChange={(e) => setVamcCrudSearch(e.target.value)}
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white outline-none"
+                />
+              </div>
+
               {/* Counter Items List */}
               <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
-                {vamcCounterItems.length === 0 ? (
-                  <div className="text-center py-8 text-neutral-500 text-xs">No items added to VaMC counter menu yet. Add above.</div>
+                {vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).length === 0 ? (
+                  <div className="text-center py-8 text-neutral-500 text-xs">No matching counter items found.</div>
                 ) : (
-                  vamcCounterItems.map(item => (
+                  vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).map(item => (
                     <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs">
                       <div>
                         <span className="font-bold text-white block">{item.name}</span>
