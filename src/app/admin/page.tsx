@@ -47,7 +47,10 @@ import {
   Scale,
   Search,
   Settings,
-  CheckCircle2
+  CheckCircle2,
+  IceCream,
+  TrendingUp,
+  PackageCheck
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -97,15 +100,25 @@ export default function LuxuryGoldAdminPanel() {
   const [editingVamcItem, setEditingVamcItem] = useState<any | null>(null);
   const [vamcItemName, setVamcItemName] = useState('');
   const [vamcItemPrice, setVamcItemPrice] = useState('');
-  const [vamcCrudSearch, setVamcCrudSearch] = useState(''); // Search state for Manage Counter Menu CRUD
-  
+  const [vamcCrudSearch, setVamcCrudSearch] = useState('');
   const [vamcSearch, setVamcSearch] = useState('');
 
-  // Multi-Customer Tabs State (Default C1, with C+ tab adding capability)
   const [vamcTabs, setVamcTabs] = useState<any[]>([
     { id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }
   ]);
   const [activeVamcTabId, setActiveVamcTabId] = useState('C1');
+
+  // Ice Cream Ledger & Profit Tracking States
+  const [showIceCreamModal, setShowIceCreamModal] = useState(false);
+  const [iceItems, setIceItems] = useState<any[]>([]);
+  const [icePurchases, setIcePurchases] = useState<any[]>([]);
+  const [iceItemName, setIceItemName] = useState('');
+  const [iceItemSP, setIceItemSP] = useState('');
+  const [iceItemCP, setIceItemCP] = useState('');
+  const [showIcePurchaseModal, setShowIcePurchaseModal] = useState(false);
+  const [selectedIceItem, setSelectedIceItem] = useState<any | null>(null);
+  const [icePurchaseQty, setIcePurchaseQty] = useState('');
+  const [icePurchaseCost, setIcePurchaseCost] = useState('');
 
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -132,7 +145,7 @@ export default function LuxuryGoldAdminPanel() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
 
-  // Add-ons Master CRUD (Complete State)
+  // Add-ons Master CRUD
   const [showAddonModal, setShowAddonModal] = useState(false);
   const [editingAddon, setEditingAddon] = useState<any | null>(null);
   const [addonName, setAddonName] = useState('');
@@ -232,6 +245,17 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
+  const loadIceCreamData = async () => {
+    try {
+      const { data: items } = await supabase.from('ice_cream_menu_items').select('*').order('name');
+      const { data: purchases } = await supabase.from('ice_cream_purchases').select('*').order('created_at', { ascending: false });
+      if (items) setIceItems(items);
+      if (purchases) setIcePurchases(purchases);
+    } catch (e) {
+      console.log('Ice cream tables not yet created or empty.');
+    }
+  };
+
   const loadAdminData = async () => {
     setLoading(true);
     try {
@@ -258,6 +282,7 @@ export default function LuxuryGoldAdminPanel() {
       ]);
 
       await loadVaMCCounterItems();
+      await loadIceCreamData();
 
       try {
         const { data: loyalties } = await supabase.from('customer_loyalty').select('*');
@@ -298,6 +323,8 @@ export default function LuxuryGoldAdminPanel() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => loadVaMCCounterItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_menu_items' }, () => loadIceCreamData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_purchases' }, () => loadIceCreamData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => loadAdminData())
@@ -487,6 +514,40 @@ export default function LuxuryGoldAdminPanel() {
     document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') localStorage.clear();
     window.location.replace('/');
+  };
+
+  // Ice Cream Ledger Stats Calculation
+  const iceCreamStats = useMemo(() => {
+    let totalInv = 0;
+    let totalRev = 0;
+    
+    iceItems.forEach(item => {
+      const itemPurchases = icePurchases.filter(p => p.item_id === item.id);
+      const totalQtyPurchased = itemPurchases.reduce((s, p) => s + p.quantity_added, 0);
+      const itemInv = itemPurchases.reduce((s, p) => s + Number(p.total_investment), 0);
+      
+      const qtySold = Math.max(0, totalQtyPurchased - item.stock_quantity);
+      const itemRev = qtySold * Number(item.selling_price);
+      
+      totalInv += itemInv;
+      totalRev += itemRev;
+    });
+    
+    return { totalInvestment: totalInv, totalRevenue: totalRev, netProfit: totalRev - totalInv };
+  }, [iceItems, icePurchases]);
+
+  // Handle Quick Ice Cream Stock Deduct (Sale Entry)
+  const handleQuickIceCreamSell = async (item: any) => {
+    if (item.stock_quantity <= 0) return alert('Out of stock!');
+    try {
+      setLoading(true);
+      await supabase.from('ice_cream_menu_items').update({ stock_quantity: item.stock_quantity - 1 }).eq('id', item.id);
+      loadIceCreamData();
+    } catch (e: any) {
+      alert('Error updating stock: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddTable = async (e: React.FormEvent) => {
@@ -1027,7 +1088,7 @@ export default function LuxuryGoldAdminPanel() {
           <div class="divider"></div>
           <div class="total-row">
             <span>NET PAYABLE (Zero GST):</span>
-            <span>₹{gross.toFixed(2)}</span>
+            <span>₹${gross.toFixed(2)}</span>
           </div>
           <div class="divider"></div>
           <div class="footer">
@@ -1167,6 +1228,18 @@ export default function LuxuryGoldAdminPanel() {
           </div>
 
           <div className="flex items-center gap-2">
+            
+            {/* NEW: Ice Cream Profit Ledger Button */}
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => setShowIceCreamModal(true)}
+              className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20 text-sky-200 text-xs font-mono font-bold transition cursor-pointer shadow-md"
+              title="Ice Cream Stock & Profit Ledger"
+            >
+              <IceCream className="w-4 h-4 text-sky-400" />
+              <span>Ice Cream Ledger</span>
+            </motion.button>
+
             {/* VaMC Manual POS Counter Button */}
             <motion.button
               whileTap={{ scale: 0.94 }}
@@ -1222,8 +1295,25 @@ export default function LuxuryGoldAdminPanel() {
         </div>
       </header>
 
+      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex flex-wrap items-center justify-between gap-3">
+        <div className="p-2 rounded-2xl bg-[#111115] border border-[#D4AF37]/40 shadow-lg flex items-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowVaMCModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>C+ Customer Quick Bill</span>
+          </motion.button>
+          <span className="text-[11px] font-mono text-neutral-400 hidden sm:inline px-2">
+            Instant individual customer billing via independent counter menu.
+          </span>
+        </div>
+      </div>
+
       {/* FLOATING ACTION DOCK */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 relative z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 relative z-40">
         <div className="p-3 rounded-[28px] bg-gradient-to-b from-[#111114]/90 to-[#0a0a0d]/90 border border-white/[0.1] backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
           
           <div className="flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-1 lg:pb-0 w-full lg:w-auto">
@@ -2662,6 +2752,227 @@ export default function LuxuryGoldAdminPanel() {
                   ))
                 )}
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ======================================================== */}
+      {/* ICE CREAM INVENTORY & PROFIT LEDGER MODAL (STANDALONE) */}
+      {/* ======================================================== */}
+      <AnimatePresence>
+        {showIceCreamModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-5xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-400/20 border border-sky-400 flex items-center justify-center text-sky-400">
+                    <IceCream className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-wider">Ice Cream Stock & Profit Ledger</h2>
+                    <span className="text-[10px] sm:text-xs text-neutral-400">Manage running inventory, budget investment, and real-time sales profit.</span>
+                  </div>
+                </div>
+                <button onClick={() => setShowIceCreamModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Top Analytics Dashboard */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
+                <div className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex flex-col justify-center">
+                  <span className="text-[11px] text-neutral-400 uppercase font-bold flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 text-neutral-400" /> Total Budget Investment</span>
+                  <span className="text-2xl font-black text-white mt-1">₹{iceCreamStats.totalInvestment.toFixed(2)}</span>
+                </div>
+                <div className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex flex-col justify-center">
+                  <span className="text-[11px] text-neutral-400 uppercase font-bold flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Total Sales Revenue</span>
+                  <span className="text-2xl font-black text-emerald-400 mt-1">₹{iceCreamStats.totalRevenue.toFixed(2)}</span>
+                </div>
+                <div className="p-4 rounded-[24px] bg-sky-950/20 border border-sky-400/40 flex flex-col justify-center shadow-lg relative overflow-hidden">
+                  <div className="absolute -right-4 -bottom-4 opacity-10"><IceCream className="w-24 h-24 text-sky-400" /></div>
+                  <span className="text-[11px] text-sky-200 uppercase font-bold relative z-10">Net Profit Generated</span>
+                  <span className={`text-3xl font-black mt-1 relative z-10 ${iceCreamStats.netProfit >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
+                    {iceCreamStats.netProfit >= 0 ? '+' : '-'}₹{Math.abs(iceCreamStats.netProfit).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mt-5 overflow-hidden flex-1">
+                
+                {/* Left: Add New Item Form */}
+                <div className="md:col-span-4 flex flex-col space-y-4 border-r border-white/10 pr-0 md:pr-6 overflow-y-auto custom-gold-scrollbar">
+                  <div>
+                    <h3 className="text-xs font-black text-sky-400 uppercase border-b border-white/10 pb-2 mb-3 flex items-center gap-1.5">
+                      <Plus className="w-4 h-4" /> Add Ice Cream Item (CRUD)
+                    </h3>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      const cleanName = iceItemName.trim();
+                      const sp = parseFloat(iceItemSP);
+                      const cp = parseFloat(iceItemCP);
+                      if (!cleanName || isNaN(sp) || isNaN(cp) || sp <= 0 || cp < 0) return alert('Valid details ivvandi.');
+
+                      setLoading(true);
+                      try {
+                        await supabase.from('ice_cream_menu_items').insert({ name: cleanName, selling_price: sp, cost_price: cp, stock_quantity: 0 });
+                        setIceItemName(''); setIceItemSP(''); setIceItemCP('');
+                        loadIceCreamData();
+                      } catch (err: any) { alert('Error: ' + err.message); } 
+                      finally { setLoading(false); }
+                    }} className="space-y-3">
+                      <div>
+                        <label className="text-[10px] text-neutral-400 block mb-1">Ice Cream Name</label>
+                        <input type="text" required placeholder="e.g. Vanilla Cone" value={iceItemName} onChange={(e) => setIceItemName(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-neutral-400 block mb-1">Cost Price (CP) ₹</label>
+                          <input type="number" required min="0" step="0.01" placeholder="₹ Buy Price" value={iceItemCP} onChange={(e) => setIceItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-neutral-400 block mb-1">Selling Price (SP) ₹</label>
+                          <input type="number" required min="1" step="0.01" placeholder="₹ Sell Price" value={iceItemSP} onChange={(e) => setIceItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
+                        </div>
+                      </div>
+                      <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-md">
+                        + Save Item To Ledger
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Right: Inventory & Running Stock */}
+                <div className="md:col-span-8 flex flex-col overflow-hidden">
+                  <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
+                    <h3 className="text-xs font-black text-white uppercase flex items-center gap-1.5"><PackageCheck className="w-4 h-4 text-sky-400" /> Active Inventory & Quick Sell</h3>
+                    <span className="text-[10px] text-neutral-400">{iceItems.length} items found</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto custom-gold-scrollbar pr-2 flex-1 pb-4">
+                    {iceItems.length === 0 ? (
+                      <div className="col-span-full text-center py-10 text-neutral-500 text-xs">No inventory items. Add on the left to start tracking.</div>
+                    ) : (
+                      iceItems.map(item => (
+                        <div key={item.id} className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col justify-between relative overflow-hidden group">
+                          
+                          {/* Stock Badge */}
+                          <div className="absolute top-0 right-0 bg-sky-950/40 border-b border-l border-white/10 px-3 py-1 rounded-bl-xl text-center min-w-[60px]">
+                            <span className="block text-[9px] text-sky-200 font-bold uppercase">Stock</span>
+                            <span className={`block text-lg font-black ${item.stock_quantity > 0 ? 'text-white' : 'text-rose-400'}`}>{item.stock_quantity}</span>
+                          </div>
+
+                          <div className="pr-16">
+                            <span className="font-bold text-white block text-sm line-clamp-1">{item.name}</span>
+                            <div className="flex items-center gap-3 mt-1.5 text-[10px]">
+                              <span className="text-rose-300 font-mono bg-rose-950/30 px-1.5 py-0.5 rounded">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
+                              <span className="text-emerald-300 font-mono bg-emerald-950/30 px-1.5 py-0.5 rounded">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/5">
+                            <button 
+                              onClick={() => { setSelectedIceItem(item); setIcePurchaseQty(''); setIcePurchaseCost(''); setShowIcePurchaseModal(true); }}
+                              className="flex-1 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-xs font-bold text-white transition cursor-pointer"
+                            >
+                              + Add Stock
+                            </button>
+                            <button 
+                              onClick={() => handleQuickIceCreamSell(item)}
+                              disabled={item.stock_quantity <= 0 || loading}
+                              className="flex-1 py-1.5 rounded-lg bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Sell (-1)
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if(!confirm(`Delete "${item.name}" from ledger?`)) return;
+                                await supabase.from('ice_cream_menu_items').delete().eq('id', item.id);
+                                loadIceCreamData();
+                              }} 
+                              className="p-1.5 rounded-lg bg-rose-950/30 text-rose-400 hover:bg-rose-950/50 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ICE CREAM PURCHASE (ADD STOCK) MODAL */}
+      <AnimatePresence>
+        {showIcePurchaseModal && selectedIceItem && (
+          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-sky-400/60 rounded-[28px] p-6 shadow-2xl flex flex-col"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase">Add Bulk Stock</h3>
+                  <span className="text-[10px] text-sky-400 block">{selectedIceItem.name}</span>
+                </div>
+                <button onClick={() => setShowIcePurchaseModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const qty = parseInt(icePurchaseQty);
+                const cost = parseFloat(icePurchaseCost);
+                if (isNaN(qty) || qty <= 0 || isNaN(cost) || cost < 0) return alert('Invalid entry');
+
+                setLoading(true);
+                try {
+                  // Log Purchase
+                  await supabase.from('ice_cream_purchases').insert({
+                    item_id: selectedIceItem.id,
+                    quantity_added: qty,
+                    total_investment: cost
+                  });
+                  // Update Stock Count
+                  await supabase.from('ice_cream_menu_items').update({
+                    stock_quantity: selectedIceItem.stock_quantity + qty
+                  }).eq('id', selectedIceItem.id);
+                  
+                  setShowIcePurchaseModal(false);
+                  loadIceCreamData();
+                } catch (err: any) { alert('Error: ' + err.message); } 
+                finally { setLoading(false); }
+              }} className="space-y-4">
+                
+                <div>
+                  <label className="text-[10px] text-neutral-400 block mb-1">Quantity Adding (e.g. 50 boxes)</label>
+                  <input type="number" required min="1" value={icePurchaseQty} onChange={(e) => {
+                    setIcePurchaseQty(e.target.value);
+                    if(e.target.value) setIcePurchaseCost(String(parseInt(e.target.value) * Number(selectedIceItem.cost_price)));
+                  }} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold" />
+                </div>
+                
+                <div>
+                  <label className="text-[10px] text-neutral-400 block mb-1">Total Investment Cost ₹</label>
+                  <input type="number" required min="0" step="0.01" value={icePurchaseCost} onChange={(e) => setIcePurchaseCost(e.target.value)} className="w-full bg-[#161619] border border-sky-500/30 rounded-xl px-3 py-2 text-white outline-none font-bold text-sky-200" />
+                  <span className="text-[9px] text-neutral-500 mt-1 block">Default auto-calculated based on CP (₹{Number(selectedIceItem.cost_price).toFixed(2)}/item). You can edit if bulk discount applies.</span>
+                </div>
+
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-md mt-2">
+                  Confirm Purchase & Update Stock
+                </button>
+              </form>
             </motion.div>
           </div>
         )}
