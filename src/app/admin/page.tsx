@@ -65,10 +65,10 @@ export default function LuxuryGoldAdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
   
-  // Floating Top Tabs: 'none' | 'history' | 'security' | 'waiter' | 'tables'
+  // Floating Top Tabs
   const [activeFloatingTab, setActiveFloatingTab] = useState<'none' | 'history' | 'security' | 'waiter' | 'tables'>('none');
   
-  // Main Workspace: 'live_orders' | 'menu_hub'
+  // Main Workspace
   const [activeWorkspace, setActiveWorkspace] = useState<'live_orders' | 'menu_hub'>('live_orders');
   const [menuHubTab, setMenuHubTab] = useState<'items' | 'combos' | 'addons' | 'promos'>('items');
 
@@ -93,7 +93,7 @@ export default function LuxuryGoldAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // VaMC Manual Counter POS & Multi-Customer Tabs States
+  // VaMC Manual Counter POS States
   const [showVaMCModal, setShowVaMCModal] = useState(false);
   const [vamcCounterItems, setVamcCounterItems] = useState<any[]>([]);
   const [showVaMCCrudModal, setShowVaMCCrudModal] = useState(false);
@@ -126,7 +126,7 @@ export default function LuxuryGoldAdminPanel() {
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
 
-  // Live Orders Payment & Change State
+  // Live Orders State
   const [selectedRunningTableNum, setSelectedRunningTableNum] = useState<number | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<Record<string, 'cash' | 'upi'>>({});
   const [customerHandedAmounts, setCustomerHandedAmounts] = useState<Record<string, string>>({});
@@ -1231,7 +1231,7 @@ export default function LuxuryGoldAdminPanel() {
 
           <div className="flex items-center gap-2">
             
-            {/* NEW: Ice Cream Profit Ledger Button */}
+            {/* Ice Cream Profit Ledger Button */}
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={() => setShowIceCreamModal(true)}
@@ -1299,17 +1299,16 @@ export default function LuxuryGoldAdminPanel() {
 
       {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS & ICE CREAM */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex flex-wrap items-center justify-between gap-3">
-        <div className="p-2 rounded-2xl bg-[#111115] border border-[#D4AF37]/40 shadow-lg flex items-center gap-2">
+        <div className="p-2 rounded-2xl bg-[#0d0d0f] border border-sky-900/50 shadow-lg flex items-center gap-2">
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowVaMCModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-[0_0_15px_rgba(14,165,233,0.3)]"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>C+ Customer Quick Bill</span>
           </motion.button>
           
-          {/* UPDATED: Ice Cream Ledger Button here as requested */}
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowIceCreamModal(true)}
@@ -1319,8 +1318,8 @@ export default function LuxuryGoldAdminPanel() {
             <span>Ice Cream Ledger</span>
           </motion.button>
 
-          <span className="text-[11px] font-mono text-neutral-400 hidden lg:inline px-2">
-            Instant individual customer billing via independent counter menu.
+          <span className="text-[11px] font-mono text-sky-200/50 hidden lg:inline px-2 border-l border-sky-900/50 ml-2 pl-4">
+            Instant standalone billing & inventory management.
           </span>
         </div>
       </div>
@@ -2362,23 +2361,31 @@ export default function LuxuryGoldAdminPanel() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+              className="w-full max-w-4xl bg-[#0a0f16] border border-sky-400/60 rounded-[32px] p-6 shadow-[0_0_40px_rgba(14,165,233,0.15)] flex flex-col max-h-[90vh] overflow-hidden"
             >
               {/* Modal Header with Chrome-like C1 / C+ Tabs */}
-              <div className="flex flex-col gap-3 border-b border-white/10 pb-3">
+              <div className="flex flex-col gap-3 border-b border-sky-900/50 pb-3">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                    <div className="w-10 h-10 rounded-2xl bg-sky-400/20 border border-sky-400 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]">
                       <Calculator className="w-5 h-5" />
                     </div>
                     <div>
-                      <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
-                      <span className="text-[10px] text-neutral-400">Switch tabs like Chrome to manage separate customer bills simultaneously</span>
+                      <h2 className="text-base font-black text-sky-100 uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
+                      <span className="text-[10px] text-sky-200/60">Switch tabs like Chrome to manage separate customer bills</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
+                    <button
+                      onClick={() => setShowVaMCCrudModal(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30 transition"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      <span>Manage Counter Menu</span>
+                    </button>
+
+                    <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-sky-900/40 hover:bg-rose-500/20 hover:text-rose-400 text-sky-400 cursor-pointer transition">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -2392,10 +2399,10 @@ export default function LuxuryGoldAdminPanel() {
                       <div
                         key={tab.id}
                         onClick={() => setActiveVamcTabId(tab.id)}
-                        className={`flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl border-t border-x cursor-pointer transition select-none ${
+                        className={`flex items-center gap-2 px-4 py-2 rounded-t-xl border-t border-x cursor-pointer transition select-none ${
                           isActive 
-                            ? 'bg-[#18181c] border-[#D4AF37] text-white font-black' 
-                            : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white'
+                            ? 'bg-[#0d141e] border-sky-400 text-sky-100 font-black shadow-[0_-5px_15px_rgba(14,165,233,0.1)]' 
+                            : 'bg-sky-950/20 border-sky-900/50 text-sky-400/60 hover:text-sky-300 hover:bg-sky-900/30'
                         }`}
                       >
                         <span>{tab.name} ({tab.cart.reduce((s, i) => s + i.quantity, 0)})</span>
@@ -2408,9 +2415,9 @@ export default function LuxuryGoldAdminPanel() {
                               setVamcTabs(nextTabs);
                               if (isActive) setActiveVamcTabId(nextTabs[0].id);
                             }}
-                            className="p-0.5 hover:text-rose-400"
+                            className="p-0.5 hover:text-rose-400 transition"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -2425,7 +2432,7 @@ export default function LuxuryGoldAdminPanel() {
                       setVamcTabs([...vamcTabs, { id: nextId, name: `Customer ${nextId}`, cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
                       setActiveVamcTabId(nextId);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37] text-[#FCF6BA] font-black text-xs hover:bg-[#D4AF37]/30 cursor-pointer flex items-center gap-1 shrink-0"
+                    className="px-3 py-1.5 rounded-xl bg-sky-400/10 border border-sky-400/50 text-sky-300 font-black text-xs hover:bg-sky-400/20 hover:text-white cursor-pointer flex items-center gap-1 shrink-0 transition ml-2"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>C+</span>
@@ -2442,42 +2449,25 @@ export default function LuxuryGoldAdminPanel() {
                 };
 
                 const tabCart = currentTab.cart;
-                
-                // --- MODIFIED VAMC ICE CREAM LEDGER DESIGN FOR RIGHT SIDE ---
-                const iceCreamStatsCurrentTab = (() => {
-                  let totalInv = 0;
-                  let totalRev = 0;
-                  iceItems.forEach(item => {
-                    const itemPurchases = icePurchases.filter(p => p.item_id === item.id);
-                    const totalQtyPurchased = itemPurchases.reduce((s, p) => s + p.quantity_added, 0);
-                    const itemInv = itemPurchases.reduce((s, p) => s + Number(p.total_investment), 0);
-                    const qtySold = Math.max(0, totalQtyPurchased - item.stock_quantity);
-                    const itemRev = qtySold * Number(item.selling_price);
-                    totalInv += itemInv;
-                    totalRev += itemRev;
-                  });
-                  return { totalInvestment: totalInv, totalRevenue: totalRev, netProfit: totalRev - totalInv };
-                })();
-
 
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1 relative">
                     
-                    {/* Left: Interactive Visual Selection Blocks */}
-                    <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden">
+                    {/* Left: Interactive Visual Selection Blocks (Fixed: Now mapping vamcCounterItems correctly) */}
+                    <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden z-10">
                       <div className="relative">
-                        <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <Search className="w-4 h-4 text-sky-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
                           placeholder="Search counter items..."
                           value={vamcSearch}
                           onChange={(e) => setVamcSearch(e.target.value)}
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37]"
+                          className="w-full bg-[#0d141e] border border-sky-900/50 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-sky-100 outline-none focus:border-sky-500/80 transition"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
-                        {iceItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
+                        {vamcCounterItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
                           const isSelected = tabCart.some(ci => ci.id === item.id);
                           return (
                             <div
@@ -2488,25 +2478,24 @@ export default function LuxuryGoldAdminPanel() {
                                   if (exist) {
                                     return tabCart.filter(ci => ci.id !== item.id);
                                   }
-                                  return [...tabCart, { ...item, quantity: 1, price: item.selling_price }];
+                                  return [...tabCart, { ...item, quantity: 1, price: item.price }];
                                 })();
                                 updateCurrentTab({ cart: newCart });
                               }}
-                              className={`p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                              className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
                                 isSelected 
-                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-lg' 
-                                  : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50'
+                                  ? 'bg-sky-500/20 border-sky-400 ring-1 ring-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]' 
+                                  : 'bg-white/[0.02] border-sky-900/50 hover:border-sky-400/50 hover:bg-sky-900/20'
                               }`}
                             >
                               <div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
-                                  {isSelected && <CheckCircle className="w-4 h-4 text-[#D4AF37] shrink-0" />}
+                                  <span className="text-xs font-bold text-sky-100 block line-clamp-1">{item.name}</span>
+                                  {isSelected && <CheckCircle className="w-4 h-4 text-sky-400 shrink-0" />}
                                 </div>
-                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1">₹{Number(item.selling_price).toFixed(2)}</span>
-                                <span className="text-[9px] text-neutral-400 block mt-1">Stock: {item.stock_quantity}</span>
+                                <span className="text-[11px] font-black text-sky-400 block mt-1.5">₹{Number(item.price).toFixed(2)}</span>
                               </div>
-                              <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
+                              <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-sky-200' : 'text-sky-600/60'}`}>
                                 {isSelected ? '✓ Selected' : 'Tap to Select'}
                               </span>
                             </div>
@@ -2515,42 +2504,38 @@ export default function LuxuryGoldAdminPanel() {
                       </div>
                     </div>
 
-                    {/* Right: NEW BLUE/BLACK THEME ICE CREAM LEDGER STYLE BILLING */}
-                    <div className="md:col-span-5 bg-[#0a0f16] border border-sky-900/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 relative overflow-hidden">
-                      {/* Decorative Background */}
-                      <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
-                        <IceCream className="w-48 h-48 text-sky-400" />
-                      </div>
-
+                    {/* Right: NEW BLUE/BLACK THEME VAMC LEDGER STYLE BILLING */}
+                    <div className="md:col-span-5 bg-[#0d141e] border border-sky-900/50 rounded-3xl p-5 flex flex-col justify-between space-y-4 relative overflow-hidden z-10 shadow-lg">
+                      
                       <div className="relative z-10 flex flex-col h-full">
                         <div>
-                           <div className="flex justify-between items-center border-b border-sky-900/50 pb-2 mb-3">
-                              <h3 className="text-xs font-black text-sky-400 uppercase flex items-center gap-1.5">
+                           <div className="flex justify-between items-center border-b border-sky-900/50 pb-2.5 mb-3">
+                              <h3 className="text-xs font-black text-sky-400 uppercase flex items-center gap-1.5 tracking-wide">
                                 <Receipt className="w-4 h-4" /> Bill Cart ({currentTab.name})
                               </h3>
-                              <span className="text-[10px] text-sky-200/50">{tabCart.length} Items</span>
+                              <span className="text-[10px] text-sky-200/50 font-bold bg-sky-950/40 px-2 py-0.5 rounded-md">{tabCart.length} Items</span>
                            </div>
                           
-                          <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
+                          <div className="space-y-2.5 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
                             {tabCart.length === 0 ? (
-                              <div className="text-center py-6 text-sky-200/30 text-xs">No items selected. Tap blocks on left.</div>
+                              <div className="text-center py-6 text-sky-200/30 text-xs font-bold">No items selected. Tap blocks on left.</div>
                             ) : (
                               tabCart.map((ci, idx) => (
-                                <div key={ci.id} className="flex justify-between items-center text-xs border-b border-sky-900/30 pb-2">
+                                <div key={ci.id} className="flex justify-between items-center text-xs border-b border-sky-900/30 pb-2.5">
                                   <div className="truncate pr-2">
                                     <span className="text-sky-100 font-bold block truncate">{ci.name}</span>
-                                    <span className="text-[10px] text-sky-400">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
+                                    <span className="text-[10px] text-sky-400/80 font-black tracking-wide">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0 bg-sky-950/40 rounded-lg p-1 border border-sky-900/50">
                                     <button onClick={() => {
                                       const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0);
                                       updateCurrentTab({ cart: newCart });
-                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer"><Minus className="w-3 h-3" /></button>
-                                    <span className="px-1 text-sky-100 font-bold w-4 text-center">{ci.quantity}</span>
+                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer transition"><Minus className="w-3 h-3" /></button>
+                                    <span className="px-1 text-sky-100 font-black w-4 text-center">{ci.quantity}</span>
                                     <button onClick={() => {
                                       const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
                                       updateCurrentTab({ cart: newCart });
-                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer"><Plus className="w-3 h-3" /></button>
+                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer transition"><Plus className="w-3 h-3" /></button>
                                   </div>
                                 </div>
                               ))
@@ -2558,13 +2543,13 @@ export default function LuxuryGoldAdminPanel() {
                           </div>
                         </div>
 
-                        <div className="space-y-2 mt-auto pt-4 text-xs">
+                        <div className="space-y-3 mt-auto pt-4 text-xs">
                           <input
                             type="text"
                             placeholder="Customer Name (Optional)"
                             value={currentTab.customerName}
                             onChange={(e) => updateCurrentTab({ customerName: e.target.value })}
-                            className="w-full bg-[#0d141e] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 placeholder:text-sky-700"
+                            className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3.5 py-2.5 text-sky-100 outline-none focus:border-sky-500/50 placeholder:text-sky-700 transition"
                           />
                           <input
                             type="tel"
@@ -2572,32 +2557,32 @@ export default function LuxuryGoldAdminPanel() {
                             placeholder="Phone Number (Optional)"
                             value={currentTab.customerPhone}
                             onChange={(e) => updateCurrentTab({ customerPhone: e.target.value.replace(/\D/g, '') })}
-                            className="w-full bg-[#0d141e] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none font-mono focus:border-sky-500/50 placeholder:text-sky-700"
+                            className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3.5 py-2.5 text-sky-100 outline-none font-mono focus:border-sky-500/50 placeholder:text-sky-700 transition"
                           />
 
-                          <div className="grid grid-cols-2 gap-2 pt-2">
+                          <div className="grid grid-cols-2 gap-2.5 pt-2">
                             <button
                               type="button"
                               onClick={() => updateCurrentTab({ paymentMode: 'cash' })}
-                              className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                                currentTab.paymentMode === 'cash' ? 'bg-sky-500 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300'
+                              className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                                currentTab.paymentMode === 'cash' ? 'bg-sky-400 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.4)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300 hover:bg-sky-900/30'
                               }`}
                             >
-                              <Banknote className="w-3.5 h-3.5" /> Cash
+                              <Banknote className="w-4 h-4" /> Cash
                             </button>
                             <button
                               type="button"
                               onClick={() => updateCurrentTab({ paymentMode: 'upi' })}
-                              className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                                currentTab.paymentMode === 'upi' ? 'bg-sky-500 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300'
+                              className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                                currentTab.paymentMode === 'upi' ? 'bg-sky-400 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.4)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300 hover:bg-sky-900/30'
                               }`}
                             >
-                              <Smartphone className="w-3.5 h-3.5" /> PhonePe / Paid
+                              <Smartphone className="w-4 h-4" /> PhonePe / Paid
                             </button>
                           </div>
 
                           {currentTab.paymentMode === 'cash' && (
-                            <div className="p-3 rounded-xl bg-[#0d141e] border border-sky-500/30 space-y-2 mt-2">
+                            <div className="p-3.5 rounded-xl bg-[#0a0f16] border border-sky-500/30 space-y-2.5 mt-2 shadow-inner">
                               <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sky-500 font-bold">₹</span>
                                 <input
@@ -2605,12 +2590,12 @@ export default function LuxuryGoldAdminPanel() {
                                   placeholder="Customer Handed Cash"
                                   value={currentTab.customerHanded}
                                   onChange={(e) => updateCurrentTab({ customerHanded: e.target.value })}
-                                  className="w-full bg-transparent rounded-lg pl-7 pr-3 py-1.5 text-sky-100 font-bold outline-none border-b border-sky-900 focus:border-sky-500 transition-colors"
+                                  className="w-full bg-transparent rounded-lg pl-7 pr-3 py-1.5 text-sky-100 font-bold outline-none border-b border-sky-900 focus:border-sky-400 transition-colors placeholder:text-sky-800"
                                 />
                               </div>
-                              <div className="flex justify-between text-[11px] pt-1">
-                                <span className="text-sky-200/60">Change to return:</span>
-                                <span className="text-sky-400 font-black">
+                              <div className="flex justify-between items-center text-[11px] pt-1 px-1">
+                                <span className="text-sky-200/60 font-bold">Change to return:</span>
+                                <span className="text-sky-400 font-black text-sm">
                                   ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
                                 </span>
                               </div>
@@ -2619,9 +2604,9 @@ export default function LuxuryGoldAdminPanel() {
                         </div>
 
                         <div className="pt-4 mt-4 border-t border-sky-900/50 space-y-3">
-                          <div className="flex justify-between items-center text-sm font-black text-sky-100">
+                          <div className="flex justify-between items-center text-sm font-black text-sky-100 px-1">
                             <span>Total Bill:</span>
-                            <span className="text-sky-400 text-lg">₹{tabCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
+                            <span className="text-sky-400 text-xl tracking-wide">₹{tabCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
                           </div>
                           <button
                             disabled={loading || tabCart.length === 0}
@@ -2645,23 +2630,16 @@ export default function LuxuryGoldAdminPanel() {
 
                                 const itemsPayload = tabCart.map(ci => ({
                                   session_id: sess.id,
-                                  menu_item_id: null,
+                                  menu_item_id: null, // VAMC items bypass menu_items mapping
                                   quantity: ci.quantity,
                                   unit_price: ci.price,
                                   item_status: 'served',
-                                  cooking_notes: `VaMC Counter Item: ${ci.name}`
+                                  cooking_notes: `VaMC Counter Item: ${ci.name}` // Critical fix for Dish #null
                                 }));
 
                                 await supabase.from('order_items').insert(itemsPayload);
                                 
-                                // Deduct stock for each item sold
-                                for(const item of tabCart) {
-                                     await supabase.from('ice_cream_menu_items').update({
-                                         stock_quantity: Math.max(0, item.stock_quantity - item.quantity)
-                                     }).eq('id', item.id);
-                                }
-
-                                alert(`${currentTab.name} Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
+                                alert(`VaMC Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
                                 
                                 const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
                                 if (nextTabs.length === 0) {
@@ -2672,8 +2650,6 @@ export default function LuxuryGoldAdminPanel() {
                                   setActiveVamcTabId(nextTabs[0].id);
                                 }
 
-                                // Don't close modal, just clear tab
-                                // setShowVaMCModal(false);
                                 loadAdminData();
                               } catch (err: any) {
                                 alert('Error: ' + err.message);
@@ -2681,7 +2657,7 @@ export default function LuxuryGoldAdminPanel() {
                                 setLoading(false);
                               }
                             }}
-                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(14,165,233,0.2)] cursor-pointer hover:shadow-[0_0_25px_rgba(14,165,233,0.4)] transition-all"
+                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(14,165,233,0.3)] cursor-pointer hover:shadow-[0_0_30px_rgba(14,165,233,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
                           </button>
@@ -2699,6 +2675,110 @@ export default function LuxuryGoldAdminPanel() {
       </AnimatePresence>
 
       {/* ======================================================== */}
+      {/* VAMC COUNTER MENU CRUD MODAL (WITH SEARCH BAR) */}
+      {/* ======================================================== */}
+      <AnimatePresence>
+        {showVaMCCrudModal && (
+          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            >
+              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3">
+                <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage VaMC Counter Items (CRUD)</h3>
+                <button onClick={() => setShowVaMCCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+              </div>
+
+              {/* Add / Edit Form */}
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const cleanName = vamcItemName.trim();
+                const pr = parseFloat(vamcItemPrice);
+                if (!cleanName || isNaN(pr) || pr <= 0) return alert('Valid Name & Price ivvandi.');
+
+                setLoading(true);
+                try {
+                  if (editingVamcItem) {
+                    await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingVamcItem.id);
+                  } else {
+                    await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
+                  }
+                  setVamcItemName('');
+                  setVamcItemPrice('');
+                  setEditingVamcItem(null);
+                  loadVaMCCounterItems();
+                } catch (err: any) {
+                  alert('Error: ' + err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }} className="grid grid-cols-1 sm:grid-cols-3 gap-2 py-3 border-b border-sky-900/30">
+                <input
+                  type="text"
+                  required
+                  placeholder="Item Name (e.g. Water Bottle)"
+                  value={vamcItemName}
+                  onChange={(e) => setVamcItemName(e.target.value)}
+                  className="bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 text-xs"
+                />
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="0.01"
+                  placeholder="Price ₹"
+                  value={vamcItemPrice}
+                  onChange={(e) => setVamcItemPrice(e.target.value)}
+                  className="bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-400 outline-none focus:border-sky-500/50 text-xs font-bold"
+                />
+                <button type="submit" disabled={loading} className="py-2 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer hover:bg-sky-300 shadow-md transition">
+                  {editingVamcItem ? 'Update Item' : '+ Add Item'}
+                </button>
+              </form>
+
+              {/* Search Bar for CRUD Items */}
+              <div className="relative mt-3">
+                <Search className="w-4 h-4 text-sky-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search in counter menu..."
+                  value={vamcCrudSearch}
+                  onChange={(e) => setVamcCrudSearch(e.target.value)}
+                  className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl pl-9 pr-3 py-2 text-xs text-sky-100 outline-none focus:border-sky-500/50 transition"
+                />
+              </div>
+
+              {/* Counter Items List */}
+              <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
+                {vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).length === 0 ? (
+                  <div className="text-center py-8 text-sky-200/50 text-xs">No matching counter items found.</div>
+                ) : (
+                  vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).map(item => (
+                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-sky-900/30 flex justify-between items-center text-xs hover:border-sky-500/30 transition">
+                      <div>
+                        <span className="font-bold text-sky-100 block">{item.name}</span>
+                        <span className="text-sky-400 font-black">₹{Number(item.price).toFixed(2)}</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => { setEditingVamcItem(item); setVamcItemName(item.name); setVamcItemPrice(String(item.price)); }} className="p-1.5 rounded-lg bg-sky-950/30 text-sky-300 hover:bg-sky-900/50 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
+                        <button onClick={async () => {
+                          if (!confirm(`"${item.name}" delete cheyala?`)) return;
+                          await supabase.from('vamc_menu_items').delete().eq('id', item.id);
+                          loadVaMCCounterItems();
+                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 cursor-pointer transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ======================================================== */}
       {/* ICE CREAM INVENTORY & PROFIT LEDGER MODAL (STANDALONE) */}
       {/* ======================================================== */}
       <AnimatePresence>
@@ -2710,84 +2790,84 @@ export default function LuxuryGoldAdminPanel() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-5xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
-              <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <div className="flex justify-between items-center border-b border-sky-900/50 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-sky-400/20 border border-sky-400 flex items-center justify-center text-sky-400">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-400/20 border border-sky-400 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]">
                     <IceCream className="w-6 h-6" />
                   </div>
                   <div>
                     <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-wider">Ice Cream Stock & Profit Ledger</h2>
-                    <span className="text-[10px] sm:text-xs text-neutral-400">Manage running inventory, budget investment, and real-time sales profit.</span>
+                    <span className="text-[10px] sm:text-xs text-sky-200/60">Manage running inventory, budget investment, and real-time sales profit.</span>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setShowIceCrudModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30">
+                    <button onClick={() => setShowIceCrudModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30 transition shadow-md">
                       <Settings className="w-3.5 h-3.5" />
                       <span>Manage Items (CRUD)</span>
                     </button>
-                    <button onClick={() => setShowIceCreamModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
-                    <X className="w-6 h-6" />
+                    <button onClick={() => setShowIceCreamModal(false)} className="p-2 rounded-xl bg-sky-900/40 hover:bg-rose-500/20 hover:text-rose-400 text-sky-400 cursor-pointer transition">
+                      <X className="w-6 h-6" />
                     </button>
                 </div>
               </div>
 
               {/* Top Analytics Dashboard */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
-                <div className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex flex-col justify-center">
-                  <span className="text-[11px] text-neutral-400 uppercase font-bold flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 text-neutral-400" /> Total Budget Investment</span>
-                  <span className="text-2xl font-black text-white mt-1">₹{iceCreamStats.totalInvestment.toFixed(2)}</span>
+                <div className="p-4 rounded-[24px] bg-[#0a0f16] border border-sky-900/50 flex flex-col justify-center shadow-inner">
+                  <span className="text-[11px] text-sky-200/60 uppercase font-bold flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 text-sky-400" /> Total Budget Investment</span>
+                  <span className="text-2xl font-black text-sky-100 mt-1 tracking-wide">₹{iceCreamStats.totalInvestment.toFixed(2)}</span>
                 </div>
-                <div className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex flex-col justify-center">
-                  <span className="text-[11px] text-neutral-400 uppercase font-bold flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Total Sales Revenue</span>
-                  <span className="text-2xl font-black text-emerald-400 mt-1">₹{iceCreamStats.totalRevenue.toFixed(2)}</span>
+                <div className="p-4 rounded-[24px] bg-[#0a0f16] border border-sky-900/50 flex flex-col justify-center shadow-inner">
+                  <span className="text-[11px] text-sky-200/60 uppercase font-bold flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Total Sales Revenue</span>
+                  <span className="text-2xl font-black text-emerald-400 mt-1 tracking-wide">₹{iceCreamStats.totalRevenue.toFixed(2)}</span>
                 </div>
-                <div className="p-4 rounded-[24px] bg-sky-950/20 border border-sky-400/40 flex flex-col justify-center shadow-lg relative overflow-hidden">
+                <div className="p-4 rounded-[24px] bg-sky-950/30 border border-sky-400/40 flex flex-col justify-center shadow-[0_0_20px_rgba(14,165,233,0.15)] relative overflow-hidden">
                   <div className="absolute -right-4 -bottom-4 opacity-10"><IceCream className="w-24 h-24 text-sky-400" /></div>
-                  <span className="text-[11px] text-sky-200 uppercase font-bold relative z-10">Net Profit Generated</span>
-                  <span className={`text-3xl font-black mt-1 relative z-10 ${iceCreamStats.netProfit >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
+                  <span className="text-[11px] text-sky-200 uppercase font-bold relative z-10 tracking-wide">Net Profit Generated</span>
+                  <span className={`text-3xl font-black mt-1 relative z-10 tracking-wide ${iceCreamStats.netProfit >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
                     {iceCreamStats.netProfit >= 0 ? '+' : '-'}₹{Math.abs(iceCreamStats.netProfit).toFixed(2)}
                   </span>
                 </div>
               </div>
 
               <div className="flex flex-col mt-5 overflow-hidden flex-1">
-                  <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
-                    <h3 className="text-xs font-black text-white uppercase flex items-center gap-1.5"><PackageCheck className="w-4 h-4 text-sky-400" /> Active Inventory & Quick Sell</h3>
-                    <span className="text-[10px] text-neutral-400">{iceItems.length} items found</span>
+                  <div className="flex justify-between items-center border-b border-sky-900/50 pb-2 mb-3">
+                    <h3 className="text-xs font-black text-sky-400 uppercase flex items-center gap-1.5"><PackageCheck className="w-4 h-4 text-sky-400" /> Active Inventory & Quick Sell</h3>
+                    <span className="text-[10px] text-sky-200/50 bg-sky-950/40 px-2 py-0.5 rounded-md">{iceItems.length} items found</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 overflow-y-auto custom-gold-scrollbar pr-2 flex-1 pb-4">
                     {iceItems.length === 0 ? (
-                      <div className="col-span-full text-center py-10 text-neutral-500 text-xs">No inventory items. Use Manage Items (CRUD) to add.</div>
+                      <div className="col-span-full text-center py-10 text-sky-200/30 text-xs font-bold">No inventory items. Use Manage Items (CRUD) to add.</div>
                     ) : (
                       iceItems.map(item => (
-                        <div key={item.id} className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col justify-between relative overflow-hidden group">
+                        <div key={item.id} className="p-4 rounded-2xl bg-[#0a0f16] border border-sky-900/50 hover:border-sky-400/50 transition-colors flex flex-col justify-between relative overflow-hidden group shadow-md">
                           
                           {/* Stock Badge */}
-                          <div className="absolute top-0 right-0 bg-sky-950/40 border-b border-l border-white/10 px-3 py-1 rounded-bl-xl text-center min-w-[60px]">
+                          <div className="absolute top-0 right-0 bg-sky-950/60 border-b border-l border-sky-900/50 px-3 py-1 rounded-bl-xl text-center min-w-[60px] backdrop-blur-sm">
                             <span className="block text-[9px] text-sky-200 font-bold uppercase">Stock</span>
                             <span className={`block text-lg font-black ${item.stock_quantity > 0 ? 'text-white' : 'text-rose-400'}`}>{item.stock_quantity}</span>
                           </div>
 
                           <div className="pr-16">
-                            <span className="font-bold text-white block text-sm line-clamp-1">{item.name}</span>
-                            <div className="flex items-center gap-2 mt-1.5 text-[10px] flex-wrap">
-                              <span className="text-rose-300 font-mono bg-rose-950/30 px-1.5 py-0.5 rounded">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
-                              <span className="text-emerald-300 font-mono bg-emerald-950/30 px-1.5 py-0.5 rounded">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
+                            <span className="font-bold text-sky-100 block text-sm line-clamp-1">{item.name}</span>
+                            <div className="flex items-center gap-2 mt-2 text-[10px] flex-wrap">
+                              <span className="text-rose-300 font-mono bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-900/50">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
+                              <span className="text-emerald-300 font-mono bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-900/50">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/5">
+                          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-sky-900/50">
                             <button 
                               onClick={() => { setSelectedIceItem(item); setIcePurchaseQty(''); setIcePurchaseCost(''); setShowIcePurchaseModal(true); }}
-                              className="flex-1 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-xs font-bold text-white transition cursor-pointer"
+                              className="flex-1 py-1.5 rounded-lg bg-sky-950/40 hover:bg-sky-900/60 border border-sky-900/50 text-xs font-bold text-sky-300 transition cursor-pointer"
                             >
                               + Add Stock
                             </button>
                             <button 
                               onClick={() => handleQuickIceCreamSell(item)}
                               disabled={item.stock_quantity <= 0 || loading}
-                              className="flex-1 py-1.5 rounded-lg bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 border border-emerald-400/30 text-xs font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="flex-1 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Sell (-1)
                             </button>
@@ -2812,7 +2892,7 @@ export default function LuxuryGoldAdminPanel() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-2xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
             >
-              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3">
                 <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage Ice Cream Items (CRUD)</h3>
                 <button onClick={() => setShowIceCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
@@ -2842,22 +2922,22 @@ export default function LuxuryGoldAdminPanel() {
                 } finally {
                   setLoading(false);
                 }
-              }} className="space-y-3 py-3 border-b border-white/10">
+              }} className="space-y-3 py-3 border-b border-sky-900/30">
                   <div>
-                    <label className="text-[10px] text-neutral-400 block mb-1">Ice Cream Name</label>
-                    <input type="text" required placeholder="e.g. Chocolate Mini Cone" value={iceItemName} onChange={(e) => setIceItemName(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs" />
+                    <label className="text-[10px] text-sky-200/60 block mb-1 font-bold">Ice Cream Name</label>
+                    <input type="text" required placeholder="e.g. Chocolate Mini Cone" value={iceItemName} onChange={(e) => setIceItemName(e.target.value)} className="w-full bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 text-xs transition" />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] text-neutral-400 block mb-1">Cost Price (CP) ₹</label>
-                      <input type="number" required min="0" step="0.01" placeholder="₹ Buy Price" value={iceItemCP} onChange={(e) => setIceItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
+                      <label className="text-[10px] text-rose-300/80 block mb-1 font-bold">Cost Price (CP) ₹</label>
+                      <input type="number" required min="0" step="0.01" placeholder="₹ Buy Price" value={iceItemCP} onChange={(e) => setIceItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-900/50 rounded-xl px-3 py-2 text-rose-100 outline-none focus:border-rose-500/50 text-xs font-bold transition" />
                     </div>
                     <div>
-                      <label className="text-[10px] text-neutral-400 block mb-1">Selling Price (SP) ₹</label>
-                      <input type="number" required min="1" step="0.01" placeholder="₹ Sell Price" value={iceItemSP} onChange={(e) => setIceItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
+                      <label className="text-[10px] text-emerald-300/80 block mb-1 font-bold">Selling Price (SP) ₹</label>
+                      <input type="number" required min="1" step="0.01" placeholder="₹ Sell Price" value={iceItemSP} onChange={(e) => setIceItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-900/50 rounded-xl px-3 py-2 text-emerald-100 outline-none focus:border-emerald-500/50 text-xs font-bold transition" />
                     </div>
                   </div>
-                  <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer mt-2 shadow-md">
+                  <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer mt-2 shadow-[0_0_15px_rgba(14,165,233,0.3)] hover:bg-sky-300 transition-colors">
                     {editingIceItem ? 'Update Item' : '+ Save Item To Ledger'}
                   </button>
               </form>
@@ -2865,24 +2945,24 @@ export default function LuxuryGoldAdminPanel() {
               {/* Items List */}
               <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
                 {iceItems.length === 0 ? (
-                  <div className="text-center py-8 text-neutral-500 text-xs">No items added yet.</div>
+                  <div className="text-center py-8 text-sky-200/50 text-xs font-bold">No items added yet.</div>
                 ) : (
                   iceItems.map(item => (
-                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs">
+                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-sky-900/30 flex justify-between items-center text-xs hover:border-sky-500/30 transition-colors">
                       <div>
-                        <span className="font-bold text-white block">{item.name}</span>
+                        <span className="font-bold text-sky-100 block">{item.name}</span>
                         <div className="flex gap-2 text-[9px] mt-1">
-                            <span className="text-rose-400">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
-                            <span className="text-emerald-400">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
+                            <span className="text-rose-400 font-mono tracking-wide">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
+                            <span className="text-emerald-400 font-mono tracking-wide">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="flex gap-1.5">
-                        <button onClick={() => { setEditingIceItem(item); setIceItemName(item.name); setIceItemSP(String(item.selling_price)); setIceItemCP(String(item.cost_price)); }} className="p-1.5 rounded-lg bg-white/5 text-sky-400 cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { setEditingIceItem(item); setIceItemName(item.name); setIceItemSP(String(item.selling_price)); setIceItemCP(String(item.cost_price)); }} className="p-1.5 rounded-lg bg-sky-950/30 text-sky-400 hover:bg-sky-900/50 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
                         <button onClick={async () => {
                           if (!confirm(`"${item.name}" delete cheyala?`)) return;
                           await supabase.from('ice_cream_menu_items').delete().eq('id', item.id);
                           loadIceCreamData();
-                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 cursor-pointer transition"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                   ))
@@ -2901,12 +2981,12 @@ export default function LuxuryGoldAdminPanel() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm bg-[#0d0d0f] border border-sky-400/60 rounded-[28px] p-6 shadow-2xl flex flex-col"
+              className="w-full max-w-sm bg-[#0d0d0f] border border-sky-400/60 rounded-[28px] p-6 shadow-[0_0_30px_rgba(14,165,233,0.15)] flex flex-col"
             >
-              <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
+              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3 mb-4">
                 <div>
-                  <h3 className="text-sm font-black text-white uppercase">Add Bulk Stock</h3>
-                  <span className="text-[10px] text-sky-400 block">{selectedIceItem.name}</span>
+                  <h3 className="text-sm font-black text-sky-100 uppercase">Add Bulk Stock</h3>
+                  <span className="text-[10px] text-sky-400 block font-bold tracking-wide">{selectedIceItem.name}</span>
                 </div>
                 <button onClick={() => setShowIcePurchaseModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
@@ -2919,13 +2999,11 @@ export default function LuxuryGoldAdminPanel() {
 
                 setLoading(true);
                 try {
-                  // Log Purchase
                   await supabase.from('ice_cream_purchases').insert({
                     item_id: selectedIceItem.id,
                     quantity_added: qty,
                     total_investment: cost
                   });
-                  // Update Stock Count
                   await supabase.from('ice_cream_menu_items').update({
                     stock_quantity: selectedIceItem.stock_quantity + qty
                   }).eq('id', selectedIceItem.id);
@@ -2937,20 +3015,20 @@ export default function LuxuryGoldAdminPanel() {
               }} className="space-y-4">
                 
                 <div>
-                  <label className="text-[10px] text-neutral-400 block mb-1">Quantity Adding (e.g. 50 boxes)</label>
+                  <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Quantity Adding (e.g. 50 boxes)</label>
                   <input type="number" required min="1" value={icePurchaseQty} onChange={(e) => {
                     setIcePurchaseQty(e.target.value);
                     if(e.target.value) setIcePurchaseCost(String(parseInt(e.target.value) * Number(selectedIceItem.cost_price)));
-                  }} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold" />
+                  }} className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none font-bold focus:border-sky-500/50 transition" />
                 </div>
                 
                 <div>
-                  <label className="text-[10px] text-neutral-400 block mb-1">Total Investment Cost ₹</label>
-                  <input type="number" required min="0" step="0.01" value={icePurchaseCost} onChange={(e) => setIcePurchaseCost(e.target.value)} className="w-full bg-[#161619] border border-sky-500/30 rounded-xl px-3 py-2 text-white outline-none font-bold text-sky-200" />
-                  <span className="text-[9px] text-neutral-500 mt-1 block">Default auto-calculated based on CP (₹{Number(selectedIceItem.cost_price).toFixed(2)}/item). You can edit if bulk discount applies.</span>
+                  <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Total Investment Cost ₹</label>
+                  <input type="number" required min="0" step="0.01" value={icePurchaseCost} onChange={(e) => setIcePurchaseCost(e.target.value)} className="w-full bg-[#0a0f16] border border-sky-500/30 rounded-xl px-3 py-2 outline-none font-bold text-sky-400 focus:border-sky-400 transition" />
+                  <span className="text-[9px] text-sky-200/40 mt-1 block">Default auto-calculated based on CP (₹{Number(selectedIceItem.cost_price).toFixed(2)}/item). Edit if bulk discount applies.</span>
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-md mt-2">
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-[0_0_15px_rgba(14,165,233,0.3)] hover:shadow-[0_0_25px_rgba(14,165,233,0.4)] transition-all mt-2">
                   Confirm Purchase & Update Stock
                 </button>
               </form>
