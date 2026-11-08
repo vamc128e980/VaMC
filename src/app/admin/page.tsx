@@ -119,6 +119,8 @@ export default function LuxuryGoldAdminPanel() {
   const [selectedIceItem, setSelectedIceItem] = useState<any | null>(null);
   const [icePurchaseQty, setIcePurchaseQty] = useState('');
   const [icePurchaseCost, setIcePurchaseCost] = useState('');
+  const [showIceCrudModal, setShowIceCrudModal] = useState(false);
+  const [editingIceItem, setEditingIceItem] = useState<any | null>(null);
 
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -1295,7 +1297,7 @@ export default function LuxuryGoldAdminPanel() {
         </div>
       </header>
 
-      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS */}
+      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS & ICE CREAM */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex flex-wrap items-center justify-between gap-3">
         <div className="p-2 rounded-2xl bg-[#111115] border border-[#D4AF37]/40 shadow-lg flex items-center gap-2">
           <motion.button
@@ -1306,7 +1308,18 @@ export default function LuxuryGoldAdminPanel() {
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>C+ Customer Quick Bill</span>
           </motion.button>
-          <span className="text-[11px] font-mono text-neutral-400 hidden sm:inline px-2">
+          
+          {/* UPDATED: Ice Cream Ledger Button here as requested */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowIceCreamModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
+          >
+            <IceCream className="w-4 h-4 stroke-[2]" />
+            <span>Ice Cream Ledger</span>
+          </motion.button>
+
+          <span className="text-[11px] font-mono text-neutral-400 hidden lg:inline px-2">
             Instant individual customer billing via independent counter menu.
           </span>
         </div>
@@ -2365,14 +2378,6 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowVaMCCrudModal(true)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer shadow-md"
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                      <span>Manage Counter Menu</span>
-                    </button>
-
                     <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
                       <X className="w-5 h-5" />
                     </button>
@@ -2437,6 +2442,23 @@ export default function LuxuryGoldAdminPanel() {
                 };
 
                 const tabCart = currentTab.cart;
+                
+                // --- MODIFIED VAMC ICE CREAM LEDGER DESIGN FOR RIGHT SIDE ---
+                const iceCreamStatsCurrentTab = (() => {
+                  let totalInv = 0;
+                  let totalRev = 0;
+                  iceItems.forEach(item => {
+                    const itemPurchases = icePurchases.filter(p => p.item_id === item.id);
+                    const totalQtyPurchased = itemPurchases.reduce((s, p) => s + p.quantity_added, 0);
+                    const itemInv = itemPurchases.reduce((s, p) => s + Number(p.total_investment), 0);
+                    const qtySold = Math.max(0, totalQtyPurchased - item.stock_quantity);
+                    const itemRev = qtySold * Number(item.selling_price);
+                    totalInv += itemInv;
+                    totalRev += itemRev;
+                  });
+                  return { totalInvestment: totalInv, totalRevenue: totalRev, netProfit: totalRev - totalInv };
+                })();
+
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1">
@@ -2455,7 +2477,7 @@ export default function LuxuryGoldAdminPanel() {
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
-                        {vamcCounterItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
+                        {iceItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
                           const isSelected = tabCart.some(ci => ci.id === item.id);
                           return (
                             <div
@@ -2466,7 +2488,7 @@ export default function LuxuryGoldAdminPanel() {
                                   if (exist) {
                                     return tabCart.filter(ci => ci.id !== item.id);
                                   }
-                                  return [...tabCart, { ...item, quantity: 1 }];
+                                  return [...tabCart, { ...item, quantity: 1, price: item.selling_price }];
                                 })();
                                 updateCurrentTab({ cart: newCart });
                               }}
@@ -2481,7 +2503,8 @@ export default function LuxuryGoldAdminPanel() {
                                   <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
                                   {isSelected && <CheckCircle className="w-4 h-4 text-[#D4AF37] shrink-0" />}
                                 </div>
-                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1">₹{Number(item.price).toFixed(2)}</span>
+                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1">₹{Number(item.selling_price).toFixed(2)}</span>
+                                <span className="text-[9px] text-neutral-400 block mt-1">Stock: {item.stock_quantity}</span>
                               </div>
                               <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
                                 {isSelected ? '✓ Selected' : 'Tap to Select'}
@@ -2492,266 +2515,184 @@ export default function LuxuryGoldAdminPanel() {
                       </div>
                     </div>
 
-                    {/* Right: Cart & Billing Ledger for Current Tab */}
-                    <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col justify-between space-y-3">
-                      <div>
-                        <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
-                          <h3 className="text-xs font-bold text-[#FCF6BA] uppercase">Bill Cart ({currentTab.name})</h3>
+                    {/* Right: NEW BLUE/BLACK THEME ICE CREAM LEDGER STYLE BILLING */}
+                    <div className="md:col-span-5 bg-[#0a0f16] border border-sky-900/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 relative overflow-hidden">
+                      {/* Decorative Background */}
+                      <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
+                        <IceCream className="w-48 h-48 text-sky-400" />
+                      </div>
+
+                      <div className="relative z-10 flex flex-col h-full">
+                        <div>
+                           <div className="flex justify-between items-center border-b border-sky-900/50 pb-2 mb-3">
+                              <h3 className="text-xs font-black text-sky-400 uppercase flex items-center gap-1.5">
+                                <Receipt className="w-4 h-4" /> Bill Cart ({currentTab.name})
+                              </h3>
+                              <span className="text-[10px] text-sky-200/50">{tabCart.length} Items</span>
+                           </div>
+                          
+                          <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
+                            {tabCart.length === 0 ? (
+                              <div className="text-center py-6 text-sky-200/30 text-xs">No items selected. Tap blocks on left.</div>
+                            ) : (
+                              tabCart.map((ci, idx) => (
+                                <div key={ci.id} className="flex justify-between items-center text-xs border-b border-sky-900/30 pb-2">
+                                  <div className="truncate pr-2">
+                                    <span className="text-sky-100 font-bold block truncate">{ci.name}</span>
+                                    <span className="text-[10px] text-sky-400">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0 bg-sky-950/40 rounded-lg p-1 border border-sky-900/50">
+                                    <button onClick={() => {
+                                      const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0);
+                                      updateCurrentTab({ cart: newCart });
+                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer"><Minus className="w-3 h-3" /></button>
+                                    <span className="px-1 text-sky-100 font-bold w-4 text-center">{ci.quantity}</span>
+                                    <button onClick={() => {
+                                      const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
+                                      updateCurrentTab({ cart: newCart });
+                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer"><Plus className="w-3 h-3" /></button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
-                        
-                        <div className="space-y-2 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
-                          {tabCart.length === 0 ? (
-                            <div className="text-center py-6 text-neutral-500 text-xs">No items selected. Tap blocks on left.</div>
-                          ) : (
-                            tabCart.map((ci, idx) => (
-                              <div key={ci.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-2">
-                                <div className="truncate pr-2">
-                                  <span className="text-white font-bold block truncate">{ci.name}</span>
-                                  <span className="text-[10px] text-[#D4AF37]">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button onClick={() => {
-                                    const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0);
-                                    updateCurrentTab({ cart: newCart });
-                                  }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Minus className="w-3 h-3" /></button>
-                                  <span className="px-1 text-white font-bold">{ci.quantity}</span>
-                                  <button onClick={() => {
-                                    const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
-                                    updateCurrentTab({ cart: newCart });
-                                  }} className="p-1 rounded bg-white/5 text-white cursor-pointer"><Plus className="w-3 h-3" /></button>
-                                </div>
+
+                        <div className="space-y-2 mt-auto pt-4 text-xs">
+                          <input
+                            type="text"
+                            placeholder="Customer Name (Optional)"
+                            value={currentTab.customerName}
+                            onChange={(e) => updateCurrentTab({ customerName: e.target.value })}
+                            className="w-full bg-[#0d141e] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 placeholder:text-sky-700"
+                          />
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            placeholder="Phone Number (Optional)"
+                            value={currentTab.customerPhone}
+                            onChange={(e) => updateCurrentTab({ customerPhone: e.target.value.replace(/\D/g, '') })}
+                            className="w-full bg-[#0d141e] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none font-mono focus:border-sky-500/50 placeholder:text-sky-700"
+                          />
+
+                          <div className="grid grid-cols-2 gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => updateCurrentTab({ paymentMode: 'cash' })}
+                              className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                                currentTab.paymentMode === 'cash' ? 'bg-sky-500 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300'
+                              }`}
+                            >
+                              <Banknote className="w-3.5 h-3.5" /> Cash
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateCurrentTab({ paymentMode: 'upi' })}
+                              className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
+                                currentTab.paymentMode === 'upi' ? 'bg-sky-500 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300'
+                              }`}
+                            >
+                              <Smartphone className="w-3.5 h-3.5" /> PhonePe / Paid
+                            </button>
+                          </div>
+
+                          {currentTab.paymentMode === 'cash' && (
+                            <div className="p-3 rounded-xl bg-[#0d141e] border border-sky-500/30 space-y-2 mt-2">
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sky-500 font-bold">₹</span>
+                                <input
+                                  type="number"
+                                  placeholder="Customer Handed Cash"
+                                  value={currentTab.customerHanded}
+                                  onChange={(e) => updateCurrentTab({ customerHanded: e.target.value })}
+                                  className="w-full bg-transparent rounded-lg pl-7 pr-3 py-1.5 text-sky-100 font-bold outline-none border-b border-sky-900 focus:border-sky-500 transition-colors"
+                                />
                               </div>
-                            ))
+                              <div className="flex justify-between text-[11px] pt-1">
+                                <span className="text-sky-200/60">Change to return:</span>
+                                <span className="text-sky-400 font-black">
+                                  ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
+                                </span>
+                              </div>
+                            </div>
                           )}
                         </div>
-                      </div>
 
-                      <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
-                        <input
-                          type="text"
-                          placeholder="Customer Name (Optional)"
-                          value={currentTab.customerName}
-                          onChange={(e) => updateCurrentTab({ customerName: e.target.value })}
-                          className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
-                        />
-                        <input
-                          type="tel"
-                          maxLength={10}
-                          placeholder="Phone Number (Optional)"
-                          value={currentTab.customerPhone}
-                          onChange={(e) => updateCurrentTab({ customerPhone: e.target.value.replace(/\D/g, '') })}
-                          className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-mono"
-                        />
-
-                        <div className="grid grid-cols-2 gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => updateCurrentTab({ paymentMode: 'cash' })}
-                            className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
-                              currentTab.paymentMode === 'cash' ? 'bg-amber-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
-                            }`}
-                          >
-                            <Banknote className="w-3.5 h-3.5" /> Cash
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateCurrentTab({ paymentMode: 'upi' })}
-                            className={`py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer ${
-                              currentTab.paymentMode === 'upi' ? 'bg-emerald-400 text-black border-transparent' : 'bg-white/5 border-white/10 text-neutral-400'
-                            }`}
-                          >
-                            <Smartphone className="w-3.5 h-3.5" /> PhonePe / Paid
-                          </button>
-                        </div>
-
-                        {currentTab.paymentMode === 'cash' && (
-                          <div className="p-2.5 rounded-xl bg-black/40 border border-amber-400/30 space-y-1">
-                            <input
-                              type="number"
-                              placeholder="Customer Handed Cash ₹"
-                              value={currentTab.customerHanded}
-                              onChange={(e) => updateCurrentTab({ customerHanded: e.target.value })}
-                              className="w-full bg-[#161619] border border-amber-400/40 rounded-lg px-2.5 py-1.5 text-white font-bold outline-none"
-                            />
-                            <div className="flex justify-between text-[11px] pt-1">
-                              <span className="text-neutral-400">Change to return:</span>
-                              <span className="text-emerald-400 font-bold">
-                                ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
-                              </span>
-                            </div>
+                        <div className="pt-4 mt-4 border-t border-sky-900/50 space-y-3">
+                          <div className="flex justify-between items-center text-sm font-black text-sky-100">
+                            <span>Total Bill:</span>
+                            <span className="text-sky-400 text-lg">₹{tabCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
                           </div>
-                        )}
-                      </div>
+                          <button
+                            disabled={loading || tabCart.length === 0}
+                            onClick={async () => {
+                              const total = tabCart.reduce((s, i) => s + (i.price * i.quantity), 0);
+                              setLoading(true);
+                              try {
+                                const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
+                                  table_number: 0,
+                                  customer_name: currentTab.customerName.trim() || `${currentTab.name} Counter`,
+                                  customer_phone: currentTab.customerPhone.trim() || '0000000000',
+                                  subtotal: total,
+                                  total_amount: total,
+                                  final_payable: total,
+                                  status: 'completed',
+                                  payment_status: 'paid',
+                                  payment_mode: currentTab.paymentMode
+                                }).select().single();
 
-                      <div className="pt-2 border-t border-white/10 space-y-2">
-                        <div className="flex justify-between items-center text-sm font-black text-white">
-                          <span>Total Bill:</span>
-                          <span className="text-[#D4AF37] text-base">₹{tabCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
-                        </div>
-                        <button
-                          disabled={loading || tabCart.length === 0}
-                          onClick={async () => {
-                            const total = tabCart.reduce((s, i) => s + (i.price * i.quantity), 0);
-                            setLoading(true);
-                            try {
-                              const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
-                                table_number: 0,
-                                customer_name: currentTab.customerName.trim() || `${currentTab.name} Counter`,
-                                customer_phone: currentTab.customerPhone.trim() || '0000000000',
-                                subtotal: total,
-                                total_amount: total,
-                                final_payable: total,
-                                status: 'completed',
-                                payment_status: 'paid',
-                                payment_mode: currentTab.paymentMode
-                              }).select().single();
+                                if (sErr) throw sErr;
 
-                              if (sErr) throw sErr;
+                                const itemsPayload = tabCart.map(ci => ({
+                                  session_id: sess.id,
+                                  menu_item_id: null,
+                                  quantity: ci.quantity,
+                                  unit_price: ci.price,
+                                  item_status: 'served',
+                                  cooking_notes: `VaMC Counter Item: ${ci.name}`
+                                }));
 
-                              const itemsPayload = tabCart.map(ci => ({
-                                session_id: sess.id,
-                                menu_item_id: null,
-                                quantity: ci.quantity,
-                                unit_price: ci.price,
-                                item_status: 'served',
-                                cooking_notes: `VaMC Counter Item: ${ci.name}`
-                              }));
+                                await supabase.from('order_items').insert(itemsPayload);
+                                
+                                // Deduct stock for each item sold
+                                for(const item of tabCart) {
+                                     await supabase.from('ice_cream_menu_items').update({
+                                         stock_quantity: Math.max(0, item.stock_quantity - item.quantity)
+                                     }).eq('id', item.id);
+                                }
 
-                              await supabase.from('order_items').insert(itemsPayload);
-                              alert(`${currentTab.name} Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
-                              
-                              const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
-                              if (nextTabs.length === 0) {
-                                setVamcTabs([{ id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
-                                setActiveVamcTabId('C1');
-                              } else {
-                                setVamcTabs(nextTabs);
-                                setActiveVamcTabId(nextTabs[0].id);
+                                alert(`${currentTab.name} Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
+                                
+                                const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
+                                if (nextTabs.length === 0) {
+                                  setVamcTabs([{ id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
+                                  setActiveVamcTabId('C1');
+                                } else {
+                                  setVamcTabs(nextTabs);
+                                  setActiveVamcTabId(nextTabs[0].id);
+                                }
+
+                                // Don't close modal, just clear tab
+                                // setShowVaMCModal(false);
+                                loadAdminData();
+                              } catch (err: any) {
+                                alert('Error: ' + err.message);
+                              } finally {
+                                setLoading(false);
                               }
+                            }}
+                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(14,165,233,0.2)] cursor-pointer hover:shadow-[0_0_25px_rgba(14,165,233,0.4)] transition-all"
+                          >
+                            {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
+                          </button>
+                        </div>
 
-                              setShowVaMCModal(false);
-                              loadAdminData();
-                            } catch (err: any) {
-                              alert('Error: ' + err.message);
-                            } finally {
-                              setLoading(false);
-                            }
-                          }}
-                          className="w-full py-3 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
-                        >
-                          {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
-                        </button>
                       </div>
-
                     </div>
 
                   </div>
                 );
               })()}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ======================================================== */}
-      {/* VAMC COUNTER MENU CRUD MODAL (WITH SEARCH BAR) */}
-      {/* ======================================================== */}
-      <AnimatePresence>
-        {showVaMCCrudModal && (
-          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-2xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
-            >
-              <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <h3 className="text-sm font-black text-white uppercase">Manage VaMC Counter Menu Items (CRUD)</h3>
-                <button onClick={() => setShowVaMCCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-              </div>
-
-              {/* Add / Edit Form */}
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const cleanName = vamcItemName.trim();
-                const pr = parseFloat(vamcItemPrice);
-                if (!cleanName || isNaN(pr) || pr <= 0) return alert('Valid Name & Price ivvandi.');
-
-                setLoading(true);
-                try {
-                  if (editingVamcItem) {
-                    await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingVamcItem.id);
-                  } else {
-                    await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
-                  }
-                  setVamcItemName('');
-                  setVamcItemPrice('');
-                  setEditingVamcItem(null);
-                  loadVaMCCounterItems();
-                } catch (err: any) {
-                  alert('Error: ' + err.message);
-                } finally {
-                  setLoading(false);
-                }
-              }} className="grid grid-cols-1 sm:grid-cols-3 gap-2 py-3 border-b border-white/10">
-                <input
-                  type="text"
-                  required
-                  placeholder="Item Name (e.g. Water Bottle)"
-                  value={vamcItemName}
-                  onChange={(e) => setVamcItemName(e.target.value)}
-                  className="bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs"
-                />
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="0.01"
-                  placeholder="Price ₹"
-                  value={vamcItemPrice}
-                  onChange={(e) => setVamcItemPrice(e.target.value)}
-                  className="bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold"
-                />
-                <button type="submit" disabled={loading} className="py-2 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer">
-                  {editingVamcItem ? 'Update Item' : '+ Add Item'}
-                </button>
-              </form>
-
-              {/* Search Bar for CRUD Items */}
-              <div className="relative mt-3">
-                <Search className="w-4 h-4 text-[#D4AF37] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search in counter menu..."
-                  value={vamcCrudSearch}
-                  onChange={(e) => setVamcCrudSearch(e.target.value)}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white outline-none"
-                />
-              </div>
-
-              {/* Counter Items List */}
-              <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
-                {vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).length === 0 ? (
-                  <div className="text-center py-8 text-neutral-500 text-xs">No matching counter items found.</div>
-                ) : (
-                  vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).map(item => (
-                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs">
-                      <div>
-                        <span className="font-bold text-white block">{item.name}</span>
-                        <span className="text-[#D4AF37] font-black">₹{Number(item.price).toFixed(2)}</span>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => { setEditingVamcItem(item); setVamcItemName(item.name); setVamcItemPrice(String(item.price)); }} className="p-1.5 rounded-lg bg-white/5 text-[#D4AF37] cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
-                        <button onClick={async () => {
-                          if (!confirm(`"${item.name}" delete cheyala?`)) return;
-                          await supabase.from('vamc_menu_items').delete().eq('id', item.id);
-                          loadVaMCCounterItems();
-                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
             </motion.div>
           </div>
         )}
@@ -2779,9 +2720,15 @@ export default function LuxuryGoldAdminPanel() {
                     <span className="text-[10px] sm:text-xs text-neutral-400">Manage running inventory, budget investment, and real-time sales profit.</span>
                   </div>
                 </div>
-                <button onClick={() => setShowIceCreamModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
-                  <X className="w-6 h-6" />
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowIceCrudModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30">
+                      <Settings className="w-3.5 h-3.5" />
+                      <span>Manage Items (CRUD)</span>
+                    </button>
+                    <button onClick={() => setShowIceCreamModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white cursor-pointer">
+                    <X className="w-6 h-6" />
+                    </button>
+                </div>
               </div>
 
               {/* Top Analytics Dashboard */}
@@ -2803,60 +2750,15 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mt-5 overflow-hidden flex-1">
-                
-                {/* Left: Add New Item Form */}
-                <div className="md:col-span-4 flex flex-col space-y-4 border-r border-white/10 pr-0 md:pr-6 overflow-y-auto custom-gold-scrollbar">
-                  <div>
-                    <h3 className="text-xs font-black text-sky-400 uppercase border-b border-white/10 pb-2 mb-3 flex items-center gap-1.5">
-                      <Plus className="w-4 h-4" /> Add Ice Cream Item (CRUD)
-                    </h3>
-                    <form onSubmit={async (e) => {
-                      e.preventDefault();
-                      const cleanName = iceItemName.trim();
-                      const sp = parseFloat(iceItemSP);
-                      const cp = parseFloat(iceItemCP);
-                      if (!cleanName || isNaN(sp) || isNaN(cp) || sp <= 0 || cp < 0) return alert('Valid details ivvandi.');
-
-                      setLoading(true);
-                      try {
-                        await supabase.from('ice_cream_menu_items').insert({ name: cleanName, selling_price: sp, cost_price: cp, stock_quantity: 0 });
-                        setIceItemName(''); setIceItemSP(''); setIceItemCP('');
-                        loadIceCreamData();
-                      } catch (err: any) { alert('Error: ' + err.message); } 
-                      finally { setLoading(false); }
-                    }} className="space-y-3">
-                      <div>
-                        <label className="text-[10px] text-neutral-400 block mb-1">Ice Cream Name</label>
-                        <input type="text" required placeholder="e.g. Vanilla Cone" value={iceItemName} onChange={(e) => setIceItemName(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-neutral-400 block mb-1">Cost Price (CP) ₹</label>
-                          <input type="number" required min="0" step="0.01" placeholder="₹ Buy Price" value={iceItemCP} onChange={(e) => setIceItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-neutral-400 block mb-1">Selling Price (SP) ₹</label>
-                          <input type="number" required min="1" step="0.01" placeholder="₹ Sell Price" value={iceItemSP} onChange={(e) => setIceItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
-                        </div>
-                      </div>
-                      <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-md">
-                        + Save Item To Ledger
-                      </button>
-                    </form>
-                  </div>
-                </div>
-
-                {/* Right: Inventory & Running Stock */}
-                <div className="md:col-span-8 flex flex-col overflow-hidden">
+              <div className="flex flex-col mt-5 overflow-hidden flex-1">
                   <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
                     <h3 className="text-xs font-black text-white uppercase flex items-center gap-1.5"><PackageCheck className="w-4 h-4 text-sky-400" /> Active Inventory & Quick Sell</h3>
                     <span className="text-[10px] text-neutral-400">{iceItems.length} items found</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto custom-gold-scrollbar pr-2 flex-1 pb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 overflow-y-auto custom-gold-scrollbar pr-2 flex-1 pb-4">
                     {iceItems.length === 0 ? (
-                      <div className="col-span-full text-center py-10 text-neutral-500 text-xs">No inventory items. Add on the left to start tracking.</div>
+                      <div className="col-span-full text-center py-10 text-neutral-500 text-xs">No inventory items. Use Manage Items (CRUD) to add.</div>
                     ) : (
                       iceItems.map(item => (
                         <div key={item.id} className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col justify-between relative overflow-hidden group">
@@ -2869,7 +2771,7 @@ export default function LuxuryGoldAdminPanel() {
 
                           <div className="pr-16">
                             <span className="font-bold text-white block text-sm line-clamp-1">{item.name}</span>
-                            <div className="flex items-center gap-3 mt-1.5 text-[10px]">
+                            <div className="flex items-center gap-2 mt-1.5 text-[10px] flex-wrap">
                               <span className="text-rose-300 font-mono bg-rose-950/30 px-1.5 py-0.5 rounded">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
                               <span className="text-emerald-300 font-mono bg-emerald-950/30 px-1.5 py-0.5 rounded">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
                             </div>
@@ -2889,23 +2791,102 @@ export default function LuxuryGoldAdminPanel() {
                             >
                               Sell (-1)
                             </button>
-                            <button 
-                              onClick={async () => {
-                                if(!confirm(`Delete "${item.name}" from ledger?`)) return;
-                                await supabase.from('ice_cream_menu_items').delete().eq('id', item.id);
-                                loadIceCreamData();
-                              }} 
-                              className="p-1.5 rounded-lg bg-rose-950/30 text-rose-400 hover:bg-rose-950/50 cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
                           </div>
                         </div>
                       ))
                     )}
                   </div>
-                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
+      {/* ICE CREAM MANAGE ITEMS CRUD MODAL */}
+      <AnimatePresence>
+        {showIceCrudModal && (
+          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage Ice Cream Items (CRUD)</h3>
+                <button onClick={() => setShowIceCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+              </div>
+
+              {/* Add / Edit Form */}
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const cleanName = iceItemName.trim();
+                const sp = parseFloat(iceItemSP);
+                const cp = parseFloat(iceItemCP);
+                if (!cleanName || isNaN(sp) || isNaN(cp) || sp <= 0 || cp < 0) return alert('Valid Name & Price ivvandi.');
+
+                setLoading(true);
+                try {
+                  if (editingIceItem) {
+                    await supabase.from('ice_cream_menu_items').update({ name: cleanName, selling_price: sp, cost_price: cp }).eq('id', editingIceItem.id);
+                  } else {
+                    await supabase.from('ice_cream_menu_items').insert({ name: cleanName, selling_price: sp, cost_price: cp, stock_quantity: 0 });
+                  }
+                  setIceItemName('');
+                  setIceItemSP('');
+                  setIceItemCP('');
+                  setEditingIceItem(null);
+                  loadIceCreamData();
+                } catch (err: any) {
+                  alert('Error: ' + err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }} className="space-y-3 py-3 border-b border-white/10">
+                  <div>
+                    <label className="text-[10px] text-neutral-400 block mb-1">Ice Cream Name</label>
+                    <input type="text" required placeholder="e.g. Chocolate Mini Cone" value={iceItemName} onChange={(e) => setIceItemName(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none text-xs" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-neutral-400 block mb-1">Cost Price (CP) ₹</label>
+                      <input type="number" required min="0" step="0.01" placeholder="₹ Buy Price" value={iceItemCP} onChange={(e) => setIceItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-neutral-400 block mb-1">Selling Price (SP) ₹</label>
+                      <input type="number" required min="1" step="0.01" placeholder="₹ Sell Price" value={iceItemSP} onChange={(e) => setIceItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-500/30 rounded-xl px-3 py-2 text-white outline-none text-xs font-bold" />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer mt-2 shadow-md">
+                    {editingIceItem ? 'Update Item' : '+ Save Item To Ledger'}
+                  </button>
+              </form>
+
+              {/* Items List */}
+              <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
+                {iceItems.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-500 text-xs">No items added yet.</div>
+                ) : (
+                  iceItems.map(item => (
+                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-white block">{item.name}</span>
+                        <div className="flex gap-2 text-[9px] mt-1">
+                            <span className="text-rose-400">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
+                            <span className="text-emerald-400">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => { setEditingIceItem(item); setIceItemName(item.name); setIceItemSP(String(item.selling_price)); setIceItemCP(String(item.cost_price)); }} className="p-1.5 rounded-lg bg-white/5 text-sky-400 cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                        <button onClick={async () => {
+                          if (!confirm(`"${item.name}" delete cheyala?`)) return;
+                          await supabase.from('ice_cream_menu_items').delete().eq('id', item.id);
+                          loadIceCreamData();
+                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </div>
