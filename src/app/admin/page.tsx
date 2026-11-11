@@ -114,16 +114,13 @@ export default function LuxuryGoldAdminPanel() {
   
   // Form States for CRUD
   const [crudItemName, setCrudItemName] = useState('');
-  const [crudItemPrice, setCrudItemPrice] = useState(''); // Used for Main
-  const [crudItemSP, setCrudItemSP] = useState(''); // Used for IC/DF
-  const [crudItemCP, setCrudItemCP] = useState(''); // Used for IC/DF
+  const [crudItemPrice, setCrudItemPrice] = useState('');
 
   // Purchase / Add Stock Modal States
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [purchaseType, setPurchaseType] = useState<'ice_cream' | 'df'>('ice_cream');
   const [selectedInvItem, setSelectedInvItem] = useState<any | null>(null);
   const [purchaseQty, setPurchaseQty] = useState('');
-  const [purchaseCost, setPurchaseCost] = useState('');
 
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -1202,11 +1199,11 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={() => setShowVaMCModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20 text-sky-200 text-xs font-mono font-bold transition cursor-pointer shadow-md"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[#D4AF37]/50 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer shadow-md"
               title="Quick Bill POS (VaMC, Ice Cream, Dry Fruits)"
             >
-              <Calculator className="w-4 h-4 text-sky-400" />
-              <span>C+ POS</span>
+              <Calculator className="w-4 h-4 text-[#D4AF37]" />
+              <span>VaMC</span>
             </motion.button>
 
             <motion.button
@@ -1255,17 +1252,17 @@ export default function LuxuryGoldAdminPanel() {
 
       {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex flex-wrap items-center justify-between gap-3">
-        <div className="p-2 rounded-2xl bg-[#0d0d0f] border border-sky-900/50 shadow-lg flex items-center gap-2">
+        <div className="p-2 rounded-2xl bg-[#111115] border border-[#D4AF37]/40 shadow-lg flex items-center gap-2">
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowVaMCModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-[0_0_15px_rgba(14,165,233,0.3)]"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>C+ Customer Quick Bill</span>
+            <span>VaMC</span>
           </motion.button>
           
-          <span className="text-[11px] font-mono text-sky-200/50 hidden lg:inline px-2 border-l border-sky-900/50 ml-2 pl-4">
+          <span className="text-[11px] font-mono text-[#D4AF37]/70 hidden lg:inline px-2 border-l border-[#D4AF37]/30 ml-2 pl-4">
             Unified billing for General, Ice Cream & Dry Fruits.
           </span>
         </div>
@@ -1925,7 +1922,7 @@ export default function LuxuryGoldAdminPanel() {
           </div>
         )}
 
-        {/* VIEW B: MENU, ADD-ONS, COMBOS & PROMOS OPERATIONS HUB */}
+        {/* VIEW B: MENU, ADD-ONS, Combos & PROMOS OPERATIONS HUB */}
         {activeWorkspace === 'menu_hub' && (
           <div className="space-y-5">
             <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto custom-gold-scrollbar">
@@ -2308,31 +2305,31 @@ export default function LuxuryGoldAdminPanel() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-4xl bg-[#0a0f16] border border-sky-400/60 rounded-[32px] p-6 shadow-[0_0_40px_rgba(14,165,233,0.15)] flex flex-col max-h-[90vh] overflow-hidden"
+              className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
               {/* Modal Header */}
-              <div className="flex flex-col gap-3 border-b border-sky-900/50 pb-3">
+              <div className="flex flex-col gap-3 border-b border-white/10 pb-3">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-2xl bg-sky-400/20 border border-sky-400 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]">
+                    <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37] shadow-lg">
                       <Calculator className="w-5 h-5" />
                     </div>
                     <div>
-                      <h2 className="text-base font-black text-sky-100 uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
-                      <span className="text-[10px] text-sky-200/60">Unified Billing for General, Ice Cream & Dry Fruits</span>
+                      <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
+                      <span className="text-[10px] text-neutral-400">Unified billing for General, Ice Cream & Dry Fruits.</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowVaMCCrudModal(true)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30 transition"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer hover:bg-amber-300 transition"
                     >
                       <Settings className="w-3.5 h-3.5" />
-                      <span>Manage Menu</span>
+                      <span>Manage Menu Items</span>
                     </button>
 
-                    <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-sky-900/40 hover:bg-rose-500/20 hover:text-rose-400 text-sky-400 cursor-pointer transition">
+                    <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-neutral-400 cursor-pointer transition">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -2348,8 +2345,8 @@ export default function LuxuryGoldAdminPanel() {
                         onClick={() => setActiveVamcTabId(tab.id)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-t-xl border-t border-x cursor-pointer transition select-none ${
                           isActive 
-                            ? 'bg-[#0d141e] border-sky-400 text-sky-100 font-black shadow-[0_-5px_15px_rgba(14,165,233,0.1)]' 
-                            : 'bg-sky-950/20 border-sky-900/50 text-sky-400/60 hover:text-sky-300 hover:bg-sky-900/30'
+                            ? 'bg-[#18181c] border-[#D4AF37] text-white font-black shadow-lg' 
+                            : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white hover:bg-white/[0.05]'
                         }`}
                       >
                         <span>{tab.name} ({tab.cart.reduce((s, i) => s + i.quantity, 0)})</span>
@@ -2378,7 +2375,7 @@ export default function LuxuryGoldAdminPanel() {
                       setVamcTabs([...vamcTabs, { id: nextId, name: `Customer ${nextId}`, cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
                       setActiveVamcTabId(nextId);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-sky-400/10 border border-sky-400/50 text-sky-300 font-black text-xs hover:bg-sky-400/20 hover:text-white cursor-pointer flex items-center gap-1 shrink-0 transition ml-2"
+                    className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37] text-[#FCF6BA] font-black text-xs hover:bg-[#D4AF37]/30 cursor-pointer flex items-center gap-1 shrink-0 transition ml-2"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>C+</span>
@@ -2408,25 +2405,25 @@ export default function LuxuryGoldAdminPanel() {
                       
                       {/* Search Bar */}
                       <div className="relative">
-                        <Search className="w-4 h-4 text-sky-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
                           placeholder="Search items..."
                           value={vamcSearch}
                           onChange={(e) => setVamcSearch(e.target.value)}
-                          className="w-full bg-[#0d141e] border border-sky-900/50 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-sky-100 outline-none focus:border-sky-500/80 transition"
+                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37] transition"
                         />
                       </div>
 
                       {/* Category Filters */}
                       <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1">
-                        <button onClick={() => setPosCategory('main')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'main' ? 'bg-sky-500/20 border-sky-400 text-sky-100' : 'bg-[#0d141e] border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                        <button onClick={() => setPosCategory('main')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'main' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
                           🛒 General
                         </button>
-                        <button onClick={() => setPosCategory('ice_cream')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'ice_cream' ? 'bg-sky-500/20 border-sky-400 text-sky-100' : 'bg-[#0d141e] border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                        <button onClick={() => setPosCategory('ice_cream')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'ice_cream' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
                           🍦 Ice Creams
                         </button>
-                        <button onClick={() => setPosCategory('df')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'df' ? 'bg-sky-500/20 border-sky-400 text-sky-100' : 'bg-[#0d141e] border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                        <button onClick={() => setPosCategory('df')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'df' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
                           🥜 Dry Fruits
                         </button>
                       </div>
@@ -2453,73 +2450,68 @@ export default function LuxuryGoldAdminPanel() {
                               }}
                               className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
                                 isSelected 
-                                  ? 'bg-sky-500/20 border-sky-400 ring-1 ring-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]' 
-                                  : 'bg-white/[0.02] border-sky-900/50 hover:border-sky-400/50 hover:bg-sky-900/20'
+                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-lg' 
+                                  : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/[0.04]'
                               }`}
                             >
                               <div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs font-bold text-sky-100 block line-clamp-1">{item.name}</span>
-                                  {isSelected && <CheckCircle className="w-4 h-4 text-sky-400 shrink-0" />}
+                                  <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
+                                  {isSelected && <CheckCircle className="w-4 h-4 text-[#D4AF37] shrink-0" />}
                                 </div>
-                                <span className="text-[11px] font-black text-sky-400 block mt-1.5">₹{Number(itemPrice).toFixed(2)}</span>
+                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1.5">₹{Number(itemPrice).toFixed(2)}</span>
                                 {posCategory !== 'main' && (
                                   <span className={`text-[9px] font-bold block mt-0.5 ${item.stock_quantity > 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>Stock: {item.stock_quantity}</span>
                                 )}
                               </div>
-                              <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-sky-200' : 'text-sky-600/60'}`}>
+                              <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
                                 {isSelected ? '✓ Selected' : 'Tap to Select'}
                               </span>
                             </div>
                           );
                         })}
                         {displayItems.length === 0 && (
-                          <div className="col-span-full py-6 text-center text-sky-200/40 text-xs">No items found in this category.</div>
+                          <div className="col-span-full py-6 text-center text-neutral-500 text-xs">No items found in this category.</div>
                         )}
                       </div>
                     </div>
 
                     {/* RIGHT: Unified Bill Cart & Checkout */}
-                    <div className="md:col-span-5 bg-[#0d141e] border border-sky-900/50 rounded-3xl p-5 flex flex-col justify-between space-y-4 relative overflow-hidden z-10 shadow-lg">
-                      {/* Decorative Background */}
-                      <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
-                        <ShoppingBag className="w-48 h-48 text-sky-400" />
-                      </div>
-
+                    <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-3xl p-5 flex flex-col justify-between space-y-4 relative overflow-hidden z-10 shadow-lg">
                       <div className="relative z-10 flex flex-col h-full">
                         <div>
-                           <div className="flex justify-between items-center border-b border-sky-900/50 pb-2.5 mb-3">
-                              <h3 className="text-xs font-black text-sky-400 uppercase flex items-center gap-1.5 tracking-wide">
+                           <div className="flex justify-between items-center border-b border-white/10 pb-2.5 mb-3">
+                              <h3 className="text-xs font-black text-[#FCF6BA] uppercase flex items-center gap-1.5 tracking-wide">
                                 <Receipt className="w-4 h-4" /> Bill Cart ({currentTab.name})
                               </h3>
-                              <span className="text-[10px] text-sky-200/50 font-bold bg-sky-950/40 px-2 py-0.5 rounded-md">{tabCart.length} Items</span>
+                              <span className="text-[10px] text-neutral-400 font-bold bg-white/5 px-2 py-0.5 rounded-md">{tabCart.length} Items</span>
                            </div>
                           
                           <div className="space-y-2.5 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
                             {tabCart.length === 0 ? (
-                              <div className="text-center py-6 text-sky-200/30 text-xs font-bold">No items selected. Tap blocks on left.</div>
+                              <div className="text-center py-6 text-neutral-500 text-xs font-bold">No items selected. Tap blocks on left.</div>
                             ) : (
                               tabCart.map((ci, idx) => (
-                                <div key={`${ci.itemType}-${ci.id}`} className="flex justify-between items-center text-xs border-b border-sky-900/30 pb-2.5">
+                                <div key={`${ci.itemType}-${ci.id}`} className="flex justify-between items-center text-xs border-b border-white/5 pb-2.5">
                                   <div className="truncate pr-2">
-                                    <span className="text-sky-100 font-bold block truncate">
+                                    <span className="text-white font-bold block truncate">
                                       {ci.name} 
-                                      <span className="text-[8px] uppercase ml-1 px-1 rounded bg-sky-900/50 text-sky-400/70">
+                                      <span className="text-[8px] uppercase ml-1 px-1 rounded bg-white/10 text-neutral-400">
                                         {ci.itemType === 'main' ? 'GEN' : ci.itemType === 'ice_cream' ? 'ICE' : 'DF'}
                                       </span>
                                     </span>
-                                    <span className="text-[10px] text-sky-400/80 font-black tracking-wide">₹{Number(ci.cartPrice).toFixed(2)} x {ci.quantity}</span>
+                                    <span className="text-[10px] text-[#D4AF37] font-black tracking-wide">₹{Number(ci.cartPrice).toFixed(2)} x {ci.quantity}</span>
                                   </div>
-                                  <div className="flex items-center gap-1.5 shrink-0 bg-sky-950/40 rounded-lg p-1 border border-sky-900/50">
+                                  <div className="flex items-center gap-1.5 shrink-0 bg-white/5 rounded-lg p-1 border border-white/10">
                                     <button onClick={() => {
                                       const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0);
                                       updateCurrentTab({ cart: newCart });
-                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer transition"><Minus className="w-3 h-3" /></button>
-                                    <span className="px-1 text-sky-100 font-black w-4 text-center">{ci.quantity}</span>
+                                    }} className="p-1 rounded hover:bg-white/10 text-white cursor-pointer transition"><Minus className="w-3 h-3" /></button>
+                                    <span className="px-1 text-white font-black w-4 text-center">{ci.quantity}</span>
                                     <button onClick={() => {
                                       const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
                                       updateCurrentTab({ cart: newCart });
-                                    }} className="p-1 rounded hover:bg-sky-900/80 text-sky-300 cursor-pointer transition"><Plus className="w-3 h-3" /></button>
+                                    }} className="p-1 rounded hover:bg-white/10 text-white cursor-pointer transition"><Plus className="w-3 h-3" /></button>
                                   </div>
                                 </div>
                               ))
@@ -2533,7 +2525,7 @@ export default function LuxuryGoldAdminPanel() {
                             placeholder="Customer Name (Optional)"
                             value={currentTab.customerName}
                             onChange={(e) => updateCurrentTab({ customerName: e.target.value })}
-                            className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3.5 py-2.5 text-sky-100 outline-none focus:border-sky-500/50 placeholder:text-sky-700 transition"
+                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37] transition"
                           />
                           <input
                             type="tel"
@@ -2541,7 +2533,7 @@ export default function LuxuryGoldAdminPanel() {
                             placeholder="Phone Number (Optional)"
                             value={currentTab.customerPhone}
                             onChange={(e) => updateCurrentTab({ customerPhone: e.target.value.replace(/\D/g, '') })}
-                            className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3.5 py-2.5 text-sky-100 outline-none font-mono focus:border-sky-500/50 placeholder:text-sky-700 transition"
+                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none font-mono focus:border-[#D4AF37] transition"
                           />
 
                           <div className="grid grid-cols-2 gap-2.5 pt-2">
@@ -2549,7 +2541,7 @@ export default function LuxuryGoldAdminPanel() {
                               type="button"
                               onClick={() => updateCurrentTab({ paymentMode: 'cash' })}
                               className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                                currentTab.paymentMode === 'cash' ? 'bg-sky-400 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.4)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300 hover:bg-sky-900/30'
+                                currentTab.paymentMode === 'cash' ? 'bg-amber-400 text-black border-transparent shadow-md' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'
                               }`}
                             >
                               <Banknote className="w-4 h-4" /> Cash
@@ -2558,7 +2550,7 @@ export default function LuxuryGoldAdminPanel() {
                               type="button"
                               onClick={() => updateCurrentTab({ paymentMode: 'upi' })}
                               className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                                currentTab.paymentMode === 'upi' ? 'bg-sky-400 text-black border-transparent shadow-[0_0_15px_rgba(14,165,233,0.4)]' : 'bg-sky-950/20 border-sky-900/50 text-sky-400/70 hover:text-sky-300 hover:bg-sky-900/30'
+                                currentTab.paymentMode === 'upi' ? 'bg-emerald-400 text-black border-transparent shadow-md' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'
                               }`}
                             >
                               <Smartphone className="w-4 h-4" /> PhonePe / Paid
@@ -2566,20 +2558,20 @@ export default function LuxuryGoldAdminPanel() {
                           </div>
 
                           {currentTab.paymentMode === 'cash' && (
-                            <div className="p-3.5 rounded-xl bg-[#0a0f16] border border-sky-500/30 space-y-2.5 mt-2 shadow-inner">
+                            <div className="p-3.5 rounded-xl bg-black/40 border border-amber-400/30 space-y-2.5 mt-2 shadow-inner">
                               <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sky-500 font-bold">₹</span>
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 font-bold">₹</span>
                                 <input
                                   type="number"
                                   placeholder="Customer Handed Cash"
                                   value={currentTab.customerHanded}
                                   onChange={(e) => updateCurrentTab({ customerHanded: e.target.value })}
-                                  className="w-full bg-transparent rounded-lg pl-7 pr-3 py-1.5 text-sky-100 font-bold outline-none border-b border-sky-900 focus:border-sky-400 transition-colors placeholder:text-sky-800"
+                                  className="w-full bg-transparent rounded-lg pl-7 pr-3 py-1.5 text-white font-bold outline-none border-b border-white/10 focus:border-amber-400 transition-colors"
                                 />
                               </div>
                               <div className="flex justify-between items-center text-[11px] pt-1 px-1">
-                                <span className="text-sky-200/60 font-bold">Change to return:</span>
-                                <span className="text-sky-400 font-black text-sm">
+                                <span className="text-neutral-400 font-bold">Change to return:</span>
+                                <span className="text-emerald-400 font-black text-sm">
                                   ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0))).toFixed(2) : '0.00')}
                                 </span>
                               </div>
@@ -2587,10 +2579,10 @@ export default function LuxuryGoldAdminPanel() {
                           )}
                         </div>
 
-                        <div className="pt-4 mt-4 border-t border-sky-900/50 space-y-3">
-                          <div className="flex justify-between items-center text-sm font-black text-sky-100 px-1">
+                        <div className="pt-4 mt-4 border-t border-white/10 space-y-3">
+                          <div className="flex justify-between items-center text-sm font-black text-white px-1">
                             <span>Total Bill:</span>
-                            <span className="text-sky-400 text-xl tracking-wide">₹{tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0).toFixed(2)}</span>
+                            <span className="text-[#D4AF37] text-xl tracking-wide">₹{tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0).toFixed(2)}</span>
                           </div>
                           
                           {/* SMART CHECKOUT ENGINE */}
@@ -2614,10 +2606,10 @@ export default function LuxuryGoldAdminPanel() {
                                 }).select().single();
                                 if (sErr) throw sErr;
 
-                                // 2. Insert Order Items
+                                // 2. Insert Order Items (with fallback to counter item names for history)
                                 const itemsPayload = tabCart.map(ci => ({
                                   session_id: sess.id,
-                                  menu_item_id: null, // Unified items bypass join map
+                                  menu_item_id: null, 
                                   quantity: ci.quantity,
                                   unit_price: ci.cartPrice,
                                   item_status: 'served',
@@ -2663,7 +2655,7 @@ export default function LuxuryGoldAdminPanel() {
                                 setLoading(false);
                               }
                             }}
-                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(14,165,233,0.3)] cursor-pointer hover:shadow-[0_0_30px_rgba(14,165,233,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer hover:bg-[#c59b27] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
                           </button>
@@ -2689,79 +2681,62 @@ export default function LuxuryGoldAdminPanel() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-3xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+              className="w-full max-w-3xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
             >
-              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3 mb-3">
-                <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage Menu Items</h3>
+              <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-3">
+                <h3 className="text-sm font-black text-white uppercase flex items-center gap-2"><Settings className="w-4 h-4 text-[#D4AF37]"/> Manage Menu Items</h3>
                 <button onClick={() => setShowVaMCCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
               {/* CRUD Tabs */}
-              <div className="flex gap-2 border-b border-sky-900/30 pb-3">
-                 <button onClick={() => { setCrudCategory('main'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${crudCategory === 'main' ? 'bg-sky-500/20 border border-sky-400 text-sky-100' : 'bg-[#0a0f16] border border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+              <div className="flex gap-2 border-b border-white/10 pb-3">
+                 <button onClick={() => { setCrudCategory('main'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition border ${crudCategory === 'main' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
                     General Items
                  </button>
-                 <button onClick={() => { setCrudCategory('ice_cream'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemSP(''); setCrudItemCP(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${crudCategory === 'ice_cream' ? 'bg-sky-500/20 border border-sky-400 text-sky-100' : 'bg-[#0a0f16] border border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                 <button onClick={() => { setCrudCategory('ice_cream'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition border ${crudCategory === 'ice_cream' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
                     Ice Creams
                  </button>
-                 <button onClick={() => { setCrudCategory('df'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemSP(''); setCrudItemCP(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${crudCategory === 'df' ? 'bg-sky-500/20 border border-sky-400 text-sky-100' : 'bg-[#0a0f16] border border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                 <button onClick={() => { setCrudCategory('df'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition border ${crudCategory === 'df' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
                     Dry Fruits
                  </button>
               </div>
 
-              {/* Unified Add / Edit Form */}
+              {/* Unified Add / Edit Form (Only Price ₹ for all) */}
               <form onSubmit={async (e) => {
                 e.preventDefault();
                 const cleanName = crudItemName.trim();
+                const pr = parseFloat(crudItemPrice);
+                if (!cleanName || isNaN(pr) || pr <= 0) { return alert('Valid Name & Price ivvandi.'); }
                 
                 setLoading(true);
                 try {
                   if (crudCategory === 'main') {
-                    const pr = parseFloat(crudItemPrice);
-                    if (!cleanName || isNaN(pr) || pr <= 0) { setLoading(false); return alert('Valid Name & Price ivvandi.'); }
                     if (editingCrudItem) await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingCrudItem.id);
                     else await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
                   } else {
-                    const sp = parseFloat(crudItemSP);
-                    const cp = parseFloat(crudItemCP);
-                    if (!cleanName || isNaN(sp) || isNaN(cp) || sp <= 0 || cp < 0) { setLoading(false); return alert('Valid details ivvandi.'); }
-                    
                     const targetTable = crudCategory === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items';
-                    if (editingCrudItem) await supabase.from(targetTable).update({ name: cleanName, selling_price: sp, cost_price: cp }).eq('id', editingCrudItem.id);
-                    else await supabase.from(targetTable).insert({ name: cleanName, selling_price: sp, cost_price: cp, stock_quantity: 0 });
+                    if (editingCrudItem) await supabase.from(targetTable).update({ name: cleanName, selling_price: pr, cost_price: pr }).eq('id', editingCrudItem.id);
+                    else await supabase.from(targetTable).insert({ name: cleanName, selling_price: pr, cost_price: pr, stock_quantity: 0 });
                   }
                   
-                  setCrudItemName(''); setCrudItemPrice(''); setCrudItemSP(''); setCrudItemCP(''); setEditingCrudItem(null);
+                  setCrudItemName(''); setCrudItemPrice(''); setEditingCrudItem(null);
                   loadCounterAndInventoryData();
                 } catch (err: any) { alert('Error: ' + err.message); } 
                 finally { setLoading(false); }
-              }} className="space-y-3 py-3 border-b border-sky-900/30">
+              }} className="space-y-3 py-3 border-b border-white/10">
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                    <div className="sm:col-span-4">
-                        <label className="text-[10px] text-sky-200/60 block mb-1 font-bold">Item Name</label>
-                        <input type="text" required placeholder="Item Name" value={crudItemName} onChange={(e) => setCrudItemName(e.target.value)} className="w-full bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 text-xs transition" />
+                    <div className="sm:col-span-5">
+                        <label className="text-[10px] text-neutral-400 block mb-1 font-bold">Item Name</label>
+                        <input type="text" required placeholder="Item Name" value={crudItemName} onChange={(e) => setCrudItemName(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37] text-xs transition" />
                     </div>
 
-                    {crudCategory === 'main' ? (
-                       <div className="sm:col-span-4">
-                          <label className="text-[10px] text-sky-200/60 block mb-1 font-bold">Price ₹</label>
-                          <input type="number" required min="1" step="0.01" placeholder="₹ Price" value={crudItemPrice} onChange={(e) => setCrudItemPrice(e.target.value)} className="w-full bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-400 outline-none focus:border-sky-500/50 text-xs font-bold transition" />
-                       </div>
-                    ) : (
-                       <>
-                        <div className="sm:col-span-2">
-                          <label className="text-[10px] text-rose-300/80 block mb-1 font-bold">Cost (CP) ₹</label>
-                          <input type="number" required min="0" step="0.01" placeholder="₹ CP" value={crudItemCP} onChange={(e) => setCrudItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-900/50 rounded-xl px-3 py-2 text-rose-100 outline-none focus:border-rose-500/50 text-xs font-bold transition" />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="text-[10px] text-emerald-300/80 block mb-1 font-bold">Sell (SP) ₹</label>
-                          <input type="number" required min="1" step="0.01" placeholder="₹ SP" value={crudItemSP} onChange={(e) => setCrudItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-900/50 rounded-xl px-3 py-2 text-emerald-100 outline-none focus:border-emerald-500/50 text-xs font-bold transition" />
-                        </div>
-                       </>
-                    )}
+                    <div className="sm:col-span-3">
+                        <label className="text-[10px] text-neutral-400 block mb-1 font-bold">Price ₹</label>
+                        <input type="number" required min="1" step="0.01" placeholder="₹ Price" value={crudItemPrice} onChange={(e) => setCrudItemPrice(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-[#D4AF37] outline-none focus:border-[#D4AF37] text-xs font-bold transition" />
+                    </div>
 
                     <div className="sm:col-span-4 flex items-end">
-                      <button type="submit" disabled={loading} className="w-full py-2 h-[34px] rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-sky-300 transition">
+                      <button type="submit" disabled={loading} className="w-full py-2 h-[34px] rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-[#c59b27] transition">
                         {editingCrudItem ? 'Update' : '+ Add Item'}
                       </button>
                     </div>
@@ -2770,13 +2745,13 @@ export default function LuxuryGoldAdminPanel() {
 
               {/* Search Bar */}
               <div className="relative mt-3">
-                <Search className="w-4 h-4 text-sky-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-[#D4AF37] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Search in list..."
                   value={vamcCrudSearch}
                   onChange={(e) => setVamcCrudSearch(e.target.value)}
-                  className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl pl-9 pr-3 py-2 text-xs text-sky-100 outline-none focus:border-sky-500/50 transition"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37] transition"
                 />
               </div>
 
@@ -2790,33 +2765,32 @@ export default function LuxuryGoldAdminPanel() {
                    
                    listData = listData.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase()));
 
-                   if (listData.length === 0) return <div className="text-center py-8 text-sky-200/50 text-xs">No items found.</div>;
+                   if (listData.length === 0) return <div className="text-center py-8 text-neutral-500 text-xs">No items found.</div>;
 
                    return listData.map(item => (
-                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-sky-900/30 flex justify-between items-center text-xs hover:border-sky-500/30 transition">
+                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs hover:border-[#D4AF37]/50 transition">
                       <div>
-                        <span className="font-bold text-sky-100 block">{item.name}</span>
+                        <span className="font-bold text-white block">{item.name}</span>
                         {crudCategory === 'main' ? (
-                          <span className="text-sky-400 font-black">₹{Number(item.price).toFixed(2)}</span>
+                          <span className="text-[#D4AF37] font-black">₹{Number(item.price).toFixed(2)}</span>
                         ) : (
-                          <div className="flex gap-2 text-[9px] mt-1 items-center">
-                            <span className="text-rose-400 font-mono">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
-                            <span className="text-emerald-400 font-mono">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
-                            <span className={`font-black ml-2 px-1.5 rounded ${item.stock_quantity > 0 ? 'bg-sky-900/50 text-sky-200' : 'bg-rose-900/50 text-rose-200'}`}>Stock: {item.stock_quantity}</span>
+                          <div className="flex gap-2 text-[10px] mt-1 items-center">
+                            <span className="text-[#D4AF37] font-black">₹{Number(item.selling_price).toFixed(2)}</span>
+                            <span className={`font-bold ml-2 px-1.5 rounded ${item.stock_quantity > 0 ? 'bg-emerald-900/30 text-emerald-400' : 'bg-rose-900/30 text-rose-400'}`}>Stock: {item.stock_quantity}</span>
                           </div>
                         )}
                       </div>
                       <div className="flex gap-1.5 items-center">
                         {crudCategory !== 'main' && (
-                           <button onClick={() => { setSelectedInvItem(item); setPurchaseType(crudCategory); setPurchaseQty(''); setPurchaseCost(''); setShowPurchaseModal(true); }} className="px-2 py-1.5 rounded-lg bg-sky-900/40 text-sky-300 font-bold hover:bg-sky-800 transition cursor-pointer">
+                           <button onClick={() => { setSelectedInvItem(item); setPurchaseType(crudCategory); setPurchaseQty(''); setShowPurchaseModal(true); }} className="px-2 py-1.5 rounded-lg bg-white/5 text-white font-bold hover:bg-white/10 transition cursor-pointer">
                               + Stock
                            </button>
                         )}
                         <button onClick={() => { 
                           setEditingCrudItem(item); setCrudItemName(item.name); 
                           if(crudCategory === 'main') setCrudItemPrice(String(item.price));
-                          else { setCrudItemSP(String(item.selling_price)); setCrudItemCP(String(item.cost_price)); }
-                        }} className="p-1.5 rounded-lg bg-sky-950/30 text-sky-300 hover:bg-sky-900/50 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
+                          else { setCrudItemPrice(String(item.selling_price)); }
+                        }} className="p-1.5 rounded-lg bg-white/5 text-[#D4AF37] hover:bg-white/10 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
                         
                         <button onClick={async () => {
                           if (!confirm(`"${item.name}" delete cheyala?`)) return;
@@ -2842,12 +2816,12 @@ export default function LuxuryGoldAdminPanel() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm bg-[#0d0d0f] border border-sky-400/60 rounded-[28px] p-6 shadow-[0_0_30px_rgba(14,165,233,0.15)] flex flex-col"
+              className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[28px] p-6 shadow-2xl flex flex-col"
             >
-              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3 mb-4">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
                 <div>
-                  <h3 className="text-sm font-black text-sky-100 uppercase">Add Bulk Stock</h3>
-                  <span className="text-[10px] text-sky-400 block font-bold tracking-wide">{selectedInvItem.name}</span>
+                  <h3 className="text-sm font-black text-white uppercase">Add Bulk Stock</h3>
+                  <span className="text-[10px] text-[#D4AF37] block font-bold tracking-wide">{selectedInvItem.name}</span>
                 </div>
                 <button onClick={() => setShowPurchaseModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
@@ -2855,8 +2829,10 @@ export default function LuxuryGoldAdminPanel() {
               <form onSubmit={async (e) => {
                 e.preventDefault();
                 const qty = parseInt(purchaseQty);
-                const cost = parseFloat(purchaseCost);
-                if (isNaN(qty) || qty <= 0 || isNaN(cost) || cost < 0) return alert('Invalid entry');
+                if (isNaN(qty) || qty <= 0) return alert('Invalid entry');
+                
+                // Uses the same price for total investment calculation as requested (CP=SP)
+                const cost = qty * Number(selectedInvItem.selling_price);
 
                 setLoading(true);
                 try {
@@ -2879,21 +2855,14 @@ export default function LuxuryGoldAdminPanel() {
               }} className="space-y-4">
                 
                 <div>
-                  <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Quantity Adding (e.g. 50 boxes)</label>
+                  <label className="text-[10px] text-neutral-400 font-bold block mb-1">Quantity Adding (e.g. 50 items)</label>
                   <input type="number" required min="1" value={purchaseQty} onChange={(e) => {
                     setPurchaseQty(e.target.value);
-                    if(e.target.value) setPurchaseCost(String(parseInt(e.target.value) * Number(selectedInvItem.cost_price)));
-                  }} className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none font-bold focus:border-sky-500/50 transition" />
+                  }} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold focus:border-[#D4AF37] transition" />
                 </div>
                 
-                <div>
-                  <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Total Cost (Investment) ₹</label>
-                  <input type="number" required min="0" step="0.01" value={purchaseCost} onChange={(e) => setPurchaseCost(e.target.value)} className="w-full bg-[#0a0f16] border border-sky-500/30 rounded-xl px-3 py-2 outline-none font-bold text-sky-400 focus:border-sky-400 transition" />
-                  <span className="text-[9px] text-sky-200/40 mt-1 block">Auto-calculated using CP (₹{Number(selectedInvItem.cost_price).toFixed(2)}/item). Edit manually if needed.</span>
-                </div>
-
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-[0_0_15px_rgba(14,165,233,0.3)] hover:shadow-[0_0_25px_rgba(14,165,233,0.4)] transition-all mt-2">
-                  Confirm Purchase & Update Stock
+                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-[#c59b27] transition-all mt-2">
+                  Confirm & Update Stock
                 </button>
               </form>
             </motion.div>
