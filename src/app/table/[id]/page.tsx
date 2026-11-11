@@ -3,7 +3,6 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import Script from 'next/script';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
@@ -18,22 +17,13 @@ import {
   AlertTriangle,
   Search,
   BellRing,
-  Droplets,
-  Flame,
-  Crown,
-  ChefHat,
-  MessageSquare,
-  CheckCircle2,
   Gift,
-  Layers,
-  Scale,
-  Hash,
   Check,
-  Award
+  Hash,
+  Crown
 } from 'lucide-react';
 
 const butterSpring = { type: 'spring', stiffness: 420, damping: 32, mass: 0.45 };
-const tapSpring = { type: 'spring', stiffness: 500, damping: 25, mass: 0.4 };
 
 const triggerHaptic = (ms = 12) => {
   if (typeof window !== 'undefined' && 'vibrate' in navigator) {
@@ -45,7 +35,6 @@ export default function LuxuryCustomerTablePage() {
   const params = useParams();
   const rawTableParam = decodeURIComponent((params.id as string) || '');
 
-  const [activeLang, setActiveLang] = useState<'en' | 'te' | 'hi'>('en');
   const [realTableNumber, setRealTableNumber] = useState<number | null>(null);
   const [displayTableName, setDisplayTableName] = useState<string>('');
   const [tableResolved, setTableResolved] = useState<boolean>(false);
@@ -54,7 +43,6 @@ export default function LuxuryCustomerTablePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
-  const [combos, setCombos] = useState<any[]>([]);
   
   const [banners, setBanners] = useState<any[]>([
     {
@@ -63,23 +51,22 @@ export default function LuxuryCustomerTablePage() {
     }
   ]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const [topPickDishIds, setTopPickDishIds] = useState<number[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'combos' | null>(null);
-  const [foodFilter, setFoodFilter] = useState<'all' | 'veg' | 'non_veg'>('all');
 
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [selectedWeightVariant, setSelectedWeightVariant] = useState<any | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // Customer & Loyalty States
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [customerVisitCount, setCustomerVisitCount] = useState<number>(1);
+  const [phoneError, setPhoneError] = useState('');
+  const [customerVisitCount, setCustomerVisitCount] = useState<number>(0);
   const [isRewardClaimedThisSession, setIsRewardClaimedThisSession] = useState(false);
   const [showRewardModal, setShowRewardModal] = useState(false);
 
@@ -91,29 +78,9 @@ export default function LuxuryCustomerTablePage() {
   const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
   const [isTotalBillModalOpen, setIsTotalBillModalOpen] = useState(false);
 
-  const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [waiterToast, setWaiterToast] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(false);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
-
-  const triggerGoogleTranslate = (langCode: 'en' | 'te' | 'hi') => {
-    setActiveLang(langCode);
-    triggerHaptic(15);
-    if (typeof window === 'undefined') return;
-
-    const googleLang = langCode === 'en' ? '/en/en' : `/en/${langCode}`;
-    document.cookie = `googtrans=${googleLang}; path=/;`;
-    document.cookie = `googtrans=${googleLang}; domain=${window.location.hostname}; path=/;`;
-
-    const selectElem = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-    if (selectElem) {
-      selectElem.value = langCode;
-      selectElem.dispatchEvent(new Event('change'));
-    } else {
-      window.location.reload();
-    }
-  };
 
   const resolveTableIdentity = async () => {
     if (!rawTableParam) return;
@@ -188,11 +155,23 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
+  // Fake Number Protection & Loyalty Check
+  const isValidPhone = (phone: string) => {
+    const regex = /^[6-9]\d{9}$/;
+    if (!regex.test(phone)) return false;
+    if (/^(\d)\1{9}$/.test(phone)) return false; // Blocks 3333333333, 1111111111 etc.
+    return true;
+  };
+
   const checkLoyaltyProfile = async (phone: string) => {
-    if (!phone || phone.length !== 10) return;
+    if (!isValidPhone(phone)) {
+      setCustomerVisitCount(0);
+      return;
+    }
     try {
-      const { data } = await supabase.from('customer_loyalty').select('*').eq('phone', phone.trim()).maybeSingle();
-      if (data) setCustomerVisitCount(data.total_visits || 1);
+      const { data } = await supabase.from('customer_loyalty').select('*').eq('phone', phone).maybeSingle();
+      if (data) setCustomerVisitCount(data.total_visits || 0);
+      else setCustomerVisitCount(0);
     } catch (e) {}
   };
 
@@ -201,23 +180,20 @@ export default function LuxuryCustomerTablePage() {
       { data: cats },
       { data: items },
       { data: adns },
-      { data: cmbs },
       { data: bnrs }
     ] = await Promise.all([
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
       supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true }),
-      supabase.from('combos').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false })
     ]);
 
     if (cats && cats.length > 0) {
       setCategories(cats);
-      setSelectedCategory(prev => prev || cats[0].id);
+      setSelectedCategory(cats[0].id);
     }
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
-    if (cmbs) setCombos(cmbs);
     if (bnrs && bnrs.length > 0) {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
@@ -320,18 +296,19 @@ export default function LuxuryCustomerTablePage() {
   const cartItemCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
   const runningGrandTotal = activeSessionTotal + cartGrandTotal;
 
+  // 10th Visit Reward Logic (Juices < ₹70)
+  const is10thVisitMilestone = (customerVisitCount + 1) % 10 === 0 && (customerVisitCount + 1) > 0;
+  
   const freeRewardDrinks = useMemo(() => {
-    return menuItems.filter(m => Number(m.price) <= 70 && m.food_type !== 'non_veg').slice(0, 4);
+    return menuItems.filter(m => Number(m.price) <= 70 && (m.name_en || m.name).toLowerCase().includes('juice')).slice(0, 5);
   }, [menuItems]);
-
-  const is10thVisitMilestone = customerVisitCount >= 10 && customerVisitCount % 10 === 0;
 
   const handleClaimFreeReward = (drink: MenuItem) => {
     triggerHaptic(25);
     addToCartDirect(drink, false, [], null, true);
     setIsRewardClaimedThisSession(true);
     setShowRewardModal(false);
-    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE for your 10th Visit!`);
+    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE!`);
     setTimeout(() => setWaiterToast(null), 4000);
   };
 
@@ -344,7 +321,6 @@ export default function LuxuryCustomerTablePage() {
         call_type: callType,
         status: 'pending'
       });
-      setIsWaiterModalOpen(false);
       setWaiterToast(`🔔 Steward notified for ${displayTableName}!`);
       setTimeout(() => setWaiterToast(null), 4000);
     } catch (e) {
@@ -355,8 +331,13 @@ export default function LuxuryCustomerTablePage() {
   const handlePlaceOrder = async () => {
     triggerHaptic(30);
     if (!realTableNumber) return alert('Invalid table.');
-    if (!activeSessionId && (customerName.trim().length < 2 || customerPhone.length !== 10)) {
-      return alert('Please enter Guest Name & 10-digit Phone.');
+    
+    if (!activeSessionId) {
+      if (customerName.trim().length < 2) return alert('Please enter Guest Name.');
+      if (!isValidPhone(customerPhone)) {
+        setPhoneError('Please enter a valid 10-digit mobile number.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -410,23 +391,29 @@ export default function LuxuryCustomerTablePage() {
       setActiveOrderToken(batch.order_pin || randomToken);
       setActiveBatchStatus('pending_waiter');
 
-      const orderPayload = cart.map((ci, idx) => ({
-        batch_id: batch.id,
-        session_id: sessionId,
-        menu_item_id: ci.menuItem.id,
-        station_id: 'kitchen_hot',
-        quantity: ci.quantity,
-        unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
-        item_status: 'ordered',
-        cooking_notes: cartNotes[`${ci.menuItem.id}-${idx}`] || null,
-        selected_addons: ci.selectedAddons || [],
-        is_complimentary: Boolean(ci.isComplimentary),
-        selected_weight_variant: ci.selectedWeightVariant?.size || null
-      }));
+      // Smart Tagging for Ice Creams & Dry Fruits
+      const orderPayload = cart.map((ci, idx) => {
+        let nameTag = '';
+        if (ci.menuItem.is_retail_item) nameTag = '[DF] ';
+        else if ((ci.menuItem.name_en || '').toLowerCase().includes('ice cream')) nameTag = '[ICE] ';
+
+        return {
+          batch_id: batch.id,
+          session_id: sessionId,
+          menu_item_id: ci.menuItem.id,
+          station_id: 'kitchen_hot',
+          quantity: ci.quantity,
+          unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
+          item_status: 'ordered',
+          cooking_notes: nameTag ? `Tag: ${nameTag.trim()}` : null,
+          selected_addons: ci.selectedAddons || [],
+          is_complimentary: Boolean(ci.isComplimentary),
+          selected_weight_variant: ci.selectedWeightVariant?.size || null
+        };
+      });
 
       await supabase.from('order_items').insert(orderPayload);
       setCart([]);
-      setCartNotes({});
       setIsCartOpen(false);
       fetchSessionItems(sessionId);
     } catch (err: any) {
@@ -438,14 +425,16 @@ export default function LuxuryCustomerTablePage() {
 
   const filteredMenuItems = useMemo(() => {
     return menuItems.filter(item => {
+      if (item.is_retail_item) return false; // Hide retail items from main menu (shows in cart)
       const dishName = (item.name_en || item.name || '').toLowerCase();
       if (searchQuery.trim()) return dishName.includes(searchQuery.toLowerCase());
-      if (selectedCategory === 'combos') return false;
-      if (foodFilter === 'veg') return item.food_type === 'veg';
-      if (foodFilter === 'non_veg') return item.food_type === 'non_veg';
       return item.category_id === selectedCategory;
     });
-  }, [menuItems, searchQuery, selectedCategory, foodFilter]);
+  }, [menuItems, searchQuery, selectedCategory]);
+
+  const retailDryFruits = useMemo(() => {
+    return menuItems.filter(item => item.is_retail_item);
+  }, [menuItems]);
 
   if (tableNotFound) {
     return (
@@ -466,12 +455,8 @@ export default function LuxuryCustomerTablePage() {
             <span className="text-[9px] tracking-[0.2em] font-mono uppercase text-[#D4AF37] block font-bold">ROYAL FINE-DINE</span>
             <h1 className="text-base font-black text-amber-200 tracking-wide mt-0.5">{displayTableName}</h1>
           </div>
-
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsTotalBillModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/[0.04] border border-[#D4AF37]/40 text-left shadow-lg cursor-pointer"
-            >
+            <button onClick={() => setIsTotalBillModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/[0.04] border border-[#D4AF37]/40 text-left shadow-lg cursor-pointer">
               <Receipt className="w-3.5 h-3.5 text-[#D4AF37]" />
               <div>
                 <span className="text-[8px] block uppercase font-mono text-neutral-400">LEDGER</span>
@@ -485,44 +470,7 @@ export default function LuxuryCustomerTablePage() {
       {/* Main Container */}
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
 
-        {/* 10th Visit Reward Card */}
-        {is10thVisitMilestone && !isRewardClaimedThisSession && (
-          <div className="p-4 rounded-[26px] bg-gradient-to-r from-[#211a0c] via-[#17140b] to-[#0a0907] border border-[#D4AF37] shadow-xl flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Gift className="w-6 h-6 text-[#D4AF37] animate-bounce shrink-0" />
-              <div>
-                <span className="text-xs font-black text-[#FCF6BA] block">🎉 10th Qualifying Visit Milestone!</span>
-                <span className="text-[10px] text-neutral-300 block">Claim 1 Free Fresh Juice (Min ₹180 spend per visit reached).</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowRewardModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-[#D4AF37] text-black font-black text-[10px] uppercase font-mono tracking-wider shrink-0 cursor-pointer"
-            >
-              Claim Drink
-            </button>
-          </div>
-        )}
-
-        {/* Token Badge */}
-        {activeOrderToken && (
-          <div className="p-3.5 rounded-[24px] bg-[#16140e] border border-[#D4AF37] shadow-xl flex items-center justify-between font-mono">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black">
-                <Hash className="w-4 h-4 stroke-[3]" />
-              </div>
-              <div>
-                <span className="text-[10px] text-neutral-400 uppercase block">Order Token</span>
-                <span className="text-base font-black text-white">#{activeOrderToken}</span>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/40">
-              {activeBatchStatus === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen 👨‍🍳'}
-            </span>
-          </div>
-        )}
-
-        {/* CLEAN WIDE BANNER (NO NAMES, NO TITLES - ONLY UPLOADED IMAGES WITH DOTS) */}
+        {/* Banners */}
         {banners.length > 0 && (
           <div className="relative w-full h-48 sm:h-56 overflow-hidden rounded-[24px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
             <AnimatePresence mode="wait">
@@ -535,26 +483,14 @@ export default function LuxuryCustomerTablePage() {
                   transition={{ duration: 0.4 }}
                   className="w-full h-full"
                 >
-                  <img
-                    src={banners[currentBannerIndex].image_url}
-                    alt="Promo Banner"
-                    className="w-full h-full object-cover object-center"
-                  />
+                  <img src={banners[currentBannerIndex].image_url} alt="Promo Banner" className="w-full h-full object-cover object-center" />
                 </motion.div>
               )}
             </AnimatePresence>
-
             {banners.length > 1 && (
               <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
                 {banners.map((_, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setCurrentBannerIndex(idx)}
-                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'
-                    }`}
-                  />
+                  <button key={idx} type="button" onClick={() => setCurrentBannerIndex(idx)} className={`h-1.5 rounded-full transition-all cursor-pointer ${idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'}`} />
                 ))}
               </div>
             )}
@@ -564,36 +500,20 @@ export default function LuxuryCustomerTablePage() {
         {/* Search Bar */}
         <div className="relative">
           <Search className="w-4 h-4 text-[#D4AF37]/80 absolute left-4 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search our handcrafted delights..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08]"
-          />
+          <input type="text" placeholder="Search our handcrafted delights..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08]" />
         </div>
 
         {/* Categories Bar */}
         <div className="sticky top-[58px] z-30 py-2 bg-[#060608]/95 backdrop-blur-xl border-b border-white/[0.05]">
-          <div 
-            ref={categoryScrollRef}
-            className="p-1.5 rounded-[26px] bg-white/[0.03] border border-white/[0.08] flex gap-2 overflow-x-auto select-none items-center scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
+          <div ref={categoryScrollRef} className="p-1.5 rounded-[26px] bg-white/[0.03] border border-white/[0.08] flex gap-2 overflow-x-auto select-none items-center scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {categories.map((cat) => {
               const isSelected = selectedCategory === cat.id;
               return (
                 <button
                   type="button"
                   key={cat.id}
-                  onClick={(e) => {
-                    triggerHaptic(15);
-                    setSelectedCategory(cat.id);
-                    e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                  }}
-                  className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${
-                    isSelected ? 'text-black font-black bg-[#D4AF37] shadow-md' : 'text-neutral-400 hover:text-white'
-                  }`}
+                  onClick={(e) => { triggerHaptic(15); setSelectedCategory(cat.id); e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }}
+                  className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${isSelected ? 'text-black font-black bg-[#D4AF37] shadow-md' : 'text-neutral-400 hover:text-white'}`}
                 >
                   <span>{cat.name_en || cat.name} {cat.category_type === 'retail' ? '🛍️' : ''}</span>
                 </button>
@@ -602,7 +522,7 @@ export default function LuxuryCustomerTablePage() {
           </div>
         </div>
 
-        {/* Dishes Grid (3 Columns Layout) */}
+        {/* Dishes Grid */}
         <div className="grid grid-cols-3 gap-2.5">
           {filteredMenuItems.map((item) => {
             const inCart = cart.find(ci => ci.menuItem.id === item.id);
@@ -626,7 +546,6 @@ export default function LuxuryCustomerTablePage() {
                   <div>
                     <span className="font-mono text-[11px] font-black text-[#D4AF37]">₹{Number(item.price).toFixed(0)}</span>
                   </div>
-
                   {inCart ? (
                     <div className="flex items-center bg-white/[0.08] border border-[#D4AF37]/60 rounded-lg p-0.5">
                       <button onClick={() => removeFromCart(cart.indexOf(inCart))} className="p-0.5 text-[#FCF6BA] cursor-pointer"><Minus className="w-2.5 h-2.5" /></button>
@@ -634,10 +553,7 @@ export default function LuxuryCustomerTablePage() {
                       <button onClick={() => handleItemAddClick(item)} className="p-0.5 text-[#FCF6BA] cursor-pointer"><Plus className="w-2.5 h-2.5" /></button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => handleItemAddClick(item)}
-                      className="w-6 h-6 rounded-lg bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md"
-                    >
+                    <button onClick={() => handleItemAddClick(item)} className="w-6 h-6 rounded-lg bg-[#D4AF37] text-black flex items-center justify-center font-black cursor-pointer shadow-md">
                       <Plus className="w-3 h-3 stroke-[3]" />
                     </button>
                   )}
@@ -651,20 +567,13 @@ export default function LuxuryCustomerTablePage() {
       {/* Floating Bottom Action Dock */}
       <div className="fixed bottom-4 inset-x-4 max-w-md mx-auto z-40">
         <div className="p-2 rounded-[28px] bg-[#0c0c0e]/95 border border-[#D4AF37]/50 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex items-center justify-between gap-2">
-          
-          <button
-            onClick={() => handleCallWaiter('water')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer"
-          >
+          <button onClick={() => handleCallWaiter('water')} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer">
             <BellRing className="w-4 h-4 text-[#D4AF37]" />
             <span>Call Steward</span>
           </button>
 
           {cartItemCount > 0 ? (
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="flex-1 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black py-2.5 px-4 rounded-2xl flex items-center justify-between font-black text-xs font-mono shadow-lg cursor-pointer"
-            >
+            <button onClick={() => setIsCartOpen(true)} className="flex-1 bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black py-2.5 px-4 rounded-2xl flex items-center justify-between font-black text-xs font-mono shadow-lg cursor-pointer">
               <div className="flex items-center gap-2">
                 <span className="bg-black text-[#FCF6BA] px-2 py-0.5 rounded-lg text-[10px]">{cartItemCount}</span>
                 <span>View Cart</span>
@@ -672,10 +581,7 @@ export default function LuxuryCustomerTablePage() {
               <span>₹{cartGrandTotal.toFixed(2)} ➔</span>
             </button>
           ) : (
-            <button
-              onClick={() => setIsTotalBillModalOpen(true)}
-              className="flex-1 py-2 rounded-2xl text-xs font-mono text-neutral-400 hover:text-white text-right pr-2 cursor-pointer"
-            >
+            <button onClick={() => setIsTotalBillModalOpen(true)} className="flex-1 py-2 rounded-2xl text-xs font-mono text-neutral-400 hover:text-white text-right pr-2 cursor-pointer">
               Running Bill: <strong className="text-[#D4AF37]">₹{runningGrandTotal.toFixed(2)}</strong>
             </button>
           )}
@@ -692,7 +598,7 @@ export default function LuxuryCustomerTablePage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={butterSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[88vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
+              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[95vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -702,6 +608,31 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
+              {/* RETAIL DRY FRUITS SLIDER (BIGBASKET STYLE) */}
+              {retailDryFruits.length > 0 && (
+                <div className="py-3 border-b border-white/10">
+                  <h4 className="text-xs font-black text-[#FCF6BA] mb-2 flex items-center gap-1.5"><Sparkles className="w-4 h-4"/> Buy Premium Dry Fruits (Limited Stock!)</h4>
+                  <div className="flex gap-3 overflow-x-auto custom-gold-scrollbar pb-2">
+                    {retailDryFruits.map(df => (
+                      <div key={df.id} className="min-w-[140px] bg-[#161619] border border-white/10 rounded-2xl p-2.5 flex flex-col gap-2 shadow-lg">
+                        <span className="font-bold text-white text-[11px] truncate">{df.name}</span>
+                        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+                           {df.weight_variants?.map((v: any, vIdx: number) => (
+                              <button 
+                                key={vIdx}
+                                onClick={() => addToCartDirect(df, false, [], v, false)}
+                                className="px-2 py-1 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 border border-white/10 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition"
+                              >
+                                {v.size} (₹{v.price})
+                              </button>
+                           ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-3 divide-y divide-white/5">
                 {cart.map((ci, idx) => {
                   const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
@@ -709,7 +640,7 @@ export default function LuxuryCustomerTablePage() {
                   return (
                     <div key={idx} className="pt-2 flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-white block">{ci.menuItem.name_en || ci.menuItem.name}</span>
+                        <span className="font-bold text-white block">{ci.menuItem.name_en || ci.menuItem.name} {ci.selectedWeightVariant ? `(${ci.selectedWeightVariant.size})` : ''}</span>
                         {ci.selectedAddons && ci.selectedAddons.length > 0 && (
                           <div className="text-[10px] text-amber-300 mt-0.5">
                             {ci.selectedAddons.map(a => `+ ${a.name}`).join(', ')}
@@ -728,58 +659,104 @@ export default function LuxuryCustomerTablePage() {
               </div>
 
               {!activeSessionId && (
-                <div className="space-y-2 pt-2 border-t border-white/10">
+                <div className="space-y-3 pt-3 border-t border-white/10">
                   <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
                   <input
                     type="text"
-                    required
-                    placeholder="Guest Name *"
+                    placeholder="Guest Name (Optional)"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none"
+                    className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37] transition"
                   />
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    required
-                    placeholder="10-digit Phone Number *"
-                    value={customerPhone}
-                    onChange={(e) => {
-                      const clean = e.target.value.replace(/\D/g, '');
-                      setCustomerPhone(clean);
-                      if (clean.length === 10) checkLoyaltyProfile(clean);
-                    }}
-                    className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none"
-                  />
+                  <div>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      placeholder="10-digit Phone Number *"
+                      value={customerPhone}
+                      onChange={(e) => {
+                        const clean = e.target.value.replace(/\D/g, '');
+                        setCustomerPhone(clean);
+                        setPhoneError('');
+                        if (clean.length === 10 && isValidPhone(clean)) checkLoyaltyProfile(clean);
+                        else setCustomerVisitCount(0);
+                      }}
+                      className={`w-full bg-[#161619] border rounded-xl px-3.5 py-2.5 text-white outline-none transition ${phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-[#D4AF37]/40 focus:border-[#D4AF37]'}`}
+                    />
+                    {phoneError && <span className="text-rose-400 text-[10px] mt-1 block">{phoneError}</span>}
+                  </div>
+
+                  {/* Gamified Loyalty Progress Bar */}
+                  {customerPhone.length === 10 && isValidPhone(customerPhone) && !is10thVisitMilestone && (
+                     <div className="p-3 bg-black/40 rounded-xl border border-white/10 mt-2">
+                        <div className="flex justify-between text-[10px] text-neutral-400 mb-1.5 font-bold">
+                           <span>Visit {customerVisitCount + 1}</span>
+                           <span>10th Visit = Free Juice!</span>
+                        </div>
+                        <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                           <motion.div 
+                             initial={{ width: 0 }} 
+                             animate={{ width: `${((customerVisitCount % 10) / 10) * 100}%` }} 
+                             className="h-full bg-gradient-to-r from-amber-500 to-[#D4AF37]" 
+                           />
+                        </div>
+                        <span className="text-[9px] text-[#D4AF37] mt-1.5 block text-center">Just {10 - (customerVisitCount % 10)} more visits to unlock!</span>
+                     </div>
+                  )}
+
+                  {/* 10th Visit Reward Claim Button */}
+                  {is10thVisitMilestone && !isRewardClaimedThisSession && (
+                     <div className="p-3 rounded-xl bg-gradient-to-r from-amber-900/40 to-[#12110c] border border-amber-400/50 flex justify-between items-center mt-2 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                        <div>
+                           <span className="text-amber-400 font-black text-[11px] block">🎉 10th Visit Unlocked!</span>
+                           <span className="text-[9px] text-neutral-400">Claim your free fresh juice below.</span>
+                        </div>
+                        <button onClick={() => setShowRewardModal(true)} className="px-3 py-1.5 bg-amber-400 text-black font-black rounded-lg text-[10px] uppercase shadow-md cursor-pointer">Claim Now</button>
+                     </div>
+                  )}
                 </div>
               )}
 
-              {/* Ajio / Flipkart Style Highlighted Free Item with Low Visibility Condition */}
-              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3">
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3 mt-4">
                 <div className="flex justify-between text-white font-black text-sm">
                   <span>Payable at Counter:</span>
                   <span className="text-[#D4AF37] text-base">₹{cartGrandTotal.toFixed(2)}</span>
-                </div>
-
-                {/* Professional E-Commerce Highlight Technique */}
-                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/30 to-[#12110c] border border-amber-400/30 space-y-1">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Unlocked: 1 Free Fresh Juice on 10th Visit!</span>
-                  </div>
-                  <p className="text-[9px] text-neutral-400 pl-5 font-sans leading-relaxed">
-                    *(Condition: Applicable only when per visit billing is min. ₹180+).*
-                  </p>
                 </div>
               </div>
 
               <button
                 disabled={loading}
                 onClick={handlePlaceOrder}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-4 hover:bg-[#c59b27] transition"
               >
                 {loading ? 'Submitting Order...' : 'Submit Order & Get Token'}
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Free Reward Selection Modal */}
+      <AnimatePresence>
+        {showRewardModal && (
+          <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-sm bg-[#0d0d0f] border border-amber-400/50 rounded-[28px] p-6 font-mono shadow-2xl">
+              <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-3">
+                <h3 className="text-amber-400 font-black uppercase flex items-center gap-2"><Gift className="w-4 h-4"/> Choose Your Free Drink</h3>
+                <button onClick={() => setShowRewardModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5"/></button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto custom-gold-scrollbar pr-1">
+                 {freeRewardDrinks.length === 0 ? (
+                    <div className="text-center py-6 text-neutral-500 text-xs">No eligible drinks found under ₹70.</div>
+                 ) : (
+                    freeRewardDrinks.map(drink => (
+                       <div key={drink.id} onClick={() => handleClaimFreeReward(drink)} className="p-3 rounded-xl bg-white/5 hover:bg-amber-400/20 border border-white/10 hover:border-amber-400 flex justify-between items-center cursor-pointer transition">
+                          <span className="text-white font-bold text-xs">{drink.name}</span>
+                          <span className="text-amber-400 font-black text-[10px] uppercase">Free</span>
+                       </div>
+                    ))
+                 )}
+              </div>
             </motion.div>
           </div>
         )}
@@ -834,7 +811,7 @@ export default function LuxuryCustomerTablePage() {
 
               <button
                 onClick={confirmCustomizationAndAdd}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-lg mt-2"
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-lg mt-2 hover:bg-[#c59b27] transition"
               >
                 Add to Dining Cart
               </button>
@@ -843,30 +820,64 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* Table Ledger Modal */}
+      {/* Table Ledger Modal (Fixed) */}
       <AnimatePresence>
         {isTotalBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-3xl p-6 shadow-2xl space-y-4 font-mono text-xs">
+            <div className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(212,175,55,0.15)] space-y-4 font-mono text-xs">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <h3 className="font-black text-white text-base">Table Ledger & Bill</h3>
-                <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 cursor-pointer"><X className="w-5 h-5" /></button>
+                <h3 className="font-black text-white text-base uppercase tracking-wider flex items-center gap-2"><Receipt className="w-4 h-4 text-[#D4AF37]"/> Table Ledger & Bill</h3>
+                <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer transition"><X className="w-5 h-5" /></button>
               </div>
+              
               {activeOrderToken && (
-                <div className="p-2.5 rounded-xl bg-[#161619] border border-[#D4AF37]/40 flex justify-between items-center">
-                  <span className="text-neutral-400">Order Token:</span>
-                  <span className="text-[#D4AF37] font-black text-sm">#{activeOrderToken}</span>
+                <div className="p-3 rounded-xl bg-[#161619] border border-[#D4AF37]/40 flex justify-between items-center shadow-inner">
+                  <span className="text-neutral-400 font-bold uppercase tracking-wider text-[10px]">Order Token:</span>
+                  <span className="text-[#D4AF37] font-black text-base">#{activeOrderToken}</span>
                 </div>
               )}
-              <div className="flex justify-between font-black text-white text-sm pt-2 border-t border-white/10">
-                <span>Net Payable:</span>
-                <span className="text-[#D4AF37]">₹{runningGrandTotal.toFixed(2)}</span>
+
+              {/* Fixed: Show Ordered Items List in Ledger */}
+              <div className="space-y-2.5 max-h-48 overflow-y-auto custom-gold-scrollbar pr-1 my-4">
+                {sessionOrderedItems.length === 0 ? (
+                   <div className="text-center text-neutral-500 py-4">No items ordered yet.</div>
+                ) : (
+                   sessionOrderedItems.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center border-b border-white/5 pb-2">
+                        <div className="truncate pr-2">
+                           <span className="text-white font-bold block">{item.menu_items?.name_en || item.menu_items?.name || (item.cooking_notes?.replace('VaMC Counter Item: ', '') || 'Counter Item')}</span>
+                           <span className="text-[10px] text-neutral-400">Qty: {item.quantity}</span>
+                        </div>
+                        <span className="text-[#D4AF37] font-black">₹{(Number(item.unit_price) * item.quantity).toFixed(2)}</span>
+                      </div>
+                   ))
+                )}
               </div>
-              <button onClick={() => setIsTotalBillModalOpen(false)} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase cursor-pointer">
+
+              <div className="flex justify-between items-center font-black text-white text-sm pt-3 border-t border-[#D4AF37]/50 mt-4">
+                <span className="uppercase tracking-wider">Net Payable:</span>
+                <span className="text-[#D4AF37] text-lg">₹{runningGrandTotal.toFixed(2)}</span>
+              </div>
+              <button onClick={() => setIsTotalBillModalOpen(false)} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase cursor-pointer hover:bg-[#c59b27] transition shadow-lg mt-4">
                 Close Ledger
               </button>
             </div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {waiterToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#161619] border border-[#D4AF37] text-[#FCF6BA] px-4 py-2.5 rounded-xl shadow-2xl font-mono text-xs font-bold whitespace-nowrap flex items-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            {waiterToast}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
