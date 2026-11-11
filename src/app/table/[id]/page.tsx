@@ -549,7 +549,7 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* Cart Drawer & Upsell Promos */}
+      {/* REORDERED CART DRAWER (6 Steps) */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -569,38 +569,62 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* Added Items List */}
-              <div className="space-y-3 divide-y divide-white/5">
-                {cart.map((ci, idx) => {
-                  const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
-                  const singleUnitPrice = ci.isComplimentary ? 0 : (Number(ci.menuItem.price || 0) + addOnsCost);
-                  return (
-                    <div key={idx} className="pt-2 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-white block">
-                          {ci.menuItem.name_en || ci.menuItem.name} 
-                          {ci.selectedWeightVariant ? ` (${ci.selectedWeightVariant.size})` : ''}
-                        </span>
-                        {ci.selectedAddons && ci.selectedAddons.length > 0 && (
-                          <div className="text-[10px] text-amber-300 mt-0.5">
-                            {ci.selectedAddons.map(a => `+ ${a.name}`).join(', ')}
-                          </div>
-                        )}
-                        <span className="text-[#D4AF37]">{ci.isComplimentary ? 'FREE' : `₹${singleUnitPrice.toFixed(2)}`}</span>
+              {/* 1. BILL LIST */}
+              {cart.length === 0 ? (
+                 <div className="text-center py-4 text-neutral-500 text-xs">Your cart is empty.</div>
+              ) : (
+                <div className="space-y-3 divide-y divide-white/5">
+                  {cart.map((ci, idx) => {
+                    const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
+                    const singleUnitPrice = ci.isComplimentary ? 0 : (Number(ci.menuItem.price || 0) + addOnsCost);
+                    return (
+                      <div key={idx} className="pt-2 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-white block">
+                            {ci.menuItem.name_en || ci.menuItem.name} 
+                            {ci.selectedWeightVariant ? ` (${ci.selectedWeightVariant.size})` : ''}
+                          </span>
+                          {ci.selectedAddons && ci.selectedAddons.length > 0 && (
+                            <div className="text-[10px] text-amber-300 mt-0.5">
+                              {ci.selectedAddons.map(a => `+ ${a.name}`).join(', ')}
+                            </div>
+                          )}
+                          <span className="text-[#D4AF37]">{ci.isComplimentary ? 'FREE' : `₹${singleUnitPrice.toFixed(2)}`}</span>
+                        </div>
+                        <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5">
+                          <button onClick={() => removeFromCart(idx)} className="p-1 text-[#D4AF37] cursor-pointer"><Minus className="w-3 h-3" /></button>
+                          <span className="px-2 font-bold text-white">{ci.quantity}</span>
+                          <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary, ci.itemType)} className="p-1 text-[#D4AF37] cursor-pointer"><Plus className="w-3 h-3" /></button>
+                        </div>
                       </div>
-                      <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5">
-                        <button onClick={() => removeFromCart(idx)} className="p-1 text-[#D4AF37] cursor-pointer"><Minus className="w-3 h-3" /></button>
-                        <span className="px-2 font-bold text-white">{ci.quantity}</span>
-                        <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary, ci.itemType)} className="p-1 text-[#D4AF37] cursor-pointer"><Plus className="w-3 h-3" /></button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* Guest Identification & Loyalty Logic */}
+              {/* 2. PROMO SLIDES */}
+              {banners.length > 0 && (
+                <div className="relative w-full h-32 overflow-hidden rounded-[20px] border border-[#D4AF37]/30 shadow-lg mt-4 bg-neutral-950">
+                  <AnimatePresence mode="wait">
+                    {banners[currentBannerIndex] && (
+                      <motion.img
+                        key={banners[currentBannerIndex].id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.4 }}
+                        src={banners[currentBannerIndex].image_url}
+                        alt="Promo Banner"
+                        className="w-full h-full object-cover object-center"
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* 3. GUEST IDENTITY & 4. LOYALTY BAR */}
               {!activeSessionId && (
-                <div className="space-y-3 pt-3 border-t border-white/10">
+                <div className="space-y-3 pt-4 border-t border-white/10 mt-4">
                   <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
                   <input
                     type="text"
@@ -634,7 +658,7 @@ export default function LuxuryCustomerTablePage() {
                     {phoneError && <span className="text-rose-400 text-[10px] mt-1 block">{phoneError}</span>}
                   </div>
 
-                  {/* Gamified Loyalty Progress Bar */}
+                  {/* 4. Gamified Loyalty Progress Bar */}
                   {customerPhone.length === 10 && isValidPhone(customerPhone) && !is10thVisitMilestone && (
                      <div className="p-3 bg-black/40 rounded-xl border border-white/10 mt-2">
                         <div className="flex justify-between text-[10px] text-neutral-400 mb-1.5 font-bold">
@@ -665,11 +689,9 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* ========================================================= */}
-              {/* RETAIL DRY FRUITS SLIDER (BIGBASKET UI ADAPTATION) */}
-              {/* ========================================================= */}
+              {/* 5. RETAIL DRY FRUITS SLIDER (BIGBASKET UI ADAPTATION) */}
               {dfItems.length > 0 && (
-                <div className="pt-4 border-t border-white/10 mt-3 mb-2">
+                <div className="pt-4 border-t border-white/10 mt-4">
                   <h4 className="text-[12px] font-black text-[#FCF6BA] mb-3 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-[#D4AF37]" />
                     Premium Dry Fruits & Spices
@@ -693,7 +715,21 @@ export default function LuxuryCustomerTablePage() {
                         <span className="font-bold text-white text-[12px] leading-tight line-clamp-1">{df.name}</span>
                         <span className="text-[9px] text-neutral-400 mt-1 mb-3">Premium Quality</span>
                         
-                        {/* Bottom Row: Price & Add Action */}
+                        {/* Variants Buttons */}
+                        <div className="flex gap-1.5 overflow-x-auto scrollbar-none mb-3">
+                           {df.weight_variants?.map((v: any, vIdx: number) => (
+                              <button 
+                                key={vIdx}
+                                type="button"
+                                onClick={() => addToCartDirect(df, false, [], v, false, 'df')}
+                                className="px-2 py-1 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 border border-white/10 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition cursor-pointer"
+                              >
+                                {v.size} (₹{v.price})
+                              </button>
+                           ))}
+                        </div>
+
+                        {/* Bottom Row: Default Price & Main Add Action */}
                         <div className="mt-auto flex justify-between items-end pt-1">
                            <span className="text-white font-black text-sm">₹{Number(df.selling_price).toFixed(0)}</span>
                            
@@ -711,7 +747,7 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* Pay Details & Submit */}
+              {/* 6. TOTAL & SUBMIT */}
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3 mt-4">
                 <div className="flex justify-between text-white font-black text-sm">
                   <span>Payable at Counter:</span>
@@ -720,7 +756,7 @@ export default function LuxuryCustomerTablePage() {
               </div>
 
               <button
-                disabled={loading || phoneError.length > 0}
+                disabled={loading || phoneError.length > 0 || cart.length === 0}
                 onClick={handlePlaceOrder}
                 className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-4 hover:bg-[#c59b27] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -815,7 +851,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* Table Ledger Modal (Fixed Item Display) */}
+      {/* Table Ledger Modal */}
       <AnimatePresence>
         {isTotalBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
