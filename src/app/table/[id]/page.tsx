@@ -7,20 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import { 
-  Plus, 
-  Minus, 
-  ShoppingBag, 
-  X, 
-  Receipt, 
-  Sparkles, 
-  Image as ImgIcon, 
-  AlertTriangle,
-  Search,
-  BellRing,
-  Gift,
-  Check,
-  Hash,
-  Crown
+  Plus, Minus, ShoppingBag, X, Receipt, Sparkles, Image as ImgIcon, 
+  AlertTriangle, Search, BellRing, Gift, Check, Hash
 } from 'lucide-react';
 
 const butterSpring = { type: 'spring', stiffness: 420, damping: 32, mass: 0.45 };
@@ -44,16 +32,14 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   
-  const [banners, setBanners] = useState<any[]>([
-    {
-      id: 999,
-      image_url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1200&auto=format&fit=crop'
-    }
-  ]);
+  // Dry Fruits Inventory for Cart Upsell Slider
+  const [dfItems, setDfItems] = useState<any[]>([]); 
+  
+  const [banners, setBanners] = useState<any[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<number | 'combos' | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
@@ -72,7 +58,6 @@ export default function LuxuryCustomerTablePage() {
 
   const [activeOrderToken, setActiveOrderToken] = useState<string | null>(null);
   const [activeBatchStatus, setActiveBatchStatus] = useState<string | null>(null);
-
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSessionTotal, setActiveSessionTotal] = useState<number>(0);
   const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
@@ -155,7 +140,7 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Fake Number Protection & Loyalty Check
+  // Fake Number Protection
   const isValidPhone = (phone: string) => {
     const regex = /^[6-9]\d{9}$/;
     if (!regex.test(phone)) return false;
@@ -180,12 +165,14 @@ export default function LuxuryCustomerTablePage() {
       { data: cats },
       { data: items },
       { data: adns },
-      { data: bnrs }
+      { data: bnrs },
+      { data: dfs }
     ] = await Promise.all([
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
       supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true }),
-      supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false })
+      supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false }),
+      supabase.from('df_menu_items').select('*').gt('stock_quantity', 0).order('name', { ascending: true }) // Fetch DF
     ]);
 
     if (cats && cats.length > 0) {
@@ -194,6 +181,7 @@ export default function LuxuryCustomerTablePage() {
     }
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
+    if (dfs) setDfItems(dfs);
     if (bnrs && bnrs.length > 0) {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
@@ -209,6 +197,7 @@ export default function LuxuryCustomerTablePage() {
       .channel(`table-${realTableNumber}-rt`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => fetchMenuData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -236,14 +225,16 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  const addToCartDirect = (item: any, isCombo = false, chosenAddons: MenuAddon[] = [], chosenVariant: any = null, isFree = false) => {
+  const addToCartDirect = (item: any, isCombo = false, chosenAddons: MenuAddon[] = [], chosenVariant: any = null, isFree = false, itemType = 'main') => {
     triggerHaptic(15);
-    const effectivePrice = isFree ? 0 : (chosenVariant ? chosenVariant.price : item.price);
+    // Determine price field based on itemType (DF uses selling_price)
+    let basePrice = itemType === 'main' ? item.price : item.selling_price;
+    const effectivePrice = isFree ? 0 : (chosenVariant ? chosenVariant.price : basePrice);
 
     setCart(prev => {
       const existing = prev.find(ci => 
         ci.menuItem.id === item.id && 
-        ci.isCombo === isCombo && 
+        ci.itemType === itemType &&
         ci.isComplimentary === isFree &&
         ci.selectedWeightVariant?.size === chosenVariant?.size &&
         JSON.stringify(ci.selectedAddons?.map(a => Number(a.id)).sort()) === JSON.stringify(chosenAddons.map(a => Number(a.id)).sort())
@@ -256,6 +247,7 @@ export default function LuxuryCustomerTablePage() {
         menuItem: { ...item, price: effectivePrice }, 
         quantity: 1, 
         isCombo,
+        itemType, // 'main' or 'df'
         selectedAddons: chosenAddons,
         selectedWeightVariant: chosenVariant,
         isComplimentary: isFree
@@ -266,7 +258,7 @@ export default function LuxuryCustomerTablePage() {
   const confirmCustomizationAndAdd = () => {
     if (!customizingItem) return;
     const chosenAddons = addons.filter(a => selectedAddonIds.includes(Number(a.id)));
-    addToCartDirect(customizingItem, false, chosenAddons, selectedWeightVariant, false);
+    addToCartDirect(customizingItem, false, chosenAddons, selectedWeightVariant, false, 'main');
     setCustomizingItem(null);
     setSelectedAddonIds([]);
     setSelectedWeightVariant(null);
@@ -305,7 +297,7 @@ export default function LuxuryCustomerTablePage() {
 
   const handleClaimFreeReward = (drink: MenuItem) => {
     triggerHaptic(25);
-    addToCartDirect(drink, false, [], null, true);
+    addToCartDirect(drink, false, [], null, true, 'main');
     setIsRewardClaimedThisSession(true);
     setShowRewardModal(false);
     setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE!`);
@@ -316,11 +308,7 @@ export default function LuxuryCustomerTablePage() {
     if (!realTableNumber) return;
     triggerHaptic(25);
     try {
-      await supabase.from('waiter_calls').insert({
-        table_number: realTableNumber,
-        call_type: callType,
-        status: 'pending'
-      });
+      await supabase.from('waiter_calls').insert({ table_number: realTableNumber, call_type: callType, status: 'pending' });
       setWaiterToast(`🔔 Steward notified for ${displayTableName}!`);
       setTimeout(() => setWaiterToast(null), 4000);
     } catch (e) {
@@ -357,9 +345,7 @@ export default function LuxuryCustomerTablePage() {
             final_payable: cartGrandTotal,
             status: 'active',
             payment_status: 'unpaid'
-          })
-          .select()
-          .single();
+          }).select().single();
 
         if (sErr) throw sErr;
         sessionId = newSession.id;
@@ -367,45 +353,33 @@ export default function LuxuryCustomerTablePage() {
         setActiveSessionTotal(cartGrandTotal);
         await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', realTableNumber);
       } else {
-        await supabase.from('table_sessions').update({
-          subtotal: newTotal,
-          total_amount: newTotal,
-          final_payable: newTotal
-        }).eq('id', sessionId);
+        await supabase.from('table_sessions').update({ subtotal: newTotal, total_amount: newTotal, final_payable: newTotal }).eq('id', sessionId);
         setActiveSessionTotal(newTotal);
       }
 
       const randomToken = Math.floor(1000 + Math.random() * 9000).toString();
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
-        .insert({
-          session_id: sessionId,
-          table_number: realTableNumber,
-          status: 'pending_waiter',
-          order_pin: randomToken
-        })
-        .select()
-        .single();
+        .insert({ session_id: sessionId, table_number: realTableNumber, status: 'pending_waiter', order_pin: randomToken }).select().single();
 
       if (bErr) throw bErr;
       setActiveOrderToken(batch.order_pin || randomToken);
       setActiveBatchStatus('pending_waiter');
 
-      // Smart Tagging for Ice Creams & Dry Fruits
+      // Smart Tagging for Admin Ledger (To minus stock on settle)
       const orderPayload = cart.map((ci, idx) => {
         let nameTag = '';
-        if (ci.menuItem.is_retail_item) nameTag = '[DF] ';
-        else if ((ci.menuItem.name_en || '').toLowerCase().includes('ice cream')) nameTag = '[ICE] ';
+        if (ci.itemType === 'df') nameTag = '[DF] ';
 
         return {
           batch_id: batch.id,
           session_id: sessionId,
-          menu_item_id: ci.menuItem.id,
+          menu_item_id: ci.itemType === 'main' ? ci.menuItem.id : null,
           station_id: 'kitchen_hot',
           quantity: ci.quantity,
           unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
           item_status: 'ordered',
-          cooking_notes: nameTag ? `Tag: ${nameTag.trim()}` : null,
+          cooking_notes: nameTag ? `Tag: ${nameTag.trim()} ${ci.menuItem.name}` : null,
           selected_addons: ci.selectedAddons || [],
           is_complimentary: Boolean(ci.isComplimentary),
           selected_weight_variant: ci.selectedWeightVariant?.size || null
@@ -425,16 +399,12 @@ export default function LuxuryCustomerTablePage() {
 
   const filteredMenuItems = useMemo(() => {
     return menuItems.filter(item => {
-      if (item.is_retail_item) return false; // Hide retail items from main menu (shows in cart)
+      if (item.is_retail_item) return false; 
       const dishName = (item.name_en || item.name || '').toLowerCase();
       if (searchQuery.trim()) return dishName.includes(searchQuery.toLowerCase());
       return item.category_id === selectedCategory;
     });
   }, [menuItems, searchQuery, selectedCategory]);
-
-  const retailDryFruits = useMemo(() => {
-    return menuItems.filter(item => item.is_retail_item);
-  }, [menuItems]);
 
   if (tableNotFound) {
     return (
@@ -470,30 +440,21 @@ export default function LuxuryCustomerTablePage() {
       {/* Main Container */}
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
 
-        {/* Banners */}
-        {banners.length > 0 && (
-          <div className="relative w-full h-48 sm:h-56 overflow-hidden rounded-[24px] border border-[#D4AF37]/50 shadow-2xl bg-neutral-950">
-            <AnimatePresence mode="wait">
-              {banners[currentBannerIndex] && (
-                <motion.div
-                  key={banners[currentBannerIndex].id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="w-full h-full"
-                >
-                  <img src={banners[currentBannerIndex].image_url} alt="Promo Banner" className="w-full h-full object-cover object-center" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {banners.length > 1 && (
-              <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                {banners.map((_, idx) => (
-                  <button key={idx} type="button" onClick={() => setCurrentBannerIndex(idx)} className={`h-1.5 rounded-full transition-all cursor-pointer ${idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'}`} />
-                ))}
+        {/* Token Badge */}
+        {activeOrderToken && (
+          <div className="p-3.5 rounded-[24px] bg-[#16140e] border border-[#D4AF37] shadow-xl flex items-center justify-between font-mono">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#D4AF37] text-black flex items-center justify-center font-black">
+                <Hash className="w-4 h-4 stroke-[3]" />
               </div>
-            )}
+              <div>
+                <span className="text-[10px] text-neutral-400 uppercase block">Order Token</span>
+                <span className="text-base font-black text-white">#{activeOrderToken}</span>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/40">
+              {activeBatchStatus === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen 👨‍🍳'}
+            </span>
           </div>
         )}
 
@@ -515,7 +476,7 @@ export default function LuxuryCustomerTablePage() {
                   onClick={(e) => { triggerHaptic(15); setSelectedCategory(cat.id); e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }}
                   className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${isSelected ? 'text-black font-black bg-[#D4AF37] shadow-md' : 'text-neutral-400 hover:text-white'}`}
                 >
-                  <span>{cat.name_en || cat.name} {cat.category_type === 'retail' ? '🛍️' : ''}</span>
+                  <span>{cat.name_en || cat.name}</span>
                 </button>
               );
             })}
@@ -525,7 +486,7 @@ export default function LuxuryCustomerTablePage() {
         {/* Dishes Grid */}
         <div className="grid grid-cols-3 gap-2.5">
           {filteredMenuItems.map((item) => {
-            const inCart = cart.find(ci => ci.menuItem.id === item.id);
+            const inCart = cart.find(ci => ci.menuItem.id === item.id && ci.itemType === 'main');
             const dishTitle = item.name_en || item.name;
 
             return (
@@ -588,7 +549,7 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* Cart Drawer */}
+      {/* Cart Drawer & Upsell Promos */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -598,7 +559,7 @@ export default function LuxuryCustomerTablePage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={butterSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[95vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
+              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[92vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -608,31 +569,7 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* RETAIL DRY FRUITS SLIDER (BIGBASKET STYLE) */}
-              {retailDryFruits.length > 0 && (
-                <div className="py-3 border-b border-white/10">
-                  <h4 className="text-xs font-black text-[#FCF6BA] mb-2 flex items-center gap-1.5"><Sparkles className="w-4 h-4"/> Buy Premium Dry Fruits (Limited Stock!)</h4>
-                  <div className="flex gap-3 overflow-x-auto custom-gold-scrollbar pb-2">
-                    {retailDryFruits.map(df => (
-                      <div key={df.id} className="min-w-[140px] bg-[#161619] border border-white/10 rounded-2xl p-2.5 flex flex-col gap-2 shadow-lg">
-                        <span className="font-bold text-white text-[11px] truncate">{df.name}</span>
-                        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
-                           {df.weight_variants?.map((v: any, vIdx: number) => (
-                              <button 
-                                key={vIdx}
-                                onClick={() => addToCartDirect(df, false, [], v, false)}
-                                className="px-2 py-1 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 border border-white/10 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition"
-                              >
-                                {v.size} (₹{v.price})
-                              </button>
-                           ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+              {/* Added Items List */}
               <div className="space-y-3 divide-y divide-white/5">
                 {cart.map((ci, idx) => {
                   const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
@@ -640,7 +577,10 @@ export default function LuxuryCustomerTablePage() {
                   return (
                     <div key={idx} className="pt-2 flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-white block">{ci.menuItem.name_en || ci.menuItem.name} {ci.selectedWeightVariant ? `(${ci.selectedWeightVariant.size})` : ''}</span>
+                        <span className="font-bold text-white block">
+                          {ci.menuItem.name_en || ci.menuItem.name} 
+                          {ci.selectedWeightVariant ? ` (${ci.selectedWeightVariant.size})` : ''}
+                        </span>
                         {ci.selectedAddons && ci.selectedAddons.length > 0 && (
                           <div className="text-[10px] text-amber-300 mt-0.5">
                             {ci.selectedAddons.map(a => `+ ${a.name}`).join(', ')}
@@ -651,13 +591,14 @@ export default function LuxuryCustomerTablePage() {
                       <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-0.5">
                         <button onClick={() => removeFromCart(idx)} className="p-1 text-[#D4AF37] cursor-pointer"><Minus className="w-3 h-3" /></button>
                         <span className="px-2 font-bold text-white">{ci.quantity}</span>
-                        <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary)} className="p-1 text-[#D4AF37] cursor-pointer"><Plus className="w-3 h-3" /></button>
+                        <button onClick={() => addToCartDirect(ci.menuItem, ci.isCombo, ci.selectedAddons, ci.selectedWeightVariant, ci.isComplimentary, ci.itemType)} className="p-1 text-[#D4AF37] cursor-pointer"><Plus className="w-3 h-3" /></button>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
+              {/* Guest Identification & Loyalty Logic */}
               {!activeSessionId && (
                 <div className="space-y-3 pt-3 border-t border-white/10">
                   <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
@@ -678,8 +619,15 @@ export default function LuxuryCustomerTablePage() {
                         const clean = e.target.value.replace(/\D/g, '');
                         setCustomerPhone(clean);
                         setPhoneError('');
-                        if (clean.length === 10 && isValidPhone(clean)) checkLoyaltyProfile(clean);
-                        else setCustomerVisitCount(0);
+                        if (clean.length === 10) {
+                          if(isValidPhone(clean)) checkLoyaltyProfile(clean);
+                          else {
+                            setPhoneError('Please enter a valid Indian mobile number.');
+                            setCustomerVisitCount(0);
+                          }
+                        } else {
+                          setCustomerVisitCount(0);
+                        }
                       }}
                       className={`w-full bg-[#161619] border rounded-xl px-3.5 py-2.5 text-white outline-none transition ${phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-[#D4AF37]/40 focus:border-[#D4AF37]'}`}
                     />
@@ -696,11 +644,11 @@ export default function LuxuryCustomerTablePage() {
                         <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
                            <motion.div 
                              initial={{ width: 0 }} 
-                             animate={{ width: `${((customerVisitCount % 10) / 10) * 100}%` }} 
+                             animate={{ width: `${(((customerVisitCount % 10) + 1) / 10) * 100}%` }} 
                              className="h-full bg-gradient-to-r from-amber-500 to-[#D4AF37]" 
                            />
                         </div>
-                        <span className="text-[9px] text-[#D4AF37] mt-1.5 block text-center">Just {10 - (customerVisitCount % 10)} more visits to unlock!</span>
+                        <span className="text-[9px] text-[#D4AF37] mt-1.5 block text-center">Just {10 - ((customerVisitCount % 10) + 1)} more visits to unlock!</span>
                      </div>
                   )}
 
@@ -711,12 +659,59 @@ export default function LuxuryCustomerTablePage() {
                            <span className="text-amber-400 font-black text-[11px] block">🎉 10th Visit Unlocked!</span>
                            <span className="text-[9px] text-neutral-400">Claim your free fresh juice below.</span>
                         </div>
-                        <button onClick={() => setShowRewardModal(true)} className="px-3 py-1.5 bg-amber-400 text-black font-black rounded-lg text-[10px] uppercase shadow-md cursor-pointer">Claim Now</button>
+                        <button onClick={() => setShowRewardModal(true)} className="px-3 py-1.5 bg-amber-400 text-black font-black rounded-lg text-[10px] uppercase shadow-md cursor-pointer hover:bg-amber-300">Claim Now</button>
                      </div>
                   )}
                 </div>
               )}
 
+              {/* ========================================================= */}
+              {/* RETAIL DRY FRUITS SLIDER (BIGBASKET UI ADAPTATION) */}
+              {/* ========================================================= */}
+              {dfItems.length > 0 && (
+                <div className="pt-4 border-t border-white/10 mt-3 mb-2">
+                  <h4 className="text-[12px] font-black text-[#FCF6BA] mb-3 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-[#D4AF37]" />
+                    Premium Dry Fruits & Spices
+                  </h4>
+                  <div className="flex gap-3 overflow-x-auto custom-gold-scrollbar pb-3 snap-x">
+                    {dfItems.map(df => (
+                      <div key={df.id} className="min-w-[130px] sm:min-w-[140px] bg-[#121215] border border-white/[0.05] rounded-[24px] p-3 flex flex-col relative snap-start shadow-lg">
+                        
+                        {/* Image Header */}
+                        <div className="h-20 w-full mb-3 flex items-center justify-center">
+                           {df.image_url ? (
+                             <img src={df.image_url} alt={df.name} className="h-full object-contain drop-shadow-md" />
+                           ) : (
+                             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
+                               <ShoppingBag className="w-6 h-6 text-[#D4AF37]/50" />
+                             </div>
+                           )}
+                        </div>
+                        
+                        {/* Title & Quality Subtitle */}
+                        <span className="font-bold text-white text-[12px] leading-tight line-clamp-1">{df.name}</span>
+                        <span className="text-[9px] text-neutral-400 mt-1 mb-3">Premium Quality</span>
+                        
+                        {/* Bottom Row: Price & Add Action */}
+                        <div className="mt-auto flex justify-between items-end pt-1">
+                           <span className="text-white font-black text-sm">₹{Number(df.selling_price).toFixed(0)}</span>
+                           
+                           <button 
+                             type="button"
+                             onClick={() => addToCartDirect(df, false, [], null, false, 'df')}
+                             className="w-8 h-8 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black hover:bg-[#c59b27] shadow-md transition-transform active:scale-95 cursor-pointer"
+                           >
+                             <Plus className="w-4 h-4 stroke-[3]" />
+                           </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pay Details & Submit */}
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3 mt-4">
                 <div className="flex justify-between text-white font-black text-sm">
                   <span>Payable at Counter:</span>
@@ -725,9 +720,9 @@ export default function LuxuryCustomerTablePage() {
               </div>
 
               <button
-                disabled={loading}
+                disabled={loading || phoneError.length > 0}
                 onClick={handlePlaceOrder}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-4 hover:bg-[#c59b27] transition"
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-4 hover:bg-[#c59b27] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Submitting Order...' : 'Submit Order & Get Token'}
               </button>
@@ -820,7 +815,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* Table Ledger Modal (Fixed) */}
+      {/* Table Ledger Modal (Fixed Item Display) */}
       <AnimatePresence>
         {isTotalBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
@@ -837,7 +832,7 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* Fixed: Show Ordered Items List in Ledger */}
+              {/* Show Ordered Items List in Ledger */}
               <div className="space-y-2.5 max-h-48 overflow-y-auto custom-gold-scrollbar pr-1 my-4">
                 {sessionOrderedItems.length === 0 ? (
                    <div className="text-center text-neutral-500 py-4">No items ordered yet.</div>
@@ -845,7 +840,7 @@ export default function LuxuryCustomerTablePage() {
                    sessionOrderedItems.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center border-b border-white/5 pb-2">
                         <div className="truncate pr-2">
-                           <span className="text-white font-bold block">{item.menu_items?.name_en || item.menu_items?.name || (item.cooking_notes?.replace('VaMC Counter Item: ', '') || 'Counter Item')}</span>
+                           <span className="text-white font-bold block">{item.menu_items?.name_en || item.menu_items?.name || (item.cooking_notes?.replace('Tag: [DF] ', '') || 'Item')}</span>
                            <span className="text-[10px] text-neutral-400">Qty: {item.quantity}</span>
                         </div>
                         <span className="text-[#D4AF37] font-black">₹{(Number(item.unit_price) * item.quantity).toFixed(2)}</span>
@@ -863,21 +858,6 @@ export default function LuxuryCustomerTablePage() {
               </button>
             </div>
           </div>
-        )}
-      </AnimatePresence>
-
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {waiterToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#161619] border border-[#D4AF37] text-[#FCF6BA] px-4 py-2.5 rounded-xl shadow-2xl font-mono text-xs font-bold whitespace-nowrap flex items-center gap-2"
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            {waiterToast}
-          </motion.div>
         )}
       </AnimatePresence>
     </div>
