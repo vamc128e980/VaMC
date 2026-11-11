@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import { 
   Plus, Minus, ShoppingBag, X, Receipt, Sparkles, Image as ImgIcon, 
-  AlertTriangle, Search, BellRing, Gift, Check, Hash
+  AlertTriangle, Search, BellRing, Gift, Check, Hash, Store
 } from 'lucide-react';
 
 const butterSpring = { type: 'spring', stiffness: 420, damping: 32, mass: 0.45 };
@@ -32,8 +32,10 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   
-  // Dry Fruits Inventory for Cart Upsell Slider
+  // VaMC Ledger Inventories for Upselling in Cart & Add-ons
   const [dfItems, setDfItems] = useState<any[]>([]); 
+  const [iceItems, setIceItems] = useState<any[]>([]);
+  const [vamcItems, setVamcItems] = useState<any[]>([]);
   
   const [banners, setBanners] = useState<any[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -41,8 +43,10 @@ export default function LuxuryCustomerTablePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
+  // Customization Bottom Sheet States
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
+  const [selectedCounterItemIds, setSelectedCounterItemIds] = useState<{id: number, type: string}[]>([]);
   const [selectedWeightVariant, setSelectedWeightVariant] = useState<any | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -140,11 +144,10 @@ export default function LuxuryCustomerTablePage() {
     }
   };
 
-  // Fake Number Protection
   const isValidPhone = (phone: string) => {
     const regex = /^[6-9]\d{9}$/;
     if (!regex.test(phone)) return false;
-    if (/^(\d)\1{9}$/.test(phone)) return false; // Blocks 3333333333, 1111111111 etc.
+    if (/^(\d)\1{9}$/.test(phone)) return false; 
     return true;
   };
 
@@ -162,17 +165,16 @@ export default function LuxuryCustomerTablePage() {
 
   const fetchMenuData = async () => {
     const [
-      { data: cats },
-      { data: items },
-      { data: adns },
-      { data: bnrs },
-      { data: dfs }
+      { data: cats }, { data: items }, { data: adns }, { data: bnrs },
+      { data: dfs }, { data: ices }, { data: vamcs }
     ] = await Promise.all([
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
       supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false }),
-      supabase.from('df_menu_items').select('*').gt('stock_quantity', 0).order('name', { ascending: true }) // Fetch DF
+      supabase.from('df_menu_items').select('*').order('name', { ascending: true }),
+      supabase.from('ice_cream_menu_items').select('*').order('name', { ascending: true }),
+      supabase.from('vamc_menu_items').select('*').order('name', { ascending: true })
     ]);
 
     if (cats && cats.length > 0) {
@@ -182,6 +184,9 @@ export default function LuxuryCustomerTablePage() {
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
     if (dfs) setDfItems(dfs);
+    if (ices) setIceItems(ices);
+    if (vamcs) setVamcItems(vamcs);
+    
     if (bnrs && bnrs.length > 0) {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
@@ -198,6 +203,8 @@ export default function LuxuryCustomerTablePage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => fetchMenuData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_menu_items' }, () => fetchMenuData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => fetchMenuData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -216,9 +223,11 @@ export default function LuxuryCustomerTablePage() {
     const hasAddons = item.has_addons;
     const hasRetailVariants = item.is_retail_item && Array.isArray(item.weight_variants) && item.weight_variants.length > 0;
 
-    if (hasAddons || hasRetailVariants) {
+    // Show Bottom Sheet if item has add-ons OR we want to cross-sell VaMC items
+    if (hasAddons || hasRetailVariants || iceItems.length > 0 || vamcItems.length > 0) {
       setCustomizingItem(item);
       setSelectedAddonIds([]);
+      setSelectedCounterItemIds([]);
       setSelectedWeightVariant(hasRetailVariants ? item.weight_variants[0] : null);
     } else {
       addToCartDirect(item, false);
@@ -227,7 +236,6 @@ export default function LuxuryCustomerTablePage() {
 
   const addToCartDirect = (item: any, isCombo = false, chosenAddons: MenuAddon[] = [], chosenVariant: any = null, isFree = false, itemType = 'main') => {
     triggerHaptic(15);
-    // Determine price field based on itemType (DF uses selling_price)
     let basePrice = itemType === 'main' ? item.price : item.selling_price;
     const effectivePrice = isFree ? 0 : (chosenVariant ? chosenVariant.price : basePrice);
 
@@ -247,7 +255,7 @@ export default function LuxuryCustomerTablePage() {
         menuItem: { ...item, price: effectivePrice }, 
         quantity: 1, 
         isCombo,
-        itemType, // 'main' or 'df'
+        itemType, 
         selectedAddons: chosenAddons,
         selectedWeightVariant: chosenVariant,
         isComplimentary: isFree
@@ -257,10 +265,25 @@ export default function LuxuryCustomerTablePage() {
 
   const confirmCustomizationAndAdd = () => {
     if (!customizingItem) return;
+    
+    // 1. Add Main Item with Selected Native Add-ons
     const chosenAddons = addons.filter(a => selectedAddonIds.includes(Number(a.id)));
     addToCartDirect(customizingItem, false, chosenAddons, selectedWeightVariant, false, 'main');
+    
+    // 2. Add Selected Counter Items (Ice Creams / Drinks) as Separate Cart Items
+    selectedCounterItemIds.forEach(counterItem => {
+      let fullItem = null;
+      if (counterItem.type === 'ice_cream') fullItem = iceItems.find(i => i.id === counterItem.id);
+      if (counterItem.type === 'vamc_general') fullItem = vamcItems.find(i => i.id === counterItem.id);
+      
+      if (fullItem) {
+        addToCartDirect(fullItem, false, [], null, false, counterItem.type);
+      }
+    });
+
     setCustomizingItem(null);
     setSelectedAddonIds([]);
+    setSelectedCounterItemIds([]);
     setSelectedWeightVariant(null);
   };
 
@@ -288,7 +311,6 @@ export default function LuxuryCustomerTablePage() {
   const cartItemCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
   const runningGrandTotal = activeSessionTotal + cartGrandTotal;
 
-  // 10th Visit Reward Logic (Juices < ₹70)
   const is10thVisitMilestone = (customerVisitCount + 1) % 10 === 0 && (customerVisitCount + 1) > 0;
   
   const freeRewardDrinks = useMemo(() => {
@@ -366,10 +388,11 @@ export default function LuxuryCustomerTablePage() {
       setActiveOrderToken(batch.order_pin || randomToken);
       setActiveBatchStatus('pending_waiter');
 
-      // Smart Tagging for Admin Ledger (To minus stock on settle)
       const orderPayload = cart.map((ci, idx) => {
         let nameTag = '';
-        if (ci.itemType === 'df') nameTag = '[DF] ';
+        if (ci.itemType === 'df') nameTag = '[DF]';
+        else if (ci.itemType === 'ice_cream') nameTag = '[ICE]';
+        else if (ci.itemType === 'vamc_general') nameTag = '[GEN]';
 
         return {
           batch_id: batch.id,
@@ -379,7 +402,7 @@ export default function LuxuryCustomerTablePage() {
           quantity: ci.quantity,
           unit_price: ci.isComplimentary ? 0 : ci.menuItem.price,
           item_status: 'ordered',
-          cooking_notes: nameTag ? `Tag: ${nameTag.trim()} ${ci.menuItem.name}` : null,
+          cooking_notes: nameTag ? `VaMC Counter Item: ${nameTag} ${ci.menuItem.name}` : null,
           selected_addons: ci.selectedAddons || [],
           is_complimentary: Boolean(ci.isComplimentary),
           selected_weight_variant: ci.selectedWeightVariant?.size || null
@@ -387,6 +410,27 @@ export default function LuxuryCustomerTablePage() {
       });
 
       await supabase.from('order_items').insert(orderPayload);
+
+      // LIVE STOCK MINUS FOR INVENTORY ITEMS (Dry Fruits & Ice Creams)
+      for (const item of cart) {
+        if (item.itemType === 'df') {
+          const realItem = dfItems.find(i => i.id === item.menuItem.id);
+          if (realItem) {
+            await supabase.from('df_menu_items').update({
+                stock_quantity: Math.max(0, realItem.stock_quantity - item.quantity)
+            }).eq('id', item.menuItem.id);
+          }
+        }
+        if (item.itemType === 'ice_cream') {
+          const realItem = iceItems.find(i => i.id === item.menuItem.id);
+          if (realItem) {
+            await supabase.from('ice_cream_menu_items').update({
+                stock_quantity: Math.max(0, realItem.stock_quantity - item.quantity)
+            }).eq('id', item.menuItem.id);
+          }
+        }
+      }
+
       setCart([]);
       setIsCartOpen(false);
       fetchSessionItems(sessionId);
@@ -549,7 +593,7 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* REORDERED CART DRAWER (6 Steps) */}
+      {/* EXACT 6-STEP CART FLOW MATCHING REFERENCE IMAGE */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -559,9 +603,9 @@ export default function LuxuryCustomerTablePage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={butterSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[92vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
+              className="relative w-full max-w-md mx-auto bg-[#101012] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-6 pb-8 space-y-4 z-10 max-h-[92vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
             >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
                 <div className="flex items-center gap-2">
                   <ShoppingBag className="w-5 h-5 text-[#D4AF37]" />
                   <h3 className="font-black text-white text-base">Your Dining Cart</h3>
@@ -573,7 +617,7 @@ export default function LuxuryCustomerTablePage() {
               {cart.length === 0 ? (
                  <div className="text-center py-4 text-neutral-500 text-xs">Your cart is empty.</div>
               ) : (
-                <div className="space-y-3 divide-y divide-white/5">
+                <div className="space-y-3 divide-y divide-white/5 pb-2">
                   {cart.map((ci, idx) => {
                     const addOnsCost = (ci.selectedAddons || []).reduce((sum, a) => sum + Number(a.price || 0), 0);
                     const singleUnitPrice = ci.isComplimentary ? 0 : (Number(ci.menuItem.price || 0) + addOnsCost);
@@ -585,7 +629,7 @@ export default function LuxuryCustomerTablePage() {
                             {ci.selectedWeightVariant ? ` (${ci.selectedWeightVariant.size})` : ''}
                           </span>
                           {ci.selectedAddons && ci.selectedAddons.length > 0 && (
-                            <div className="text-[10px] text-amber-300 mt-0.5">
+                            <div className="text-[10px] text-[#D4AF37] mt-0.5">
                               {ci.selectedAddons.map(a => `+ ${a.name}`).join(', ')}
                             </div>
                           )}
@@ -622,16 +666,16 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* 3. GUEST IDENTITY & 4. LOYALTY BAR */}
+              {/* 3. GUEST IDENTITY */}
               {!activeSessionId && (
-                <div className="space-y-3 pt-4 border-t border-white/10 mt-4">
-                  <span className="font-bold text-[#FCF6BA] block">Guest Identification</span>
+                <div className="space-y-3 pt-4 border-t border-white/5 mt-4">
+                  <span className="font-bold text-white block">Guest Identification</span>
                   <input
                     type="text"
                     placeholder="Guest Name (Optional)"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full bg-[#161619] border border-[#D4AF37]/40 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37] transition"
+                    className="w-full bg-transparent border border-white/20 rounded-xl px-4 py-3 text-white outline-none focus:border-[#D4AF37] transition"
                   />
                   <div>
                     <input
@@ -653,15 +697,15 @@ export default function LuxuryCustomerTablePage() {
                           setCustomerVisitCount(0);
                         }
                       }}
-                      className={`w-full bg-[#161619] border rounded-xl px-3.5 py-2.5 text-white outline-none transition ${phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-[#D4AF37]/40 focus:border-[#D4AF37]'}`}
+                      className={`w-full bg-transparent border rounded-xl px-4 py-3 text-white outline-none transition ${phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-white/20 focus:border-[#D4AF37]'}`}
                     />
                     {phoneError && <span className="text-rose-400 text-[10px] mt-1 block">{phoneError}</span>}
                   </div>
 
-                  {/* 4. Gamified Loyalty Progress Bar */}
+                  {/* 4. LOYALTY PROGRESS BAR (Gamified) */}
                   {customerPhone.length === 10 && isValidPhone(customerPhone) && !is10thVisitMilestone && (
-                     <div className="p-3 bg-black/40 rounded-xl border border-white/10 mt-2">
-                        <div className="flex justify-between text-[10px] text-neutral-400 mb-1.5 font-bold">
+                     <div className="p-3 bg-white/5 rounded-xl border border-[#D4AF37]/30 mt-2 shadow-inner">
+                        <div className="flex justify-between text-[10px] text-[#FCF6BA] mb-1.5 font-bold">
                            <span>Visit {customerVisitCount + 1}</span>
                            <span>10th Visit = Free Juice!</span>
                         </div>
@@ -669,96 +713,100 @@ export default function LuxuryCustomerTablePage() {
                            <motion.div 
                              initial={{ width: 0 }} 
                              animate={{ width: `${(((customerVisitCount % 10) + 1) / 10) * 100}%` }} 
-                             className="h-full bg-gradient-to-r from-amber-500 to-[#D4AF37]" 
+                             className="h-full bg-gradient-to-r from-[#D4AF37] to-[#f4d03f]" 
                            />
                         </div>
-                        <span className="text-[9px] text-[#D4AF37] mt-1.5 block text-center">Just {10 - ((customerVisitCount % 10) + 1)} more visits to unlock!</span>
+                        <span className="text-[9px] text-neutral-400 mt-1.5 block text-center">Just {10 - ((customerVisitCount % 10) + 1)} more visits to unlock!</span>
                      </div>
                   )}
 
                   {/* 10th Visit Reward Claim Button */}
                   {is10thVisitMilestone && !isRewardClaimedThisSession && (
-                     <div className="p-3 rounded-xl bg-gradient-to-r from-amber-900/40 to-[#12110c] border border-amber-400/50 flex justify-between items-center mt-2 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                     <div className="p-3 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37] flex justify-between items-center mt-2 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
                         <div>
-                           <span className="text-amber-400 font-black text-[11px] block">🎉 10th Visit Unlocked!</span>
+                           <span className="text-[#D4AF37] font-black text-[11px] block">🎉 10th Visit Unlocked!</span>
                            <span className="text-[9px] text-neutral-400">Claim your free fresh juice below.</span>
                         </div>
-                        <button onClick={() => setShowRewardModal(true)} className="px-3 py-1.5 bg-amber-400 text-black font-black rounded-lg text-[10px] uppercase shadow-md cursor-pointer hover:bg-amber-300">Claim Now</button>
+                        <button onClick={() => setShowRewardModal(true)} className="px-3 py-1.5 bg-[#D4AF37] text-black font-black rounded-lg text-[10px] uppercase shadow-md cursor-pointer hover:bg-[#c59b27]">Claim Now</button>
                      </div>
                   )}
                 </div>
               )}
 
-              {/* 5. RETAIL DRY FRUITS SLIDER (BIGBASKET UI ADAPTATION) */}
+              {/* 5. DRY FRUITS & SPICES PROMO SLIDER (IMPULSE BUY) */}
               {dfItems.length > 0 && (
-                <div className="pt-4 border-t border-white/10 mt-4">
-                  <h4 className="text-[12px] font-black text-[#FCF6BA] mb-3 flex items-center gap-1.5">
+                <div className="pt-4 mt-2">
+                  <h4 className="text-[12px] font-black text-white mb-3 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-[#D4AF37]" />
                     Premium Dry Fruits & Spices
                   </h4>
                   <div className="flex gap-3 overflow-x-auto custom-gold-scrollbar pb-3 snap-x">
-                    {dfItems.map(df => (
-                      <div key={df.id} className="min-w-[130px] sm:min-w-[140px] bg-[#121215] border border-white/[0.05] rounded-[24px] p-3 flex flex-col relative snap-start shadow-lg">
-                        
-                        {/* Image Header */}
-                        <div className="h-20 w-full mb-3 flex items-center justify-center">
-                           {df.image_url ? (
-                             <img src={df.image_url} alt={df.name} className="h-full object-contain drop-shadow-md" />
-                           ) : (
-                             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
-                               <ShoppingBag className="w-6 h-6 text-[#D4AF37]/50" />
-                             </div>
-                           )}
-                        </div>
-                        
-                        {/* Title & Quality Subtitle */}
-                        <span className="font-bold text-white text-[12px] leading-tight line-clamp-1">{df.name}</span>
-                        <span className="text-[9px] text-neutral-400 mt-1 mb-3">Premium Quality</span>
-                        
-                        {/* Variants Buttons */}
-                        <div className="flex gap-1.5 overflow-x-auto scrollbar-none mb-3">
-                           {df.weight_variants?.map((v: any, vIdx: number) => (
-                              <button 
-                                key={vIdx}
-                                type="button"
-                                onClick={() => addToCartDirect(df, false, [], v, false, 'df')}
-                                className="px-2 py-1 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 border border-white/10 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition cursor-pointer"
-                              >
-                                {v.size} (₹{v.price})
-                              </button>
-                           ))}
-                        </div>
+                    {dfItems.map(df => {
+                      const hasVariants = df.weight_variants && df.weight_variants.length > 0;
+                      return (
+                        <div key={df.id} className="min-w-[130px] sm:min-w-[140px] bg-white/[0.03] border border-white/[0.05] rounded-[24px] p-3 flex flex-col relative snap-start shadow-lg">
+                          
+                          {/* Image Header */}
+                          <div className="h-20 w-full mb-3 flex items-center justify-center">
+                            {df.image_url ? (
+                              <img src={df.image_url} alt={df.name} className="h-full object-contain drop-shadow-md" />
+                            ) : (
+                              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
+                                <ShoppingBag className="w-6 h-6 text-[#D4AF37]/50" />
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Title */}
+                          <span className="font-bold text-white text-[12px] leading-tight line-clamp-1">{df.name}</span>
+                          <span className="text-[9px] text-neutral-400 mt-1 mb-3">Premium Quality</span>
+                          
+                          {/* Weight Variants Buttons */}
+                          {hasVariants && (
+                            <div className="flex gap-1.5 overflow-x-auto scrollbar-none mb-3">
+                              {df.weight_variants.map((v: any, vIdx: number) => (
+                                  <button 
+                                    key={vIdx}
+                                    type="button"
+                                    onClick={() => addToCartDirect(df, false, [], v, false, 'df')}
+                                    className="px-2 py-1 rounded-lg bg-transparent border border-white/20 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition cursor-pointer"
+                                  >
+                                    {v.size} (₹{v.price})
+                                  </button>
+                              ))}
+                            </div>
+                          )}
 
-                        {/* Bottom Row: Default Price & Main Add Action */}
-                        <div className="mt-auto flex justify-between items-end pt-1">
-                           <span className="text-white font-black text-sm">₹{Number(df.selling_price).toFixed(0)}</span>
-                           
-                           <button 
-                             type="button"
-                             onClick={() => addToCartDirect(df, false, [], null, false, 'df')}
-                             className="w-8 h-8 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black hover:bg-[#c59b27] shadow-md transition-transform active:scale-95 cursor-pointer"
-                           >
-                             <Plus className="w-4 h-4 stroke-[3]" />
-                           </button>
+                          {/* Default Price & Main Add Action */}
+                          <div className="mt-auto flex justify-between items-end pt-1">
+                            <span className="text-white font-black text-sm">₹{Number(df.selling_price).toFixed(0)}</span>
+                            <button 
+                              type="button"
+                              onClick={() => addToCartDirect(df, false, [], null, false, 'df')}
+                              className="w-8 h-8 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black hover:bg-[#c59b27] shadow-md transition-transform active:scale-95 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4 stroke-[3]" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* 6. TOTAL & SUBMIT */}
-              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] space-y-3 mt-4">
-                <div className="flex justify-between text-white font-black text-sm">
+              {/* 6. PAYABLE TOTAL & SUBMIT BUTTON (Matches exact image theme) */}
+              <div className="p-4 rounded-xl bg-white/[0.05] border border-transparent space-y-3 mt-4">
+                <div className="flex justify-between items-center text-white font-bold text-sm">
                   <span>Payable at Counter:</span>
-                  <span className="text-[#D4AF37] text-base">₹{cartGrandTotal.toFixed(2)}</span>
+                  <span className="text-[#D4AF37] text-base font-black">₹{cartGrandTotal.toFixed(2)}</span>
                 </div>
               </div>
 
               <button
                 disabled={loading || phoneError.length > 0 || cart.length === 0}
                 onClick={handlePlaceOrder}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-4 hover:bg-[#c59b27] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-2 hover:bg-[#c59b27] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Submitting Order...' : 'Submit Order & Get Token'}
               </button>
@@ -771,9 +819,9 @@ export default function LuxuryCustomerTablePage() {
       <AnimatePresence>
         {showRewardModal && (
           <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-sm bg-[#0d0d0f] border border-amber-400/50 rounded-[28px] p-6 font-mono shadow-2xl">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-sm bg-[#101012] border border-[#D4AF37]/50 rounded-[28px] p-6 font-mono shadow-2xl">
               <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-3">
-                <h3 className="text-amber-400 font-black uppercase flex items-center gap-2"><Gift className="w-4 h-4"/> Choose Your Free Drink</h3>
+                <h3 className="text-[#D4AF37] font-black uppercase flex items-center gap-2"><Gift className="w-4 h-4"/> Choose Free Drink</h3>
                 <button onClick={() => setShowRewardModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5"/></button>
               </div>
               <div className="space-y-2 max-h-60 overflow-y-auto custom-gold-scrollbar pr-1">
@@ -781,9 +829,9 @@ export default function LuxuryCustomerTablePage() {
                     <div className="text-center py-6 text-neutral-500 text-xs">No eligible drinks found under ₹70.</div>
                  ) : (
                     freeRewardDrinks.map(drink => (
-                       <div key={drink.id} onClick={() => handleClaimFreeReward(drink)} className="p-3 rounded-xl bg-white/5 hover:bg-amber-400/20 border border-white/10 hover:border-amber-400 flex justify-between items-center cursor-pointer transition">
+                       <div key={drink.id} onClick={() => handleClaimFreeReward(drink)} className="p-3 rounded-xl bg-transparent hover:bg-white/5 border border-white/10 hover:border-[#D4AF37] flex justify-between items-center cursor-pointer transition">
                           <span className="text-white font-bold text-xs">{drink.name}</span>
-                          <span className="text-amber-400 font-black text-[10px] uppercase">Free</span>
+                          <span className="text-[#D4AF37] font-black text-[10px] uppercase">Free</span>
                        </div>
                     ))
                  )}
@@ -793,7 +841,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* Add-ons Bottom Sheet */}
+      {/* ADD-ONS & COUNTER SUGGESTIONS BOTTOM SHEET */}
       <AnimatePresence>
         {customizingItem && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -803,46 +851,94 @@ export default function LuxuryCustomerTablePage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={butterSpring}
-              className="relative w-full max-w-md mx-auto bg-[#0d0d0f] border-t border-x border-[#D4AF37]/60 rounded-t-[36px] p-5 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
+              className="relative w-full max-w-md mx-auto bg-[#101012] border-t border-x border-[#D4AF37]/50 rounded-t-[36px] p-5 pb-8 space-y-4 z-10 max-h-[85vh] overflow-y-auto custom-gold-scrollbar shadow-2xl font-mono text-xs"
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <h3 className="font-black text-white text-base">{customizingItem.name_en || customizingItem.name}</h3>
                 <button onClick={() => setCustomizingItem(null)} className="text-neutral-400 cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              <div className="space-y-2">
-                <span className="text-neutral-400 block mb-1">Upgrade with Add-ons (Optional):</span>
-                {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).map(addon => {
-                  const isChecked = selectedAddonIds.includes(Number(addon.id));
-                  return (
-                    <div
-                      key={addon.id}
-                      onClick={() => {
-                        const aId = Number(addon.id);
-                        if (isChecked) setSelectedAddonIds(selectedAddonIds.filter(id => id !== aId));
-                        else setSelectedAddonIds([...selectedAddonIds, aId]);
-                      }}
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${
-                        isChecked ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white shadow-md' : 'bg-white/[0.02] border-white/10 text-neutral-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${
-                          isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'
-                        }`}>
-                          {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              {/* 1. Normal Add-ons */}
+              {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-neutral-400 block mb-1">Upgrade with Add-ons:</span>
+                  {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).map(addon => {
+                    const isChecked = selectedAddonIds.includes(Number(addon.id));
+                    return (
+                      <div
+                        key={addon.id}
+                        onClick={() => {
+                          const aId = Number(addon.id);
+                          if (isChecked) setSelectedAddonIds(selectedAddonIds.filter(id => id !== aId));
+                          else setSelectedAddonIds([...selectedAddonIds, aId]);
+                        }}
+                        className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${
+                          isChecked ? 'bg-transparent border-[#D4AF37] text-white shadow-md' : 'bg-transparent border-white/10 text-neutral-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${
+                            isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'
+                          }`}>
+                            {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                          <span className="font-bold">{addon.name}</span>
                         </div>
-                        <span className="font-bold">{addon.name}</span>
+                        <span className="text-[#D4AF37] font-black">+₹{Number(addon.price).toFixed(0)}</span>
                       </div>
-                      <span className="text-[#D4AF37] font-black">+₹{Number(addon.price).toFixed(0)}</span>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 2. VaMC Counter Suggestions (Ice Creams & Drinks) */}
+              {(iceItems.length > 0 || vamcItems.length > 0) && (
+                <div className="space-y-2 pt-3 border-t border-white/10">
+                  <span className="text-[#D4AF37] font-bold block mb-1 flex items-center gap-1.5"><Store className="w-3.5 h-3.5"/> Counter Suggestions:</span>
+                  
+                  {/* Ice Creams */}
+                  {iceItems.map(item => {
+                    const isChecked = selectedCounterItemIds.some(i => i.id === item.id && i.type === 'ice_cream');
+                    return (
+                      <div key={`ice-${item.id}`} onClick={() => {
+                        if (isChecked) setSelectedCounterItemIds(selectedCounterItemIds.filter(i => !(i.id === item.id && i.type === 'ice_cream')));
+                        else setSelectedCounterItemIds([...selectedCounterItemIds, {id: item.id, type: 'ice_cream'}]);
+                      }} className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${isChecked ? 'bg-[#D4AF37]/10 border-[#D4AF37] text-white' : 'bg-transparent border-white/10 text-neutral-300'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'}`}>
+                            {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                          <span className="font-bold">{item.name} <span className="text-[8px] uppercase bg-white/10 px-1 rounded ml-1">Ice Cream</span></span>
+                        </div>
+                        <span className="text-[#D4AF37] font-black">+₹{Number(item.selling_price).toFixed(0)}</span>
+                      </div>
+                    );
+                  })}
+
+                  {/* General VaMC Drinks/Items */}
+                  {vamcItems.map(item => {
+                    const isChecked = selectedCounterItemIds.some(i => i.id === item.id && i.type === 'vamc_general');
+                    return (
+                      <div key={`vamc-${item.id}`} onClick={() => {
+                        if (isChecked) setSelectedCounterItemIds(selectedCounterItemIds.filter(i => !(i.id === item.id && i.type === 'vamc_general')));
+                        else setSelectedCounterItemIds([...selectedCounterItemIds, {id: item.id, type: 'vamc_general'}]);
+                      }} className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${isChecked ? 'bg-[#D4AF37]/10 border-[#D4AF37] text-white' : 'bg-transparent border-white/10 text-neutral-300'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'}`}>
+                            {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+                          <span className="font-bold">{item.name}</span>
+                        </div>
+                        <span className="text-[#D4AF37] font-black">+₹{Number(item.price).toFixed(0)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <button
                 onClick={confirmCustomizationAndAdd}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-lg mt-2 hover:bg-[#c59b27] transition"
+                className="w-full py-4 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-lg mt-2 hover:bg-[#c59b27] transition"
               >
                 Add to Dining Cart
               </button>
@@ -855,14 +951,14 @@ export default function LuxuryCustomerTablePage() {
       <AnimatePresence>
         {isTotalBillModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(212,175,55,0.15)] space-y-4 font-mono text-xs">
+            <div className="w-full max-w-sm bg-[#101012] border border-[#D4AF37]/50 rounded-[28px] p-6 shadow-2xl space-y-4 font-mono text-xs">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <h3 className="font-black text-white text-base uppercase tracking-wider flex items-center gap-2"><Receipt className="w-4 h-4 text-[#D4AF37]"/> Table Ledger & Bill</h3>
                 <button onClick={() => setIsTotalBillModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer transition"><X className="w-5 h-5" /></button>
               </div>
               
               {activeOrderToken && (
-                <div className="p-3 rounded-xl bg-[#161619] border border-[#D4AF37]/40 flex justify-between items-center shadow-inner">
+                <div className="p-3 rounded-xl bg-transparent border border-[#D4AF37]/40 flex justify-between items-center">
                   <span className="text-neutral-400 font-bold uppercase tracking-wider text-[10px]">Order Token:</span>
                   <span className="text-[#D4AF37] font-black text-base">#{activeOrderToken}</span>
                 </div>
@@ -876,7 +972,7 @@ export default function LuxuryCustomerTablePage() {
                    sessionOrderedItems.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center border-b border-white/5 pb-2">
                         <div className="truncate pr-2">
-                           <span className="text-white font-bold block">{item.menu_items?.name_en || item.menu_items?.name || (item.cooking_notes?.replace('Tag: [DF] ', '') || 'Item')}</span>
+                           <span className="text-white font-bold block">{item.menu_items?.name_en || item.menu_items?.name || (item.cooking_notes?.replace(/VaMC Counter Item: \[[A-Z]+\] /g, '') || 'Item')}</span>
                            <span className="text-[10px] text-neutral-400">Qty: {item.quantity}</span>
                         </div>
                         <span className="text-[#D4AF37] font-black">₹{(Number(item.unit_price) * item.quantity).toFixed(2)}</span>
@@ -889,7 +985,7 @@ export default function LuxuryCustomerTablePage() {
                 <span className="uppercase tracking-wider">Net Payable:</span>
                 <span className="text-[#D4AF37] text-lg">₹{runningGrandTotal.toFixed(2)}</span>
               </div>
-              <button onClick={() => setIsTotalBillModalOpen(false)} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase cursor-pointer hover:bg-[#c59b27] transition shadow-lg mt-4">
+              <button onClick={() => setIsTotalBillModalOpen(false)} className="w-full py-3.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase cursor-pointer hover:bg-[#c59b27] transition shadow-lg mt-4">
                 Close Ledger
               </button>
             </div>
