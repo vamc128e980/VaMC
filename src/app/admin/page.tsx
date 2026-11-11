@@ -38,7 +38,6 @@ import {
   Smartphone,
   Banknote,
   CheckCircle,
-  EyeOff,
   ChefHat,
   MessageSquare,
   Bell,
@@ -47,10 +46,8 @@ import {
   Scale,
   Search,
   Settings,
-  CheckCircle2,
   IceCream,
-  TrendingUp,
-  PackageCheck
+  ShoppingBag
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -93,34 +90,40 @@ export default function LuxuryGoldAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // VaMC Manual Counter POS States
+  // ============================================
+  // UNIFIED VAMC POS & INVENTORY STATES
+  // ============================================
   const [showVaMCModal, setShowVaMCModal] = useState(false);
   const [vamcCounterItems, setVamcCounterItems] = useState<any[]>([]);
-  const [showVaMCCrudModal, setShowVaMCCrudModal] = useState(false);
-  const [editingVamcItem, setEditingVamcItem] = useState<any | null>(null);
-  const [vamcItemName, setVamcItemName] = useState('');
-  const [vamcItemPrice, setVamcItemPrice] = useState('');
-  const [vamcCrudSearch, setVamcCrudSearch] = useState('');
-  const [vamcSearch, setVamcSearch] = useState('');
+  const [iceItems, setIceItems] = useState<any[]>([]);
+  const [dfItems, setDfItems] = useState<any[]>([]);
 
+  // POS Interaction States
+  const [posCategory, setPosCategory] = useState<'main' | 'ice_cream' | 'df'>('main');
+  const [vamcSearch, setVamcSearch] = useState('');
   const [vamcTabs, setVamcTabs] = useState<any[]>([
     { id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }
   ]);
   const [activeVamcTabId, setActiveVamcTabId] = useState('C1');
 
-  // Ice Cream Ledger & Profit Tracking States
-  const [showIceCreamModal, setShowIceCreamModal] = useState(false);
-  const [iceItems, setIceItems] = useState<any[]>([]);
-  const [icePurchases, setIcePurchases] = useState<any[]>([]);
-  const [iceItemName, setIceItemName] = useState('');
-  const [iceItemSP, setIceItemSP] = useState('');
-  const [iceItemCP, setIceItemCP] = useState('');
-  const [showIcePurchaseModal, setShowIcePurchaseModal] = useState(false);
-  const [selectedIceItem, setSelectedIceItem] = useState<any | null>(null);
-  const [icePurchaseQty, setIcePurchaseQty] = useState('');
-  const [icePurchaseCost, setIcePurchaseCost] = useState('');
-  const [showIceCrudModal, setShowIceCrudModal] = useState(false);
-  const [editingIceItem, setEditingIceItem] = useState<any | null>(null);
+  // Unified CRUD Modal States
+  const [showVaMCCrudModal, setShowVaMCCrudModal] = useState(false);
+  const [crudCategory, setCrudCategory] = useState<'main' | 'ice_cream' | 'df'>('main');
+  const [vamcCrudSearch, setVamcCrudSearch] = useState('');
+  const [editingCrudItem, setEditingCrudItem] = useState<any | null>(null);
+  
+  // Form States for CRUD
+  const [crudItemName, setCrudItemName] = useState('');
+  const [crudItemPrice, setCrudItemPrice] = useState(''); // Used for Main
+  const [crudItemSP, setCrudItemSP] = useState(''); // Used for IC/DF
+  const [crudItemCP, setCrudItemCP] = useState(''); // Used for IC/DF
+
+  // Purchase / Add Stock Modal States
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [purchaseType, setPurchaseType] = useState<'ice_cream' | 'df'>('ice_cream');
+  const [selectedInvItem, setSelectedInvItem] = useState<any | null>(null);
+  const [purchaseQty, setPurchaseQty] = useState('');
+  const [purchaseCost, setPurchaseCost] = useState('');
 
   // Security Modals
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -238,23 +241,23 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const loadVaMCCounterItems = async () => {
+  const loadCounterAndInventoryData = async () => {
     try {
-      const { data } = await supabase.from('vamc_menu_items').select('*').order('name');
-      if (data) setVamcCounterItems(data);
-    } catch (e) {
-      setVamcCounterItems([]);
-    }
-  };
+      const [
+        { data: vItems },
+        { data: iItems },
+        { data: dItems }
+      ] = await Promise.all([
+        supabase.from('vamc_menu_items').select('*').order('name'),
+        supabase.from('ice_cream_menu_items').select('*').order('name'),
+        supabase.from('df_menu_items').select('*').order('name')
+      ]);
 
-  const loadIceCreamData = async () => {
-    try {
-      const { data: items } = await supabase.from('ice_cream_menu_items').select('*').order('name');
-      const { data: purchases } = await supabase.from('ice_cream_purchases').select('*').order('created_at', { ascending: false });
-      if (items) setIceItems(items);
-      if (purchases) setIcePurchases(purchases);
+      if (vItems) setVamcCounterItems(vItems);
+      if (iItems) setIceItems(iItems);
+      if (dItems) setDfItems(dItems);
     } catch (e) {
-      console.log('Ice cream tables not yet created or empty.');
+      console.log('Error loading counter/inventory data', e);
     }
   };
 
@@ -283,8 +286,7 @@ export default function LuxuryGoldAdminPanel() {
         supabase.from('waiter_calls').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       ]);
 
-      await loadVaMCCounterItems();
-      await loadIceCreamData();
+      await loadCounterAndInventoryData();
 
       try {
         const { data: loyalties } = await supabase.from('customer_loyalty').select('*');
@@ -324,14 +326,13 @@ export default function LuxuryGoldAdminPanel() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadAdminData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => loadVaMCCounterItems())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_menu_items' }, () => loadIceCreamData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_purchases' }, () => loadIceCreamData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => loadCounterAndInventoryData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_menu_items' }, () => loadCounterAndInventoryData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => loadCounterAndInventoryData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => loadAdminData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => loadAdminData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => loadAdminData())
       .subscribe();
 
     return () => {
@@ -516,40 +517,6 @@ export default function LuxuryGoldAdminPanel() {
     document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') localStorage.clear();
     window.location.replace('/');
-  };
-
-  // Ice Cream Ledger Stats Calculation
-  const iceCreamStats = useMemo(() => {
-    let totalInv = 0;
-    let totalRev = 0;
-    
-    iceItems.forEach(item => {
-      const itemPurchases = icePurchases.filter(p => p.item_id === item.id);
-      const totalQtyPurchased = itemPurchases.reduce((s, p) => s + p.quantity_added, 0);
-      const itemInv = itemPurchases.reduce((s, p) => s + Number(p.total_investment), 0);
-      
-      const qtySold = Math.max(0, totalQtyPurchased - item.stock_quantity);
-      const itemRev = qtySold * Number(item.selling_price);
-      
-      totalInv += itemInv;
-      totalRev += itemRev;
-    });
-    
-    return { totalInvestment: totalInv, totalRevenue: totalRev, netProfit: totalRev - totalInv };
-  }, [iceItems, icePurchases]);
-
-  // Handle Quick Ice Cream Stock Deduct (Sale Entry)
-  const handleQuickIceCreamSell = async (item: any) => {
-    if (item.stock_quantity <= 0) return alert('Out of stock!');
-    try {
-      setLoading(true);
-      await supabase.from('ice_cream_menu_items').update({ stock_quantity: item.stock_quantity - 1 }).eq('id', item.id);
-      loadIceCreamData();
-    } catch (e: any) {
-      alert('Error updating stock: ' + e.message);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleAddTable = async (e: React.FormEvent) => {
@@ -1231,26 +1198,15 @@ export default function LuxuryGoldAdminPanel() {
 
           <div className="flex items-center gap-2">
             
-            {/* Ice Cream Profit Ledger Button */}
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              onClick={() => setShowIceCreamModal(true)}
-              className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20 text-sky-200 text-xs font-mono font-bold transition cursor-pointer shadow-md"
-              title="Ice Cream Stock & Profit Ledger"
-            >
-              <IceCream className="w-4 h-4 text-sky-400" />
-              <span>Ice Cream Ledger</span>
-            </motion.button>
-
-            {/* VaMC Manual POS Counter Button */}
+            {/* UNIFIED POS ENTRY BUTTON (VaMC + Inventory combined) */}
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={() => setShowVaMCModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[#D4AF37]/50 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer shadow-md"
-              title="Vujwala Simha Master Counter (VaMC)"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20 text-sky-200 text-xs font-mono font-bold transition cursor-pointer shadow-md"
+              title="Quick Bill POS (VaMC, Ice Cream, Dry Fruits)"
             >
-              <Calculator className="w-4 h-4 text-[#D4AF37]" />
-              <span>VaMC</span>
+              <Calculator className="w-4 h-4 text-sky-400" />
+              <span>C+ POS</span>
             </motion.button>
 
             <motion.button
@@ -1297,7 +1253,7 @@ export default function LuxuryGoldAdminPanel() {
         </div>
       </header>
 
-      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS & ICE CREAM */}
+      {/* FLOATING ACTION BAR FOR VaMC / C+ CUSTOMER BILLS */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 relative z-30 flex flex-wrap items-center justify-between gap-3">
         <div className="p-2 rounded-2xl bg-[#0d0d0f] border border-sky-900/50 shadow-lg flex items-center gap-2">
           <motion.button
@@ -1309,17 +1265,8 @@ export default function LuxuryGoldAdminPanel() {
             <span>C+ Customer Quick Bill</span>
           </motion.button>
           
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowIceCreamModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs font-mono uppercase tracking-wider cursor-pointer shadow-md"
-          >
-            <IceCream className="w-4 h-4 stroke-[2]" />
-            <span>Ice Cream Ledger</span>
-          </motion.button>
-
           <span className="text-[11px] font-mono text-sky-200/50 hidden lg:inline px-2 border-l border-sky-900/50 ml-2 pl-4">
-            Instant standalone billing & inventory management.
+            Unified billing for General, Ice Cream & Dry Fruits.
           </span>
         </div>
       </div>
@@ -2352,7 +2299,7 @@ export default function LuxuryGoldAdminPanel() {
       </main>
 
       {/* ======================================================== */}
-      {/* VAMC COUNTER POS MODAL (WITH CHROME-LIKE TABS C1, C+ & SEARCH IN CRUD) */}
+      {/* UNIFIED VAMC POS MODAL (WITH CHROME-LIKE TABS & UNIFIED CART) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCModal && (
@@ -2363,7 +2310,7 @@ export default function LuxuryGoldAdminPanel() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-4xl bg-[#0a0f16] border border-sky-400/60 rounded-[32px] p-6 shadow-[0_0_40px_rgba(14,165,233,0.15)] flex flex-col max-h-[90vh] overflow-hidden"
             >
-              {/* Modal Header with Chrome-like C1 / C+ Tabs */}
+              {/* Modal Header */}
               <div className="flex flex-col gap-3 border-b border-sky-900/50 pb-3">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2.5">
@@ -2372,7 +2319,7 @@ export default function LuxuryGoldAdminPanel() {
                     </div>
                     <div>
                       <h2 className="text-base font-black text-sky-100 uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
-                      <span className="text-[10px] text-sky-200/60">Switch tabs like Chrome to manage separate customer bills</span>
+                      <span className="text-[10px] text-sky-200/60">Unified Billing for General, Ice Cream & Dry Fruits</span>
                     </div>
                   </div>
 
@@ -2382,7 +2329,7 @@ export default function LuxuryGoldAdminPanel() {
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30 transition"
                     >
                       <Settings className="w-3.5 h-3.5" />
-                      <span>Manage Counter Menu</span>
+                      <span>Manage Menu</span>
                     </button>
 
                     <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-sky-900/40 hover:bg-rose-500/20 hover:text-rose-400 text-sky-400 cursor-pointer transition">
@@ -2424,7 +2371,6 @@ export default function LuxuryGoldAdminPanel() {
                     );
                   })}
 
-                  {/* C+ Button to Add New Customer Tab */}
                   <button
                     type="button"
                     onClick={() => {
@@ -2443,42 +2389,65 @@ export default function LuxuryGoldAdminPanel() {
               {/* Active Tab Content */}
               {(() => {
                 const currentTab = vamcTabs.find(t => t.id === activeVamcTabId) || vamcTabs[0];
-
-                const updateCurrentTab = (updates: any) => {
-                  setVamcTabs(prev => prev.map(t => t.id === currentTab.id ? { ...t, ...updates } : t));
-                };
-
+                const updateCurrentTab = (updates: any) => setVamcTabs(prev => prev.map(t => t.id === currentTab.id ? { ...t, ...updates } : t));
                 const tabCart = currentTab.cart;
+                
+                // Determine which array to display
+                let displayItems = [];
+                if (posCategory === 'main') displayItems = vamcCounterItems;
+                if (posCategory === 'ice_cream') displayItems = iceItems;
+                if (posCategory === 'df') displayItems = dfItems;
+
+                displayItems = displayItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase()));
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1 relative">
                     
-                    {/* Left: Interactive Visual Selection Blocks (Fixed: Now mapping vamcCounterItems correctly) */}
+                    {/* LEFT: Item Selection with 3 Categories */}
                     <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden z-10">
+                      
+                      {/* Search Bar */}
                       <div className="relative">
                         <Search className="w-4 h-4 text-sky-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
-                          placeholder="Search counter items..."
+                          placeholder="Search items..."
                           value={vamcSearch}
                           onChange={(e) => setVamcSearch(e.target.value)}
                           className="w-full bg-[#0d141e] border border-sky-900/50 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-sky-100 outline-none focus:border-sky-500/80 transition"
                         />
                       </div>
 
+                      {/* Category Filters */}
+                      <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1">
+                        <button onClick={() => setPosCategory('main')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'main' ? 'bg-sky-500/20 border-sky-400 text-sky-100' : 'bg-[#0d141e] border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                          🛒 General
+                        </button>
+                        <button onClick={() => setPosCategory('ice_cream')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'ice_cream' ? 'bg-sky-500/20 border-sky-400 text-sky-100' : 'bg-[#0d141e] border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                          🍦 Ice Creams
+                        </button>
+                        <button onClick={() => setPosCategory('df')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'df' ? 'bg-sky-500/20 border-sky-400 text-sky-100' : 'bg-[#0d141e] border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                          🥜 Dry Fruits
+                        </button>
+                      </div>
+
+                      {/* Grid Items */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
-                        {vamcCounterItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase())).map(item => {
-                          const isSelected = tabCart.some(ci => ci.id === item.id);
+                        {displayItems.map(item => {
+                          // Note: Main items use `price`, Inventory items use `selling_price`
+                          const itemPrice = posCategory === 'main' ? item.price : item.selling_price;
+                          const isSelected = tabCart.some(ci => ci.id === item.id && ci.itemType === posCategory);
+                          
                           return (
                             <div
                               key={item.id}
                               onClick={() => {
                                 const newCart = (() => {
-                                  const exist = tabCart.find(ci => ci.id === item.id);
+                                  const exist = tabCart.find(ci => ci.id === item.id && ci.itemType === posCategory);
                                   if (exist) {
-                                    return tabCart.filter(ci => ci.id !== item.id);
+                                    return tabCart.filter(ci => !(ci.id === item.id && ci.itemType === posCategory));
                                   }
-                                  return [...tabCart, { ...item, quantity: 1, price: item.price }];
+                                  return [...tabCart, { ...item, quantity: 1, cartPrice: itemPrice, itemType: posCategory }];
                                 })();
                                 updateCurrentTab({ cart: newCart });
                               }}
@@ -2493,7 +2462,10 @@ export default function LuxuryGoldAdminPanel() {
                                   <span className="text-xs font-bold text-sky-100 block line-clamp-1">{item.name}</span>
                                   {isSelected && <CheckCircle className="w-4 h-4 text-sky-400 shrink-0" />}
                                 </div>
-                                <span className="text-[11px] font-black text-sky-400 block mt-1.5">₹{Number(item.price).toFixed(2)}</span>
+                                <span className="text-[11px] font-black text-sky-400 block mt-1.5">₹{Number(itemPrice).toFixed(2)}</span>
+                                {posCategory !== 'main' && (
+                                  <span className={`text-[9px] font-bold block mt-0.5 ${item.stock_quantity > 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>Stock: {item.stock_quantity}</span>
+                                )}
                               </div>
                               <span className={`text-[9px] font-bold mt-2 uppercase text-right ${isSelected ? 'text-sky-200' : 'text-sky-600/60'}`}>
                                 {isSelected ? '✓ Selected' : 'Tap to Select'}
@@ -2501,12 +2473,19 @@ export default function LuxuryGoldAdminPanel() {
                             </div>
                           );
                         })}
+                        {displayItems.length === 0 && (
+                          <div className="col-span-full py-6 text-center text-sky-200/40 text-xs">No items found in this category.</div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Right: NEW BLUE/BLACK THEME VAMC LEDGER STYLE BILLING */}
+                    {/* RIGHT: Unified Bill Cart & Checkout */}
                     <div className="md:col-span-5 bg-[#0d141e] border border-sky-900/50 rounded-3xl p-5 flex flex-col justify-between space-y-4 relative overflow-hidden z-10 shadow-lg">
-                      
+                      {/* Decorative Background */}
+                      <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
+                        <ShoppingBag className="w-48 h-48 text-sky-400" />
+                      </div>
+
                       <div className="relative z-10 flex flex-col h-full">
                         <div>
                            <div className="flex justify-between items-center border-b border-sky-900/50 pb-2.5 mb-3">
@@ -2521,10 +2500,15 @@ export default function LuxuryGoldAdminPanel() {
                               <div className="text-center py-6 text-sky-200/30 text-xs font-bold">No items selected. Tap blocks on left.</div>
                             ) : (
                               tabCart.map((ci, idx) => (
-                                <div key={ci.id} className="flex justify-between items-center text-xs border-b border-sky-900/30 pb-2.5">
+                                <div key={`${ci.itemType}-${ci.id}`} className="flex justify-between items-center text-xs border-b border-sky-900/30 pb-2.5">
                                   <div className="truncate pr-2">
-                                    <span className="text-sky-100 font-bold block truncate">{ci.name}</span>
-                                    <span className="text-[10px] text-sky-400/80 font-black tracking-wide">₹{Number(ci.price).toFixed(2)} x {ci.quantity}</span>
+                                    <span className="text-sky-100 font-bold block truncate">
+                                      {ci.name} 
+                                      <span className="text-[8px] uppercase ml-1 px-1 rounded bg-sky-900/50 text-sky-400/70">
+                                        {ci.itemType === 'main' ? 'GEN' : ci.itemType === 'ice_cream' ? 'ICE' : 'DF'}
+                                      </span>
+                                    </span>
+                                    <span className="text-[10px] text-sky-400/80 font-black tracking-wide">₹{Number(ci.cartPrice).toFixed(2)} x {ci.quantity}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0 bg-sky-950/40 rounded-lg p-1 border border-sky-900/50">
                                     <button onClick={() => {
@@ -2596,7 +2580,7 @@ export default function LuxuryGoldAdminPanel() {
                               <div className="flex justify-between items-center text-[11px] pt-1 px-1">
                                 <span className="text-sky-200/60 font-bold">Change to return:</span>
                                 <span className="text-sky-400 font-black text-sm">
-                                  ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.price * i.quantity), 0))).toFixed(2) : '0.00')}
+                                  ₹{((parseFloat(currentTab.customerHanded) || 0) >= (tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0)) ? ((parseFloat(currentTab.customerHanded) || 0) - (tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0))).toFixed(2) : '0.00')}
                                 </span>
                               </div>
                             </div>
@@ -2606,14 +2590,17 @@ export default function LuxuryGoldAdminPanel() {
                         <div className="pt-4 mt-4 border-t border-sky-900/50 space-y-3">
                           <div className="flex justify-between items-center text-sm font-black text-sky-100 px-1">
                             <span>Total Bill:</span>
-                            <span className="text-sky-400 text-xl tracking-wide">₹{tabCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
+                            <span className="text-sky-400 text-xl tracking-wide">₹{tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0).toFixed(2)}</span>
                           </div>
+                          
+                          {/* SMART CHECKOUT ENGINE */}
                           <button
                             disabled={loading || tabCart.length === 0}
                             onClick={async () => {
-                              const total = tabCart.reduce((s, i) => s + (i.price * i.quantity), 0);
+                              const total = tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0);
                               setLoading(true);
                               try {
+                                // 1. Create Session
                                 const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
                                   table_number: 0,
                                   customer_name: currentTab.customerName.trim() || `${currentTab.name} Counter`,
@@ -2625,22 +2612,41 @@ export default function LuxuryGoldAdminPanel() {
                                   payment_status: 'paid',
                                   payment_mode: currentTab.paymentMode
                                 }).select().single();
-
                                 if (sErr) throw sErr;
 
+                                // 2. Insert Order Items
                                 const itemsPayload = tabCart.map(ci => ({
                                   session_id: sess.id,
-                                  menu_item_id: null, // VAMC items bypass menu_items mapping
+                                  menu_item_id: null, // Unified items bypass join map
                                   quantity: ci.quantity,
-                                  unit_price: ci.price,
+                                  unit_price: ci.cartPrice,
                                   item_status: 'served',
-                                  cooking_notes: `VaMC Counter Item: ${ci.name}` // Critical fix for Dish #null
+                                  cooking_notes: `VaMC Counter Item: ${ci.name}`
                                 }));
-
                                 await supabase.from('order_items').insert(itemsPayload);
                                 
-                                alert(`VaMC Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
+                                // 3. Deduct Stock for Inventory Items (Ice Cream & Dry Fruits)
+                                for (const item of tabCart) {
+                                  if (item.itemType === 'ice_cream') {
+                                    const realItem = iceItems.find(i => i.id === item.id);
+                                    if(realItem) {
+                                      await supabase.from('ice_cream_menu_items').update({
+                                          stock_quantity: Math.max(0, realItem.stock_quantity - item.quantity)
+                                      }).eq('id', item.id);
+                                    }
+                                  } else if (item.itemType === 'df') {
+                                    const realItem = dfItems.find(i => i.id === item.id);
+                                    if(realItem) {
+                                      await supabase.from('df_menu_items').update({
+                                          stock_quantity: Math.max(0, realItem.stock_quantity - item.quantity)
+                                      }).eq('id', item.id);
+                                    }
+                                  }
+                                }
+
+                                alert(`Sale Complete! Total: ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
                                 
+                                // 4. Clear Tab
                                 const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
                                 if (nextTabs.length === 0) {
                                   setVamcTabs([{ id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
@@ -2662,7 +2668,6 @@ export default function LuxuryGoldAdminPanel() {
                             {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
                           </button>
                         </div>
-
                       </div>
                     </div>
 
@@ -2675,7 +2680,7 @@ export default function LuxuryGoldAdminPanel() {
       </AnimatePresence>
 
       {/* ======================================================== */}
-      {/* VAMC COUNTER MENU CRUD MODAL (WITH SEARCH BAR) */}
+      {/* UNIFIED CRUD MODAL (Manage General, Ice Cream, Dry Fruits) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCCrudModal && (
@@ -2684,299 +2689,155 @@ export default function LuxuryGoldAdminPanel() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-2xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+              className="w-full max-w-3xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
             >
-              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3">
-                <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage VaMC Counter Items (CRUD)</h3>
+              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3 mb-3">
+                <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage Menu Items</h3>
                 <button onClick={() => setShowVaMCCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* Add / Edit Form */}
+              {/* CRUD Tabs */}
+              <div className="flex gap-2 border-b border-sky-900/30 pb-3">
+                 <button onClick={() => { setCrudCategory('main'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${crudCategory === 'main' ? 'bg-sky-500/20 border border-sky-400 text-sky-100' : 'bg-[#0a0f16] border border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                    General Items
+                 </button>
+                 <button onClick={() => { setCrudCategory('ice_cream'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemSP(''); setCrudItemCP(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${crudCategory === 'ice_cream' ? 'bg-sky-500/20 border border-sky-400 text-sky-100' : 'bg-[#0a0f16] border border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                    Ice Creams
+                 </button>
+                 <button onClick={() => { setCrudCategory('df'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemSP(''); setCrudItemCP(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${crudCategory === 'df' ? 'bg-sky-500/20 border border-sky-400 text-sky-100' : 'bg-[#0a0f16] border border-sky-900/50 text-sky-400/60 hover:border-sky-500/50'}`}>
+                    Dry Fruits
+                 </button>
+              </div>
+
+              {/* Unified Add / Edit Form */}
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                const cleanName = vamcItemName.trim();
-                const pr = parseFloat(vamcItemPrice);
-                if (!cleanName || isNaN(pr) || pr <= 0) return alert('Valid Name & Price ivvandi.');
-
+                const cleanName = crudItemName.trim();
+                
                 setLoading(true);
                 try {
-                  if (editingVamcItem) {
-                    await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingVamcItem.id);
+                  if (crudCategory === 'main') {
+                    const pr = parseFloat(crudItemPrice);
+                    if (!cleanName || isNaN(pr) || pr <= 0) { setLoading(false); return alert('Valid Name & Price ivvandi.'); }
+                    if (editingCrudItem) await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingCrudItem.id);
+                    else await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
                   } else {
-                    await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
+                    const sp = parseFloat(crudItemSP);
+                    const cp = parseFloat(crudItemCP);
+                    if (!cleanName || isNaN(sp) || isNaN(cp) || sp <= 0 || cp < 0) { setLoading(false); return alert('Valid details ivvandi.'); }
+                    
+                    const targetTable = crudCategory === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items';
+                    if (editingCrudItem) await supabase.from(targetTable).update({ name: cleanName, selling_price: sp, cost_price: cp }).eq('id', editingCrudItem.id);
+                    else await supabase.from(targetTable).insert({ name: cleanName, selling_price: sp, cost_price: cp, stock_quantity: 0 });
                   }
-                  setVamcItemName('');
-                  setVamcItemPrice('');
-                  setEditingVamcItem(null);
-                  loadVaMCCounterItems();
-                } catch (err: any) {
-                  alert('Error: ' + err.message);
-                } finally {
-                  setLoading(false);
-                }
-              }} className="grid grid-cols-1 sm:grid-cols-3 gap-2 py-3 border-b border-sky-900/30">
-                <input
-                  type="text"
-                  required
-                  placeholder="Item Name (e.g. Water Bottle)"
-                  value={vamcItemName}
-                  onChange={(e) => setVamcItemName(e.target.value)}
-                  className="bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 text-xs"
-                />
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="0.01"
-                  placeholder="Price ₹"
-                  value={vamcItemPrice}
-                  onChange={(e) => setVamcItemPrice(e.target.value)}
-                  className="bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-400 outline-none focus:border-sky-500/50 text-xs font-bold"
-                />
-                <button type="submit" disabled={loading} className="py-2 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer hover:bg-sky-300 shadow-md transition">
-                  {editingVamcItem ? 'Update Item' : '+ Add Item'}
-                </button>
+                  
+                  setCrudItemName(''); setCrudItemPrice(''); setCrudItemSP(''); setCrudItemCP(''); setEditingCrudItem(null);
+                  loadCounterAndInventoryData();
+                } catch (err: any) { alert('Error: ' + err.message); } 
+                finally { setLoading(false); }
+              }} className="space-y-3 py-3 border-b border-sky-900/30">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-4">
+                        <label className="text-[10px] text-sky-200/60 block mb-1 font-bold">Item Name</label>
+                        <input type="text" required placeholder="Item Name" value={crudItemName} onChange={(e) => setCrudItemName(e.target.value)} className="w-full bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 text-xs transition" />
+                    </div>
+
+                    {crudCategory === 'main' ? (
+                       <div className="sm:col-span-4">
+                          <label className="text-[10px] text-sky-200/60 block mb-1 font-bold">Price ₹</label>
+                          <input type="number" required min="1" step="0.01" placeholder="₹ Price" value={crudItemPrice} onChange={(e) => setCrudItemPrice(e.target.value)} className="w-full bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-400 outline-none focus:border-sky-500/50 text-xs font-bold transition" />
+                       </div>
+                    ) : (
+                       <>
+                        <div className="sm:col-span-2">
+                          <label className="text-[10px] text-rose-300/80 block mb-1 font-bold">Cost (CP) ₹</label>
+                          <input type="number" required min="0" step="0.01" placeholder="₹ CP" value={crudItemCP} onChange={(e) => setCrudItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-900/50 rounded-xl px-3 py-2 text-rose-100 outline-none focus:border-rose-500/50 text-xs font-bold transition" />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="text-[10px] text-emerald-300/80 block mb-1 font-bold">Sell (SP) ₹</label>
+                          <input type="number" required min="1" step="0.01" placeholder="₹ SP" value={crudItemSP} onChange={(e) => setCrudItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-900/50 rounded-xl px-3 py-2 text-emerald-100 outline-none focus:border-emerald-500/50 text-xs font-bold transition" />
+                        </div>
+                       </>
+                    )}
+
+                    <div className="sm:col-span-4 flex items-end">
+                      <button type="submit" disabled={loading} className="w-full py-2 h-[34px] rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-sky-300 transition">
+                        {editingCrudItem ? 'Update' : '+ Add Item'}
+                      </button>
+                    </div>
+                  </div>
               </form>
 
-              {/* Search Bar for CRUD Items */}
+              {/* Search Bar */}
               <div className="relative mt-3">
                 <Search className="w-4 h-4 text-sky-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search in counter menu..."
+                  placeholder="Search in list..."
                   value={vamcCrudSearch}
                   onChange={(e) => setVamcCrudSearch(e.target.value)}
                   className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl pl-9 pr-3 py-2 text-xs text-sky-100 outline-none focus:border-sky-500/50 transition"
                 />
               </div>
 
-              {/* Counter Items List */}
+              {/* Items List based on Category */}
               <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
-                {vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).length === 0 ? (
-                  <div className="text-center py-8 text-sky-200/50 text-xs">No matching counter items found.</div>
-                ) : (
-                  vamcCounterItems.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase())).map(item => (
+                {(() => {
+                   let listData = [];
+                   if (crudCategory === 'main') listData = vamcCounterItems;
+                   if (crudCategory === 'ice_cream') listData = iceItems;
+                   if (crudCategory === 'df') listData = dfItems;
+                   
+                   listData = listData.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase()));
+
+                   if (listData.length === 0) return <div className="text-center py-8 text-sky-200/50 text-xs">No items found.</div>;
+
+                   return listData.map(item => (
                     <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-sky-900/30 flex justify-between items-center text-xs hover:border-sky-500/30 transition">
                       <div>
                         <span className="font-bold text-sky-100 block">{item.name}</span>
-                        <span className="text-sky-400 font-black">₹{Number(item.price).toFixed(2)}</span>
+                        {crudCategory === 'main' ? (
+                          <span className="text-sky-400 font-black">₹{Number(item.price).toFixed(2)}</span>
+                        ) : (
+                          <div className="flex gap-2 text-[9px] mt-1 items-center">
+                            <span className="text-rose-400 font-mono">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
+                            <span className="text-emerald-400 font-mono">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
+                            <span className={`font-black ml-2 px-1.5 rounded ${item.stock_quantity > 0 ? 'bg-sky-900/50 text-sky-200' : 'bg-rose-900/50 text-rose-200'}`}>Stock: {item.stock_quantity}</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => { setEditingVamcItem(item); setVamcItemName(item.name); setVamcItemPrice(String(item.price)); }} className="p-1.5 rounded-lg bg-sky-950/30 text-sky-300 hover:bg-sky-900/50 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
+                      <div className="flex gap-1.5 items-center">
+                        {crudCategory !== 'main' && (
+                           <button onClick={() => { setSelectedInvItem(item); setPurchaseType(crudCategory); setPurchaseQty(''); setPurchaseCost(''); setShowPurchaseModal(true); }} className="px-2 py-1.5 rounded-lg bg-sky-900/40 text-sky-300 font-bold hover:bg-sky-800 transition cursor-pointer">
+                              + Stock
+                           </button>
+                        )}
+                        <button onClick={() => { 
+                          setEditingCrudItem(item); setCrudItemName(item.name); 
+                          if(crudCategory === 'main') setCrudItemPrice(String(item.price));
+                          else { setCrudItemSP(String(item.selling_price)); setCrudItemCP(String(item.cost_price)); }
+                        }} className="p-1.5 rounded-lg bg-sky-950/30 text-sky-300 hover:bg-sky-900/50 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
+                        
                         <button onClick={async () => {
                           if (!confirm(`"${item.name}" delete cheyala?`)) return;
-                          await supabase.from('vamc_menu_items').delete().eq('id', item.id);
-                          loadVaMCCounterItems();
+                          const tName = crudCategory === 'main' ? 'vamc_menu_items' : (crudCategory === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items');
+                          await supabase.from(tName).delete().eq('id', item.id);
+                          loadCounterAndInventoryData();
                         }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 cursor-pointer transition"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
-                  ))
-                )}
+                   ));
+                })()}
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* ======================================================== */}
-      {/* ICE CREAM INVENTORY & PROFIT LEDGER MODAL (STANDALONE) */}
-      {/* ======================================================== */}
+      {/* INVENTORY PURCHASE (ADD STOCK) MODAL FOR BOTH ICE CREAM AND DF */}
       <AnimatePresence>
-        {showIceCreamModal && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 font-mono">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-5xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
-            >
-              <div className="flex justify-between items-center border-b border-sky-900/50 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-sky-400/20 border border-sky-400 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]">
-                    <IceCream className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-wider">Ice Cream Stock & Profit Ledger</h2>
-                    <span className="text-[10px] sm:text-xs text-sky-200/60">Manage running inventory, budget investment, and real-time sales profit.</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={() => setShowIceCrudModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-500/20 border border-sky-400 text-sky-200 font-black text-xs uppercase cursor-pointer hover:bg-sky-500/30 transition shadow-md">
-                      <Settings className="w-3.5 h-3.5" />
-                      <span>Manage Items (CRUD)</span>
-                    </button>
-                    <button onClick={() => setShowIceCreamModal(false)} className="p-2 rounded-xl bg-sky-900/40 hover:bg-rose-500/20 hover:text-rose-400 text-sky-400 cursor-pointer transition">
-                      <X className="w-6 h-6" />
-                    </button>
-                </div>
-              </div>
-
-              {/* Top Analytics Dashboard */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
-                <div className="p-4 rounded-[24px] bg-[#0a0f16] border border-sky-900/50 flex flex-col justify-center shadow-inner">
-                  <span className="text-[11px] text-sky-200/60 uppercase font-bold flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 text-sky-400" /> Total Budget Investment</span>
-                  <span className="text-2xl font-black text-sky-100 mt-1 tracking-wide">₹{iceCreamStats.totalInvestment.toFixed(2)}</span>
-                </div>
-                <div className="p-4 rounded-[24px] bg-[#0a0f16] border border-sky-900/50 flex flex-col justify-center shadow-inner">
-                  <span className="text-[11px] text-sky-200/60 uppercase font-bold flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Total Sales Revenue</span>
-                  <span className="text-2xl font-black text-emerald-400 mt-1 tracking-wide">₹{iceCreamStats.totalRevenue.toFixed(2)}</span>
-                </div>
-                <div className="p-4 rounded-[24px] bg-sky-950/30 border border-sky-400/40 flex flex-col justify-center shadow-[0_0_20px_rgba(14,165,233,0.15)] relative overflow-hidden">
-                  <div className="absolute -right-4 -bottom-4 opacity-10"><IceCream className="w-24 h-24 text-sky-400" /></div>
-                  <span className="text-[11px] text-sky-200 uppercase font-bold relative z-10 tracking-wide">Net Profit Generated</span>
-                  <span className={`text-3xl font-black mt-1 relative z-10 tracking-wide ${iceCreamStats.netProfit >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
-                    {iceCreamStats.netProfit >= 0 ? '+' : '-'}₹{Math.abs(iceCreamStats.netProfit).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-col mt-5 overflow-hidden flex-1">
-                  <div className="flex justify-between items-center border-b border-sky-900/50 pb-2 mb-3">
-                    <h3 className="text-xs font-black text-sky-400 uppercase flex items-center gap-1.5"><PackageCheck className="w-4 h-4 text-sky-400" /> Active Inventory & Quick Sell</h3>
-                    <span className="text-[10px] text-sky-200/50 bg-sky-950/40 px-2 py-0.5 rounded-md">{iceItems.length} items found</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 overflow-y-auto custom-gold-scrollbar pr-2 flex-1 pb-4">
-                    {iceItems.length === 0 ? (
-                      <div className="col-span-full text-center py-10 text-sky-200/30 text-xs font-bold">No inventory items. Use Manage Items (CRUD) to add.</div>
-                    ) : (
-                      iceItems.map(item => (
-                        <div key={item.id} className="p-4 rounded-2xl bg-[#0a0f16] border border-sky-900/50 hover:border-sky-400/50 transition-colors flex flex-col justify-between relative overflow-hidden group shadow-md">
-                          
-                          {/* Stock Badge */}
-                          <div className="absolute top-0 right-0 bg-sky-950/60 border-b border-l border-sky-900/50 px-3 py-1 rounded-bl-xl text-center min-w-[60px] backdrop-blur-sm">
-                            <span className="block text-[9px] text-sky-200 font-bold uppercase">Stock</span>
-                            <span className={`block text-lg font-black ${item.stock_quantity > 0 ? 'text-white' : 'text-rose-400'}`}>{item.stock_quantity}</span>
-                          </div>
-
-                          <div className="pr-16">
-                            <span className="font-bold text-sky-100 block text-sm line-clamp-1">{item.name}</span>
-                            <div className="flex items-center gap-2 mt-2 text-[10px] flex-wrap">
-                              <span className="text-rose-300 font-mono bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-900/50">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
-                              <span className="text-emerald-300 font-mono bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-900/50">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-sky-900/50">
-                            <button 
-                              onClick={() => { setSelectedIceItem(item); setIcePurchaseQty(''); setIcePurchaseCost(''); setShowIcePurchaseModal(true); }}
-                              className="flex-1 py-1.5 rounded-lg bg-sky-950/40 hover:bg-sky-900/60 border border-sky-900/50 text-xs font-bold text-sky-300 transition cursor-pointer"
-                            >
-                              + Add Stock
-                            </button>
-                            <button 
-                              onClick={() => handleQuickIceCreamSell(item)}
-                              disabled={item.stock_quantity <= 0 || loading}
-                              className="flex-1 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              Sell (-1)
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ICE CREAM MANAGE ITEMS CRUD MODAL */}
-      <AnimatePresence>
-        {showIceCrudModal && (
-          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-2xl bg-[#0d0d0f] border border-sky-400/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
-            >
-              <div className="flex justify-between items-center border-b border-sky-900/50 pb-3">
-                <h3 className="text-sm font-black text-sky-400 uppercase flex items-center gap-2"><Settings className="w-4 h-4"/> Manage Ice Cream Items (CRUD)</h3>
-                <button onClick={() => setShowIceCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-              </div>
-
-              {/* Add / Edit Form */}
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const cleanName = iceItemName.trim();
-                const sp = parseFloat(iceItemSP);
-                const cp = parseFloat(iceItemCP);
-                if (!cleanName || isNaN(sp) || isNaN(cp) || sp <= 0 || cp < 0) return alert('Valid Name & Price ivvandi.');
-
-                setLoading(true);
-                try {
-                  if (editingIceItem) {
-                    await supabase.from('ice_cream_menu_items').update({ name: cleanName, selling_price: sp, cost_price: cp }).eq('id', editingIceItem.id);
-                  } else {
-                    await supabase.from('ice_cream_menu_items').insert({ name: cleanName, selling_price: sp, cost_price: cp, stock_quantity: 0 });
-                  }
-                  setIceItemName('');
-                  setIceItemSP('');
-                  setIceItemCP('');
-                  setEditingIceItem(null);
-                  loadIceCreamData();
-                } catch (err: any) {
-                  alert('Error: ' + err.message);
-                } finally {
-                  setLoading(false);
-                }
-              }} className="space-y-3 py-3 border-b border-sky-900/30">
-                  <div>
-                    <label className="text-[10px] text-sky-200/60 block mb-1 font-bold">Ice Cream Name</label>
-                    <input type="text" required placeholder="e.g. Chocolate Mini Cone" value={iceItemName} onChange={(e) => setIceItemName(e.target.value)} className="w-full bg-[#161619] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none focus:border-sky-500/50 text-xs transition" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-rose-300/80 block mb-1 font-bold">Cost Price (CP) ₹</label>
-                      <input type="number" required min="0" step="0.01" placeholder="₹ Buy Price" value={iceItemCP} onChange={(e) => setIceItemCP(e.target.value)} className="w-full bg-[#161619] border border-rose-900/50 rounded-xl px-3 py-2 text-rose-100 outline-none focus:border-rose-500/50 text-xs font-bold transition" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-emerald-300/80 block mb-1 font-bold">Selling Price (SP) ₹</label>
-                      <input type="number" required min="1" step="0.01" placeholder="₹ Sell Price" value={iceItemSP} onChange={(e) => setIceItemSP(e.target.value)} className="w-full bg-[#161619] border border-emerald-900/50 rounded-xl px-3 py-2 text-emerald-100 outline-none focus:border-emerald-500/50 text-xs font-bold transition" />
-                    </div>
-                  </div>
-                  <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-sky-400 text-black font-black uppercase text-xs cursor-pointer mt-2 shadow-[0_0_15px_rgba(14,165,233,0.3)] hover:bg-sky-300 transition-colors">
-                    {editingIceItem ? 'Update Item' : '+ Save Item To Ledger'}
-                  </button>
-              </form>
-
-              {/* Items List */}
-              <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
-                {iceItems.length === 0 ? (
-                  <div className="text-center py-8 text-sky-200/50 text-xs font-bold">No items added yet.</div>
-                ) : (
-                  iceItems.map(item => (
-                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-sky-900/30 flex justify-between items-center text-xs hover:border-sky-500/30 transition-colors">
-                      <div>
-                        <span className="font-bold text-sky-100 block">{item.name}</span>
-                        <div className="flex gap-2 text-[9px] mt-1">
-                            <span className="text-rose-400 font-mono tracking-wide">CP: ₹{Number(item.cost_price).toFixed(2)}</span>
-                            <span className="text-emerald-400 font-mono tracking-wide">SP: ₹{Number(item.selling_price).toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => { setEditingIceItem(item); setIceItemName(item.name); setIceItemSP(String(item.selling_price)); setIceItemCP(String(item.cost_price)); }} className="p-1.5 rounded-lg bg-sky-950/30 text-sky-400 hover:bg-sky-900/50 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
-                        <button onClick={async () => {
-                          if (!confirm(`"${item.name}" delete cheyala?`)) return;
-                          await supabase.from('ice_cream_menu_items').delete().eq('id', item.id);
-                          loadIceCreamData();
-                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 cursor-pointer transition"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ICE CREAM PURCHASE (ADD STOCK) MODAL */}
-      <AnimatePresence>
-        {showIcePurchaseModal && selectedIceItem && (
-          <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
+        {showPurchaseModal && selectedInvItem && (
+          <div className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2986,46 +2847,49 @@ export default function LuxuryGoldAdminPanel() {
               <div className="flex justify-between items-center border-b border-sky-900/50 pb-3 mb-4">
                 <div>
                   <h3 className="text-sm font-black text-sky-100 uppercase">Add Bulk Stock</h3>
-                  <span className="text-[10px] text-sky-400 block font-bold tracking-wide">{selectedIceItem.name}</span>
+                  <span className="text-[10px] text-sky-400 block font-bold tracking-wide">{selectedInvItem.name}</span>
                 </div>
-                <button onClick={() => setShowIcePurchaseModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+                <button onClick={() => setShowPurchaseModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                const qty = parseInt(icePurchaseQty);
-                const cost = parseFloat(icePurchaseCost);
+                const qty = parseInt(purchaseQty);
+                const cost = parseFloat(purchaseCost);
                 if (isNaN(qty) || qty <= 0 || isNaN(cost) || cost < 0) return alert('Invalid entry');
 
                 setLoading(true);
                 try {
-                  await supabase.from('ice_cream_purchases').insert({
-                    item_id: selectedIceItem.id,
+                  const pTable = purchaseType === 'ice_cream' ? 'ice_cream_purchases' : 'df_purchases';
+                  const mTable = purchaseType === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items';
+                  
+                  await supabase.from(pTable).insert({
+                    item_id: selectedInvItem.id,
                     quantity_added: qty,
                     total_investment: cost
                   });
-                  await supabase.from('ice_cream_menu_items').update({
-                    stock_quantity: selectedIceItem.stock_quantity + qty
-                  }).eq('id', selectedIceItem.id);
+                  await supabase.from(mTable).update({
+                    stock_quantity: selectedInvItem.stock_quantity + qty
+                  }).eq('id', selectedInvItem.id);
                   
-                  setShowIcePurchaseModal(false);
-                  loadIceCreamData();
+                  setShowPurchaseModal(false);
+                  loadCounterAndInventoryData();
                 } catch (err: any) { alert('Error: ' + err.message); } 
                 finally { setLoading(false); }
               }} className="space-y-4">
                 
                 <div>
                   <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Quantity Adding (e.g. 50 boxes)</label>
-                  <input type="number" required min="1" value={icePurchaseQty} onChange={(e) => {
-                    setIcePurchaseQty(e.target.value);
-                    if(e.target.value) setIcePurchaseCost(String(parseInt(e.target.value) * Number(selectedIceItem.cost_price)));
+                  <input type="number" required min="1" value={purchaseQty} onChange={(e) => {
+                    setPurchaseQty(e.target.value);
+                    if(e.target.value) setPurchaseCost(String(parseInt(e.target.value) * Number(selectedInvItem.cost_price)));
                   }} className="w-full bg-[#0a0f16] border border-sky-900/50 rounded-xl px-3 py-2 text-sky-100 outline-none font-bold focus:border-sky-500/50 transition" />
                 </div>
                 
                 <div>
-                  <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Total Investment Cost ₹</label>
-                  <input type="number" required min="0" step="0.01" value={icePurchaseCost} onChange={(e) => setIcePurchaseCost(e.target.value)} className="w-full bg-[#0a0f16] border border-sky-500/30 rounded-xl px-3 py-2 outline-none font-bold text-sky-400 focus:border-sky-400 transition" />
-                  <span className="text-[9px] text-sky-200/40 mt-1 block">Default auto-calculated based on CP (₹{Number(selectedIceItem.cost_price).toFixed(2)}/item). Edit if bulk discount applies.</span>
+                  <label className="text-[10px] text-sky-200/60 font-bold block mb-1">Total Cost (Investment) ₹</label>
+                  <input type="number" required min="0" step="0.01" value={purchaseCost} onChange={(e) => setPurchaseCost(e.target.value)} className="w-full bg-[#0a0f16] border border-sky-500/30 rounded-xl px-3 py-2 outline-none font-bold text-sky-400 focus:border-sky-400 transition" />
+                  <span className="text-[9px] text-sky-200/40 mt-1 block">Auto-calculated using CP (₹{Number(selectedInvItem.cost_price).toFixed(2)}/item). Edit manually if needed.</span>
                 </div>
 
                 <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-black font-black uppercase text-xs cursor-pointer shadow-[0_0_15px_rgba(14,165,233,0.3)] hover:shadow-[0_0_25px_rgba(14,165,233,0.4)] transition-all mt-2">
