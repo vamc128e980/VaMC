@@ -32,7 +32,6 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   
-  // VaMC Ledger Inventories for Upselling in Cart & Add-ons
   const [dfItems, setDfItems] = useState<any[]>([]); 
   const [iceItems, setIceItems] = useState<any[]>([]);
   const [vamcItems, setVamcItems] = useState<any[]>([]);
@@ -43,7 +42,6 @@ export default function LuxuryCustomerTablePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
-  // Customization Bottom Sheet States
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [selectedCounterItemIds, setSelectedCounterItemIds] = useState<{id: number, type: string}[]>([]);
@@ -52,7 +50,6 @@ export default function LuxuryCustomerTablePage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Customer & Loyalty States
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -201,10 +198,6 @@ export default function LuxuryCustomerTablePage() {
     const channel = supabase
       .channel(`table-${realTableNumber}-rt`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_menu_items' }, () => fetchMenuData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => fetchMenuData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -223,7 +216,6 @@ export default function LuxuryCustomerTablePage() {
     const hasAddons = item.has_addons;
     const hasRetailVariants = item.is_retail_item && Array.isArray(item.weight_variants) && item.weight_variants.length > 0;
 
-    // Show Bottom Sheet if item has add-ons OR we want to cross-sell VaMC items
     if (hasAddons || hasRetailVariants || iceItems.length > 0 || vamcItems.length > 0) {
       setCustomizingItem(item);
       setSelectedAddonIds([]);
@@ -266,11 +258,9 @@ export default function LuxuryCustomerTablePage() {
   const confirmCustomizationAndAdd = () => {
     if (!customizingItem) return;
     
-    // 1. Add Main Item with Selected Native Add-ons
     const chosenAddons = addons.filter(a => selectedAddonIds.includes(Number(a.id)));
     addToCartDirect(customizingItem, false, chosenAddons, selectedWeightVariant, false, 'main');
     
-    // 2. Add Selected Counter Items (Ice Creams / Drinks) as Separate Cart Items
     selectedCounterItemIds.forEach(counterItem => {
       let fullItem = null;
       if (counterItem.type === 'ice_cream') fullItem = iceItems.find(i => i.id === counterItem.id);
@@ -388,7 +378,7 @@ export default function LuxuryCustomerTablePage() {
       setActiveOrderToken(batch.order_pin || randomToken);
       setActiveBatchStatus('pending_waiter');
 
-      const orderPayload = cart.map((ci, idx) => {
+      const orderPayload = cart.map((ci) => {
         let nameTag = '';
         if (ci.itemType === 'df') nameTag = '[DF]';
         else if (ci.itemType === 'ice_cream') nameTag = '[ICE]';
@@ -409,25 +399,24 @@ export default function LuxuryCustomerTablePage() {
         };
       });
 
-      await supabase.from('order_items').insert(orderPayload);
+      const { error: oiErr } = await supabase.from('order_items').insert(orderPayload);
+      if (oiErr) throw oiErr;
 
-      // LIVE STOCK MINUS FOR INVENTORY ITEMS (Dry Fruits & Ice Creams)
+      // ATOMIC STOCK MINUS VIA RPC
       for (const item of cart) {
         if (item.itemType === 'df') {
-          const realItem = dfItems.find(i => i.id === item.menuItem.id);
-          if (realItem) {
-            await supabase.from('df_menu_items').update({
-                stock_quantity: Math.max(0, realItem.stock_quantity - item.quantity)
-            }).eq('id', item.menuItem.id);
-          }
+          await supabase.rpc('adjust_inventory_stock', {
+            p_table_name: 'df_menu_items',
+            p_item_id: item.menuItem.id,
+            p_delta: -item.quantity
+          });
         }
         if (item.itemType === 'ice_cream') {
-          const realItem = iceItems.find(i => i.id === item.menuItem.id);
-          if (realItem) {
-            await supabase.from('ice_cream_menu_items').update({
-                stock_quantity: Math.max(0, realItem.stock_quantity - item.quantity)
-            }).eq('id', item.menuItem.id);
-          }
+          await supabase.rpc('adjust_inventory_stock', {
+            p_table_name: 'ice_cream_menu_items',
+            p_item_id: item.menuItem.id,
+            p_delta: -item.quantity
+          });
         }
       }
 
@@ -452,7 +441,7 @@ export default function LuxuryCustomerTablePage() {
 
   if (tableNotFound) {
     return (
-      <div className="min-h-screen bg-[#060608] text-[#FCF6BA] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-[#060608] text-[#FCF6BA] flex flex-col items-center justify-center p-6 text-center font-mono">
         <AlertTriangle className="w-12 h-12 text-[#D4AF37] mb-3" />
         <h2 className="text-xl font-bold uppercase text-white">Table QR Invalid</h2>
       </div>
@@ -593,7 +582,7 @@ export default function LuxuryCustomerTablePage() {
         </div>
       </div>
 
-      {/* EXACT 6-STEP CART FLOW MATCHING REFERENCE IMAGE */}
+      {/* CART DRAWER */}
       <AnimatePresence>
         {isCartOpen && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -613,7 +602,6 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setIsCartOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* 1. BILL LIST */}
               {cart.length === 0 ? (
                  <div className="text-center py-4 text-neutral-500 text-xs">Your cart is empty.</div>
               ) : (
@@ -646,7 +634,6 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* 2. PROMO SLIDES */}
               {banners.length > 0 && (
                 <div className="relative w-full h-32 overflow-hidden rounded-[20px] border border-[#D4AF37]/30 shadow-lg mt-4 bg-neutral-950">
                   <AnimatePresence mode="wait">
@@ -666,7 +653,6 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* 3. GUEST IDENTITY */}
               {!activeSessionId && (
                 <div className="space-y-3 pt-4 border-t border-white/5 mt-4">
                   <span className="font-bold text-white block">Guest Identification</span>
@@ -702,7 +688,6 @@ export default function LuxuryCustomerTablePage() {
                     {phoneError && <span className="text-rose-400 text-[10px] mt-1 block">{phoneError}</span>}
                   </div>
 
-                  {/* 4. LOYALTY PROGRESS BAR (Gamified) */}
                   {customerPhone.length === 10 && isValidPhone(customerPhone) && !is10thVisitMilestone && (
                      <div className="p-3 bg-white/5 rounded-xl border border-[#D4AF37]/30 mt-2 shadow-inner">
                         <div className="flex justify-between text-[10px] text-[#FCF6BA] mb-1.5 font-bold">
@@ -720,7 +705,6 @@ export default function LuxuryCustomerTablePage() {
                      </div>
                   )}
 
-                  {/* 10th Visit Reward Claim Button */}
                   {is10thVisitMilestone && !isRewardClaimedThisSession && (
                      <div className="p-3 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37] flex justify-between items-center mt-2 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
                         <div>
@@ -733,7 +717,6 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* 5. DRY FRUITS & SPICES PROMO SLIDER (IMPULSE BUY) */}
               {dfItems.length > 0 && (
                 <div className="pt-4 mt-2">
                   <h4 className="text-[12px] font-black text-white mb-3 flex items-center gap-1.5">
@@ -745,8 +728,6 @@ export default function LuxuryCustomerTablePage() {
                       const hasVariants = df.weight_variants && df.weight_variants.length > 0;
                       return (
                         <div key={df.id} className="min-w-[130px] sm:min-w-[140px] bg-white/[0.03] border border-white/[0.05] rounded-[24px] p-3 flex flex-col relative snap-start shadow-lg">
-                          
-                          {/* Image Header */}
                           <div className="h-20 w-full mb-3 flex items-center justify-center">
                             {df.image_url ? (
                               <img src={df.image_url} alt={df.name} className="h-full object-contain drop-shadow-md" />
@@ -756,12 +737,9 @@ export default function LuxuryCustomerTablePage() {
                               </div>
                             )}
                           </div>
-                          
-                          {/* Title */}
                           <span className="font-bold text-white text-[12px] leading-tight line-clamp-1">{df.name}</span>
                           <span className="text-[9px] text-neutral-400 mt-1 mb-3">Premium Quality</span>
                           
-                          {/* Weight Variants Buttons */}
                           {hasVariants && (
                             <div className="flex gap-1.5 overflow-x-auto scrollbar-none mb-3">
                               {df.weight_variants.map((v: any, vIdx: number) => (
@@ -769,7 +747,7 @@ export default function LuxuryCustomerTablePage() {
                                     key={vIdx}
                                     type="button"
                                     onClick={() => addToCartDirect(df, false, [], v, false, 'df')}
-                                    className="px-2 py-1 rounded-lg bg-transparent border border-white/20 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition cursor-pointer"
+                                    className="px-2 py-1 rounded-lg bg-transparent border border-white/25 hover:border-[#D4AF37] text-[9px] text-neutral-300 font-bold whitespace-nowrap transition cursor-pointer"
                                   >
                                     {v.size} (₹{v.price})
                                   </button>
@@ -777,7 +755,6 @@ export default function LuxuryCustomerTablePage() {
                             </div>
                           )}
 
-                          {/* Default Price & Main Add Action */}
                           <div className="mt-auto flex justify-between items-end pt-1">
                             <span className="text-white font-black text-sm">₹{Number(df.selling_price).toFixed(0)}</span>
                             <button 
@@ -795,7 +772,6 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* 6. PAYABLE TOTAL & SUBMIT BUTTON (Matches exact image theme) */}
               <div className="p-4 rounded-xl bg-white/[0.05] border border-transparent space-y-3 mt-4">
                 <div className="flex justify-between items-center text-white font-bold text-sm">
                   <span>Payable at Counter:</span>
@@ -841,7 +817,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* ADD-ONS & COUNTER SUGGESTIONS BOTTOM SHEET */}
+      {/* CUSTOMIZATION SHEET */}
       <AnimatePresence>
         {customizingItem && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -858,7 +834,6 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setCustomizingItem(null)} className="text-neutral-400 cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* 1. Normal Add-ons */}
               {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).length > 0 && (
                 <div className="space-y-2">
                   <span className="text-neutral-400 block mb-1">Upgrade with Add-ons:</span>
@@ -891,12 +866,10 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* 2. VaMC Counter Suggestions (Ice Creams & Drinks) */}
               {(iceItems.length > 0 || vamcItems.length > 0) && (
                 <div className="space-y-2 pt-3 border-t border-white/10">
                   <span className="text-[#D4AF37] font-bold block mb-1 flex items-center gap-1.5"><Store className="w-3.5 h-3.5"/> Counter Suggestions:</span>
                   
-                  {/* Ice Creams */}
                   {iceItems.map(item => {
                     const isChecked = selectedCounterItemIds.some(i => i.id === item.id && i.type === 'ice_cream');
                     return (
@@ -915,7 +888,6 @@ export default function LuxuryCustomerTablePage() {
                     );
                   })}
 
-                  {/* General VaMC Drinks/Items */}
                   {vamcItems.map(item => {
                     const isChecked = selectedCounterItemIds.some(i => i.id === item.id && i.type === 'vamc_general');
                     return (
@@ -964,7 +936,6 @@ export default function LuxuryCustomerTablePage() {
                 </div>
               )}
 
-              {/* Show Ordered Items List in Ledger */}
               <div className="space-y-2.5 max-h-48 overflow-y-auto custom-gold-scrollbar pr-1 my-4">
                 {sessionOrderedItems.length === 0 ? (
                    <div className="text-center text-neutral-500 py-4">No items ordered yet.</div>
