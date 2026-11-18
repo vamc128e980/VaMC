@@ -25,6 +25,25 @@ export default function AdminHeader() {
       }
     }
     fetchSettings();
+
+    // Real-time listener for brand name & tagline updates across devices/tabs
+    const channel = supabase
+      .channel("restaurant-settings-sync")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "restaurant_settings", filter: "id=eq.1" },
+        (payload) => {
+          if (payload.new) {
+            if (payload.new.restaurant_name) setShopName(payload.new.restaurant_name);
+            if (payload.new.tagline) setTagline(payload.new.tagline);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleEditOpen = () => {
@@ -70,7 +89,7 @@ export default function AdminHeader() {
           </div>
           <button
             onClick={handleEditOpen}
-            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition"
+            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition cursor-pointer"
             title="Edit Shop Name"
           >
             <Edit3 className="w-4 h-4" />
@@ -84,26 +103,26 @@ export default function AdminHeader() {
               value={tempName}
               onChange={(e) => setTempName(e.target.value)}
               placeholder="Shop Name"
-              className="bg-neutral-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-sm text-white focus:outline-none focus:border-amber-400"
+              className="bg-neutral-900 border border-amber-500/50 rounded-lg px-2.5 py-1 text-sm text-white focus:outline-none focus:border-amber-400 font-mono"
             />
             <input
               type="text"
               value={tempTagline}
               onChange={(e) => setTempTagline(e.target.value)}
               placeholder="Tagline / Subtitle"
-              className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-neutral-300 focus:outline-none focus:border-neutral-500 block w-full"
+              className="bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-neutral-300 focus:outline-none focus:border-neutral-500 block w-full font-mono"
             />
           </div>
           <button
             onClick={handleSave}
             disabled={loading}
-            className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
+            className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer"
           >
             <Check className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsEditing(false)}
-            className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 transition"
+            className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
