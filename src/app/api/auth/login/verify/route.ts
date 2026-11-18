@@ -2,10 +2,8 @@
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
-    // Frontend nunchi em peru tho vachina theeskuntundi
     const rawId = body?.identifier || body?.username || body?.name || body?.waiterName || body?.loginId || '';
-    const cleanId = rawId.trim().toLowerCase(); 
+    const cleanId = rawId.trim().toLowerCase();
     const cleanPass = (body?.password || body?.pin || '').trim();
 
     if (!cleanId || !cleanPass) {
@@ -15,28 +13,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // FIX: Supabase .or() query theesesi direct ga table data thechukuntunnam
+    // Fetch all staff records to match safely in JS and avoid Supabase query syntax errors
     const { data: users, error } = await supabase
       .from('staff_accounts')
       .select('role, identifier, password_hash, name');
 
     if (error) {
-      console.error("Database Fetch Error:", error.message);
-      return NextResponse.json(
-        { error: 'Database connection error.' }, 
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Database connection error.' }, { status: 500 });
     }
 
-    // JavaScript lo case-insensitive ga match chesthunnam (Crash avve chance eh ledu)
+    // Match either identifier (email/phone) or name case-insensitively
     const user = users?.find(u => 
       (u.identifier || '').toLowerCase() === cleanId || 
       (u.name || '').toLowerCase() === cleanId
     );
 
-    // Password verification
     if (!user || user.password_hash !== cleanPass) {
-      console.error("Login Error: User not found or password mismatch");
       return NextResponse.json(
         { error: 'Invalid credentials. Please verify your details.' },
         { status: 401 }
@@ -45,8 +37,6 @@ export async function POST(request: Request) {
 
     const role = user.role?.toLowerCase();
     const staffName = user.name || (role === 'admin' ? 'Royal Admin' : 'Floor Steward');
-    
-    // Token generation (mee existing function)
     const signedToken = signSession(role, staffName);
 
     const response = NextResponse.json({
@@ -73,7 +63,6 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err) {
-    console.error("Server catch block error:", err);
     return NextResponse.json({ error: 'Server authentication failed.' }, { status: 500 });
   }
 }
