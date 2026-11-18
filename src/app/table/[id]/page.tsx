@@ -198,6 +198,7 @@ export default function LuxuryCustomerTablePage() {
     const channel = supabase
       .channel(`table-${realTableNumber}-rt`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -497,6 +498,34 @@ export default function LuxuryCustomerTablePage() {
           <input type="text" placeholder="Search our handcrafted delights..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08]" />
         </div>
 
+        {/* PROMO SLIDER BANNERS (Synced with Admin Panel) */}
+        {banners.length > 0 && (
+          <div className="relative w-full h-36 overflow-hidden rounded-[24px] border border-[#D4AF37]/35 shadow-xl bg-neutral-950">
+            <AnimatePresence mode="wait">
+              {banners[currentBannerIndex] && (
+                <motion.img
+                  key={banners[currentBannerIndex].id}
+                  initial={{ opacity: 0, scale: 1.03 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.4 }}
+                  src={banners[currentBannerIndex].image_url}
+                  alt={banners[currentBannerIndex].title || 'Promo Banner'}
+                  className="w-full h-full object-cover object-center"
+                />
+              )}
+            </AnimatePresence>
+            <div className="absolute bottom-2.5 right-3 flex gap-1 z-10">
+              {banners.map((_, idx) => (
+                <span
+                  key={idx}
+                  className={`h-1.5 rounded-full transition-all ${idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'}`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Categories Bar */}
         <div className="sticky top-[58px] z-30 py-2 bg-[#060608]/95 backdrop-blur-xl border-b border-white/[0.05]">
           <div ref={categoryScrollRef} className="p-1.5 rounded-[26px] bg-white/[0.03] border border-white/[0.08] flex gap-2 overflow-x-auto select-none items-center scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -631,25 +660,6 @@ export default function LuxuryCustomerTablePage() {
                       </div>
                     );
                   })}
-                </div>
-              )}
-
-              {banners.length > 0 && (
-                <div className="relative w-full h-32 overflow-hidden rounded-[20px] border border-[#D4AF37]/30 shadow-lg mt-4 bg-neutral-950">
-                  <AnimatePresence mode="wait">
-                    {banners[currentBannerIndex] && (
-                      <motion.img
-                        key={banners[currentBannerIndex].id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.4 }}
-                        src={banners[currentBannerIndex].image_url}
-                        alt="Promo Banner"
-                        className="w-full h-full object-cover object-center"
-                      />
-                    )}
-                  </AnimatePresence>
                 </div>
               )}
 
