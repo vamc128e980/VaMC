@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import { 
   Plus, Minus, ShoppingBag, X, Receipt, Sparkles, Image as ImgIcon, 
-  AlertTriangle, Search, BellRing, Gift, Check, Hash, Store, CheckCircle2
+  AlertTriangle, Search, BellRing, Gift, Check, Hash, CheckCircle2
 } from 'lucide-react';
 
 const butterSpring = { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.45 };
@@ -31,10 +31,8 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   
-  // VaMC Ledger Inventories for Upselling in Cart & Add-ons
+  // Retail Dry Fruits for Cart Impulse Slider
   const [dfItems, setDfItems] = useState<any[]>([]); 
-  const [iceItems, setIceItems] = useState<any[]>([]);
-  const [vamcItems, setVamcItems] = useState<any[]>([]);
   
   const [banners, setBanners] = useState<any[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -42,10 +40,9 @@ export default function LuxuryCustomerTablePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
-  // Customization Bottom Sheet States
+  // Customization Bottom Sheet States (Only for Item Add-ons & Retail Pack Sizes)
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
-  const [selectedCounterItemIds, setSelectedCounterItemIds] = useState<{id: number, type: string}[]>([]);
   const [selectedWeightVariant, setSelectedWeightVariant] = useState<any | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -199,16 +196,13 @@ export default function LuxuryCustomerTablePage() {
 
   const fetchMenuData = async () => {
     const [
-      { data: cats }, { data: items }, { data: adns }, { data: bnrs },
-      { data: dfs }, { data: ices }, { data: vamcs }
+      { data: cats }, { data: items }, { data: adns }, { data: bnrs }, { data: dfs }
     ] = await Promise.all([
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
       supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false }),
-      supabase.from('df_menu_items').select('*').order('name', { ascending: true }),
-      supabase.from('ice_cream_menu_items').select('*').order('name', { ascending: true }),
-      supabase.from('vamc_menu_items').select('*').order('name', { ascending: true })
+      supabase.from('df_menu_items').select('*').order('name', { ascending: true })
     ]);
 
     if (cats && cats.length > 0) {
@@ -218,8 +212,6 @@ export default function LuxuryCustomerTablePage() {
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
     if (dfs) setDfItems(dfs);
-    if (ices) setIceItems(ices);
-    if (vamcs) setVamcItems(vamcs);
     
     if (bnrs) {
       setBanners(bnrs);
@@ -254,13 +246,14 @@ export default function LuxuryCustomerTablePage() {
 
   const handleItemAddClick = (item: MenuItem) => {
     triggerHaptic(15);
-    const hasAddons = item.has_addons;
+    const itemAddons = item.has_addons
+      ? addons.filter(a => Array.isArray(item.addon_ids) ? item.addon_ids.map(Number).includes(Number(a.id)) : true)
+      : [];
     const hasRetailVariants = item.is_retail_item && Array.isArray(item.weight_variants) && item.weight_variants.length > 0;
 
-    if (hasAddons || hasRetailVariants || iceItems.length > 0 || vamcItems.length > 0) {
+    if (itemAddons.length > 0 || hasRetailVariants) {
       setCustomizingItem(item);
       setSelectedAddonIds([]);
-      setSelectedCounterItemIds([]);
       setSelectedWeightVariant(hasRetailVariants ? item.weight_variants[0] : null);
     } else {
       addToCartDirect(item, false);
@@ -298,23 +291,10 @@ export default function LuxuryCustomerTablePage() {
 
   const confirmCustomizationAndAdd = () => {
     if (!customizingItem) return;
-    
     const chosenAddons = addons.filter(a => selectedAddonIds.includes(Number(a.id)));
     addToCartDirect(customizingItem, false, chosenAddons, selectedWeightVariant, false, 'main');
-    
-    selectedCounterItemIds.forEach(counterItem => {
-      let fullItem = null;
-      if (counterItem.type === 'ice_cream') fullItem = iceItems.find(i => i.id === counterItem.id);
-      if (counterItem.type === 'vamc_general') fullItem = vamcItems.find(i => i.id === counterItem.id);
-      
-      if (fullItem) {
-        addToCartDirect(fullItem, false, [], null, false, counterItem.type);
-      }
-    });
-
     setCustomizingItem(null);
     setSelectedAddonIds([]);
-    setSelectedCounterItemIds([]);
     setSelectedWeightVariant(null);
   };
 
@@ -379,7 +359,6 @@ export default function LuxuryCustomerTablePage() {
 
     setLoading(true);
     try {
-      // Verify live DB for an active session (prevents attaching to a settled session)
       const { data: liveSession } = await supabase
         .from('table_sessions')
         .select('id, total_amount')
@@ -445,10 +424,7 @@ export default function LuxuryCustomerTablePage() {
       setActiveBatchStatus('pending_waiter');
 
       const orderPayload = cart.map((ci) => {
-        let nameTag = '';
-        if (ci.itemType === 'df') nameTag = '[DF]';
-        else if (ci.itemType === 'ice_cream') nameTag = '[ICE]';
-        else if (ci.itemType === 'vamc_general') nameTag = '[GEN]';
+        const nameTag = ci.itemType === 'df' ? '[DF]' : '';
 
         return {
           batch_id: batch.id,
@@ -468,13 +444,12 @@ export default function LuxuryCustomerTablePage() {
       const { error: oiErr } = await supabase.from('order_items').insert(orderPayload);
       if (oiErr) throw oiErr;
 
-      // Atomic stock deduction via RPC
       await Promise.all(
         cart
-          .filter(item => item.itemType === 'df' || item.itemType === 'ice_cream')
+          .filter(item => item.itemType === 'df')
           .map(item =>
             supabase.rpc('adjust_inventory_stock', {
-              p_table_name: item.itemType === 'df' ? 'df_menu_items' : 'ice_cream_menu_items',
+              p_table_name: 'df_menu_items',
               p_item_id: item.menuItem.id,
               p_delta: -item.quantity
             })
@@ -921,7 +896,7 @@ export default function LuxuryCustomerTablePage() {
         )}
       </AnimatePresence>
 
-      {/* CUSTOMIZATION SHEET */}
+      {/* ITEM ADD-ONS & RETAIL PACK SIZE SHEET */}
       <AnimatePresence>
         {customizingItem && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -938,7 +913,31 @@ export default function LuxuryCustomerTablePage() {
                 <button onClick={() => setCustomizingItem(null)} className="text-neutral-400 cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
-              {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).length > 0 && (
+              {customizingItem.is_retail_item && Array.isArray(customizingItem.weight_variants) && customizingItem.weight_variants.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-neutral-400 block mb-1">Choose Pack Size:</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {customizingItem.weight_variants.map((v: any, idx: number) => {
+                      const isSel = selectedWeightVariant?.size === v.size;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSelectedWeightVariant(v)}
+                          className={`p-3 rounded-2xl border text-center cursor-pointer transition ${
+                            isSel ? 'bg-[#D4AF37]/15 border-[#D4AF37] text-white' : 'bg-transparent border-white/10 text-neutral-300'
+                          }`}
+                        >
+                          <span className="font-bold block">{v.size}</span>
+                          <span className="text-[#D4AF37] font-black">₹{Number(v.price).toFixed(0)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {customizingItem.has_addons && addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).length > 0 && (
                 <div className="space-y-2">
                   <span className="text-neutral-400 block mb-1">Upgrade with Add-ons:</span>
                   {addons.filter(a => Array.isArray(customizingItem.addon_ids) ? customizingItem.addon_ids.map(Number).includes(Number(a.id)) : true).map(addon => {
@@ -964,48 +963,6 @@ export default function LuxuryCustomerTablePage() {
                           <span className="font-bold">{addon.name}</span>
                         </div>
                         <span className="text-[#D4AF37] font-black">+₹{Number(addon.price).toFixed(0)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {(iceItems.length > 0 || vamcItems.length > 0) && (
-                <div className="space-y-2 pt-3 border-t border-white/10">
-                  <span className="text-[#D4AF37] font-bold block mb-1 flex items-center gap-1.5"><Store className="w-3.5 h-3.5"/> Counter Suggestions:</span>
-                  
-                  {iceItems.map(item => {
-                    const isChecked = selectedCounterItemIds.some(i => i.id === item.id && i.type === 'ice_cream');
-                    return (
-                      <div key={`ice-${item.id}`} onClick={() => {
-                        if (isChecked) setSelectedCounterItemIds(selectedCounterItemIds.filter(i => !(i.id === item.id && i.type === 'ice_cream')));
-                        else setSelectedCounterItemIds([...selectedCounterItemIds, {id: item.id, type: 'ice_cream'}]);
-                      }} className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${isChecked ? 'bg-[#D4AF37]/10 border-[#D4AF37] text-white' : 'bg-transparent border-white/10 text-neutral-300'}`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'}`}>
-                            {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          </div>
-                          <span className="font-bold">{item.name} <span className="text-[8px] uppercase bg-white/10 px-1 rounded ml-1">Ice Cream</span></span>
-                        </div>
-                        <span className="text-[#D4AF37] font-black">+₹{Number(item.selling_price).toFixed(0)}</span>
-                      </div>
-                    );
-                  })}
-
-                  {vamcItems.map(item => {
-                    const isChecked = selectedCounterItemIds.some(i => i.id === item.id && i.type === 'vamc_general');
-                    return (
-                      <div key={`vamc-${item.id}`} onClick={() => {
-                        if (isChecked) setSelectedCounterItemIds(selectedCounterItemIds.filter(i => !(i.id === item.id && i.type === 'vamc_general')));
-                        else setSelectedCounterItemIds([...selectedCounterItemIds, {id: item.id, type: 'vamc_general'}]);
-                      }} className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition ${isChecked ? 'bg-[#D4AF37]/10 border-[#D4AF37] text-white' : 'bg-transparent border-white/10 text-neutral-300'}`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 rounded-lg border flex items-center justify-center text-black font-black ${isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'}`}>
-                            {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          </div>
-                          <span className="font-bold">{item.name}</span>
-                        </div>
-                        <span className="text-[#D4AF37] font-black">+₹{Number(item.price).toFixed(0)}</span>
                       </div>
                     );
                   })}
