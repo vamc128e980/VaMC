@@ -45,7 +45,8 @@ import {
   Layers,
   Scale,
   Search,
-  Settings
+  Settings,
+  Hash
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -55,12 +56,10 @@ const fluidSpring = {
   mass: 0.5
 };
 
-// Local timezone date helper (prevents UTC midnight-5:30 AM IST shift)
 const toLocalDateStr = (dateInput: string | Date): string => {
   return new Date(dateInput).toLocaleDateString('en-CA');
 };
 
-// HTML escape helper to prevent XSS in thermal print windows
 const escapeHtml = (unsafe: unknown): string => {
   return String(unsafe ?? '')
     .replace(/&/g, '&amp;')
@@ -98,6 +97,7 @@ export default function LuxuryGoldAdminPanel() {
   // Core Data States
   const [tables, setTables] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [addons, setAddons] = useState<any[]>([]);
@@ -278,7 +278,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Decoupled Live Orders & Selected Date Sessions Loader
+  // Decoupled Live Orders, Batches & Selected Date Sessions Loader
   const loadLiveOrdersAndSessions = async (targetDate = selectedDate) => {
     try {
       const startOfDay = new Date(`${targetDate}T00:00:00`).toISOString();
@@ -305,13 +305,25 @@ export default function LuxuryGoldAdminPanel() {
         setSessions(sess);
         const sessionIds = sess.map((s: any) => s.id);
         if (sessionIds.length > 0) {
-          const { data: oitms } = await supabase
-            .from('order_items')
-            .select('*, menu_items(name_en, name, price, category_id, image_url)')
-            .in('session_id', sessionIds);
+          const [
+            { data: oitms },
+            { data: bths }
+          ] = await Promise.all([
+            supabase
+              .from('order_items')
+              .select('*, menu_items(name_en, name, price, category_id, image_url)')
+              .in('session_id', sessionIds),
+            supabase
+              .from('order_batches')
+              .select('*')
+              .in('session_id', sessionIds)
+              .order('created_at', { ascending: false })
+          ]);
           setOrderItems(oitms || []);
+          setBatches(bths || []);
         } else {
           setOrderItems([]);
+          setBatches([]);
         }
       }
     } catch (err) {
@@ -366,7 +378,6 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  // Re-fetch scoped sessions when date changes
   useEffect(() => {
     if (!isAuthenticated) return;
     loadLiveOrdersAndSessions(selectedDate);
@@ -380,6 +391,7 @@ export default function LuxuryGoldAdminPanel() {
     const channel = supabase
       .channel(`admin-sync-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadLiveOrdersAndSessions(selectedDate))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadLiveOrdersAndSessions(selectedDate))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadLiveOrdersAndSessions(selectedDate))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadLiveOrdersAndSessions(selectedDate))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => loadLiveOrdersAndSessions(selectedDate))
@@ -939,6 +951,15 @@ export default function LuxuryGoldAdminPanel() {
     return map;
   }, [orderItems]);
 
+  // Pre-indexed latest batch by session_id
+  const latestBatchBySession = useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const b of batches) {
+      if (!map[b.session_id]) map[b.session_id] = b;
+    }
+    return map;
+  }, [batches]);
+
   // Local IST Date Filter
   const filteredSessions = useMemo(() => {
     return sessions.filter(s => toLocalDateStr(s.created_at) === selectedDate);
@@ -969,7 +990,7 @@ export default function LuxuryGoldAdminPanel() {
       .map(oi => {
         let resolvedName = oi.menu_items?.name_en || oi.menu_items?.name;
         if (!resolvedName && oi.cooking_notes && oi.cooking_notes.includes('VaMC Counter Item:')) {
-          resolvedName = oi.cooking_notes.replace('VaMC Counter Item:', '').trim();
+          resolvedName = oi.cooking_notes.replace(/VaMC Counter Item: (\[[A-Z]+\] )?/g, '').trim();
         }
         if (!resolvedName) {
           resolvedName = 'Counter Item';
@@ -1052,7 +1073,7 @@ export default function LuxuryGoldAdminPanel() {
               ${Array.isArray(it.selected_addons) && it.selected_addons.length > 0 ? it.selected_addons.map((a: any) => `
                 <div class="addon-line">+ Extra: ${escapeHtml(a.name)}</div>
               `).join('') : ''}
-              ${it.cooking_notes ? `<div class="note-box">>> NOTE: ${escapeHtml(it.cooking_notes)}</div>` : ''}
+              ${it.cooking_notes && !it.cooking_notes.startsWith('VaMC Counter Item:') ? `<div class="note-box">>> NOTE: ${escapeHtml(it.cooking_notes)}</div>` : ''}
             </div>
           `).join('')}
           <div class="divider"></div>
@@ -1303,15 +1324,16 @@ export default function LuxuryGoldAdminPanel() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* UNIFIED POS ENTRY BUTTON */}
+          <div className="flex items-center gap-2.5">
+            {/* BIG FULL GOLDEN VaMC POS BUTTON WITH NEON GOLDEN LIGHT */}
             <motion.button
+              whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.94 }}
               onClick={() => setShowVaMCModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[#D4AF37]/50 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer shadow-md"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black text-sm font-mono font-black tracking-wider transition cursor-pointer shadow-[0_0_25px_rgba(212,175,55,0.65)] ring-1 ring-[#FCF6BA]/80 hover:shadow-[0_0_35px_rgba(252,246,186,0.9)]"
               title="Quick Bill POS (VaMC, Ice Cream, Dry Fruits)"
             >
-              <Calculator className="w-4 h-4 text-[#D4AF37]" />
+              <Calculator className="w-4 h-4 text-black stroke-[2.5]" />
               <span>VaMC</span>
             </motion.button>
 
@@ -1322,7 +1344,7 @@ export default function LuxuryGoldAdminPanel() {
                 setTempTagline(tagline);
                 setIsNameModalOpen(true);
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
             >
               <Store className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Edit Brand</span>
@@ -1331,7 +1353,7 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={handleResetFloor}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
               title="Reset all tables to vacant"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -1342,7 +1364,7 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button 
               whileTap={{ scale: 0.92 }}
               onClick={loadAdminData} 
-              className="p-2 rounded-xl border border-white/[0.1] bg-white/[0.03] text-[#FCF6BA] hover:border-[#D4AF37]/40 cursor-pointer"
+              className="p-2.5 rounded-xl border border-white/[0.1] bg-white/[0.03] text-[#FCF6BA] hover:border-[#D4AF37]/40 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`} />
             </motion.button>
@@ -1350,7 +1372,7 @@ export default function LuxuryGoldAdminPanel() {
             <motion.button 
               whileTap={{ scale: 0.92 }}
               onClick={handleLogout} 
-              className="p-2 rounded-xl bg-white/[0.03] border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer" 
+              className="p-2.5 rounded-xl bg-white/[0.03] border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer" 
               title="Logout"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -1711,6 +1733,7 @@ export default function LuxuryGoldAdminPanel() {
                   const matchingTbl = tables.find(t => t.table_number === sess.table_number);
                   const finalAmt = Number(sess.total_amount || 0);
                   const hasCallAlert = waiterCalls.some(c => c.table_number === sess.table_number);
+                  const latestBatch = latestBatchBySession[sess.id];
 
                   return (
                     <div
@@ -1729,7 +1752,18 @@ export default function LuxuryGoldAdminPanel() {
                           <span className="text-sm font-bold block">{matchingTbl?.table_name || `Table #${sess.table_number}`}</span>
                           {hasCallAlert && <Bell className="w-3.5 h-3.5 text-amber-400 animate-bounce" />}
                         </div>
-                        <span className="text-[11px] opacity-80">{sess.customer_name || 'Guest'}</span>
+                        <span className="text-[11px] opacity-80 block">{sess.customer_name || 'Guest'}</span>
+                        {latestBatch && (
+                          <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                            isSelected
+                              ? 'bg-black/80 text-[#FCF6BA]'
+                              : latestBatch.status === 'pending_waiter'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                          }`}>
+                            #{latestBatch.order_pin || 'ORD'} • {latestBatch.status === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen'}
+                          </span>
+                        )}
                       </div>
                       <span className="text-base font-black">₹{finalAmt.toFixed(2)}</span>
                     </div>
@@ -1753,6 +1787,7 @@ export default function LuxuryGoldAdminPanel() {
                 const items = getSessionItemsDetailed(curSession.id);
                 const grossTotal = Number(curSession.total_amount || 0);
                 const matchingTbl = tables.find(t => t.table_number === curSession.table_number);
+                const latestBatch = latestBatchBySession[curSession.id];
 
                 // 10th Milestone Visit Reward
                 const cLoyalty = curSession.customer_phone ? loyaltyData[curSession.customer_phone] : null;
@@ -1770,9 +1805,21 @@ export default function LuxuryGoldAdminPanel() {
                   <div className="p-6 rounded-[32px] bg-gradient-to-b from-[#111115]/95 via-[#0b0b0e]/95 to-[#08080a]/95 border border-[#D4AF37]/35 backdrop-blur-3xl space-y-4 font-mono shadow-2xl">
                     <div className="flex justify-between items-center border-b border-white/10 pb-3">
                       <div>
-                        <span className="text-lg font-black text-white block">
-                          {matchingTbl?.table_name || `Table #${curSession.table_number}`}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-black text-white block">
+                            {matchingTbl?.table_name || `Table #${curSession.table_number}`}
+                          </span>
+                          {latestBatch && (
+                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1 ${
+                              latestBatch.status === 'pending_waiter'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+                                : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
+                            }`}>
+                              <Hash className="w-3 h-3" />
+                              {latestBatch.order_pin || 'ORD'} • {latestBatch.status === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen'}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-neutral-400">
                           Guest: <strong className="text-white">{curSession.customer_name || 'Guest'}</strong> ({curSession.customer_phone || '-'})
                         </span>
@@ -1801,7 +1848,7 @@ export default function LuxuryGoldAdminPanel() {
                       <div className="space-y-2 max-h-56 overflow-y-auto custom-gold-scrollbar p-3 rounded-[24px] bg-black/40 border border-white/5">
                         {items.map((it) => {
                           const isCancelled = it.item_status === 'cancelled';
-                          const dName = it.menu_items?.name_en || it.menu_items?.name || 'Dish #' + it.menu_item_id;
+                          const dName = it.menu_items?.name_en || it.menu_items?.name || (it.cooking_notes?.replace(/VaMC Counter Item: (\[[A-Z]+\] )?/g, '') || 'Counter Item');
                           const dPrice = Number(it.unit_price || it.menu_items?.price || 0);
                           const addOnsCost = Array.isArray(it.selected_addons)
                             ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
@@ -1870,7 +1917,7 @@ export default function LuxuryGoldAdminPanel() {
                               )}
 
                               {/* Customer Cooking Notes */}
-                              {it.cooking_notes && (
+                              {it.cooking_notes && !it.cooking_notes.startsWith('VaMC Counter Item:') && (
                                 <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2.5 py-1 rounded-lg border border-amber-500/30 font-sans">
                                   <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
                                   <span>Note: {it.cooking_notes}</span>
@@ -2388,7 +2435,7 @@ export default function LuxuryGoldAdminPanel() {
       </main>
 
       {/* ======================================================== */}
-      {/* UNIFIED VAMC POS MODAL (FAST +1 INCREMENTS & ATOMIC STOCK) */}
+      {/* UNIFIED VAMC POS MODAL (CLEAN SELECTION + OPTIMISTIC SYNC) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {showVaMCModal && (
@@ -2521,7 +2568,7 @@ export default function LuxuryGoldAdminPanel() {
                         </button>
                       </div>
 
-                      {/* Grid Items (+1 Increment on Every Tap) */}
+                      {/* Grid Items (Clean Luxury Gold Selection — No Red -1) */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
                         {displayItems.map(item => {
                           const itemPrice = posCategory === 'main' ? item.price : item.selling_price;
@@ -2529,7 +2576,8 @@ export default function LuxuryGoldAdminPanel() {
                           const isSelected = Boolean(inCartItem);
                           
                           return (
-                            <div
+                            <motion.div
+                              whileTap={{ scale: 0.96 }}
                               key={item.id}
                               onClick={() => {
                                 const newCart = inCartItem
@@ -2539,7 +2587,7 @@ export default function LuxuryGoldAdminPanel() {
                               }}
                               className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between select-none ${
                                 isSelected 
-                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-lg' 
+                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-[0_0_16px_rgba(212,175,55,0.25)]' 
                                   : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/[0.04]'
                               }`}
                             >
@@ -2547,7 +2595,7 @@ export default function LuxuryGoldAdminPanel() {
                                 <div className="flex justify-between items-center gap-1">
                                   <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
                                   {isSelected && (
-                                    <span className="px-1.5 py-0.5 rounded-md bg-[#D4AF37] text-black font-black text-[10px] shrink-0">
+                                    <span className="px-2 py-0.5 rounded-md bg-[#D4AF37] text-black font-black text-[10px] shrink-0 shadow-sm">
                                       {inCartItem.quantity}x
                                     </span>
                                   )}
@@ -2557,27 +2605,12 @@ export default function LuxuryGoldAdminPanel() {
                                   <span className={`text-[9px] font-bold block mt-0.5 ${item.stock_quantity > 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>Stock: {item.stock_quantity}</span>
                                 )}
                               </div>
-                              <div className="flex items-center justify-between mt-2">
-                                {isSelected ? (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const newCart = tabCart
-                                        .map(ci => (ci.id === item.id && ci.itemType === posCategory) ? { ...ci, quantity: ci.quantity - 1 } : ci)
-                                        .filter(ci => ci.quantity > 0);
-                                      updateCurrentTab({ cart: newCart });
-                                    }}
-                                    className="px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-rose-300 text-[9px] font-bold hover:bg-rose-900/80"
-                                  >
-                                    -1
-                                  </button>
-                                ) : <span />}
+                              <div className="flex items-center justify-end mt-2">
                                 <span className={`text-[9px] font-bold uppercase ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
-                                  +1 Add
+                                  {isSelected ? '✓ +1 More' : '+1 Add'}
                                 </span>
                               </div>
-                            </div>
+                            </motion.div>
                           );
                         })}
                         {displayItems.length === 0 && (
@@ -2715,28 +2748,41 @@ export default function LuxuryGoldAdminPanel() {
                             <span className="text-[#D4AF37] text-xl tracking-wide">₹{cartTotal.toFixed(2)}</span>
                           </div>
                           
-                          {/* ATOMIC CHECKOUT ENGINE */}
+                          {/* FAST OPTIMISTIC + ATOMIC CHECKOUT ENGINE */}
                           <button
                             disabled={loading || tabCart.length === 0}
                             onClick={async () => {
                               if (loading || tabCart.length === 0) return;
                               const total = cartTotal;
+                              const cartSnapshot = [...tabCart];
+                              const tabSnapshot = { ...currentTab };
+
+                              // 1. Optimistic local stock deduction for instant UI feedback
+                              setIceItems(prev => prev.map(i => {
+                                const sold = cartSnapshot.find(c => c.itemType === 'ice_cream' && c.id === i.id);
+                                return sold ? { ...i, stock_quantity: Math.max(0, (i.stock_quantity || 0) - sold.quantity) } : i;
+                              }));
+                              setDfItems(prev => prev.map(d => {
+                                const sold = cartSnapshot.find(c => c.itemType === 'df' && c.id === d.id);
+                                return sold ? { ...d, stock_quantity: Math.max(0, (d.stock_quantity || 0) - sold.quantity) } : d;
+                              }));
+
                               setLoading(true);
                               try {
                                 const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
                                   table_number: 0,
-                                  customer_name: currentTab.customerName.trim() || `${currentTab.name} Counter`,
-                                  customer_phone: currentTab.customerPhone.trim() || '0000000000',
+                                  customer_name: tabSnapshot.customerName.trim() || `${tabSnapshot.name} Counter`,
+                                  customer_phone: tabSnapshot.customerPhone.trim() || '0000000000',
                                   subtotal: total,
                                   total_amount: total,
                                   final_payable: total,
                                   status: 'completed',
                                   payment_status: 'paid',
-                                  payment_mode: currentTab.paymentMode
+                                  payment_mode: tabSnapshot.paymentMode
                                 }).select().single();
                                 if (sErr) throw sErr;
 
-                                const itemsPayload = tabCart.map(ci => ({
+                                const itemsPayload = cartSnapshot.map(ci => ({
                                   session_id: sess.id,
                                   menu_item_id: null, 
                                   quantity: ci.quantity,
@@ -2744,12 +2790,10 @@ export default function LuxuryGoldAdminPanel() {
                                   item_status: 'served',
                                   cooking_notes: `VaMC Counter Item: ${ci.name}`
                                 }));
-                                const { error: oiErr } = await supabase.from('order_items').insert(itemsPayload);
-                                if (oiErr) throw oiErr;
-                                
-                                // Atomic stock deduction via RPC
-                                await Promise.all(
-                                  tabCart
+
+                                await Promise.all([
+                                  supabase.from('order_items').insert(itemsPayload).then(({ error }) => { if (error) throw error; }),
+                                  ...cartSnapshot
                                     .filter(item => item.itemType === 'ice_cream' || item.itemType === 'df')
                                     .map(item =>
                                       supabase.rpc('adjust_inventory_stock', {
@@ -2758,11 +2802,11 @@ export default function LuxuryGoldAdminPanel() {
                                         p_delta: -item.quantity
                                       })
                                     )
-                                );
+                                ]);
 
-                                showToast(`Sale Complete! ₹${total.toFixed(2)} (${currentTab.paymentMode.toUpperCase()})`);
+                                showToast(`Sale Complete! ₹${total.toFixed(2)} (${tabSnapshot.paymentMode.toUpperCase()})`);
                                 
-                                const nextTabs = vamcTabs.filter(t => t.id !== currentTab.id);
+                                const nextTabs = vamcTabs.filter(t => t.id !== tabSnapshot.id);
                                 if (nextTabs.length === 0) {
                                   vamcTabCounter.current += 1;
                                   const freshId = `C${vamcTabCounter.current}`;
@@ -2773,15 +2817,15 @@ export default function LuxuryGoldAdminPanel() {
                                   setActiveVamcTabId(nextTabs[0].id);
                                 }
 
-                                loadCounterAndInventoryData();
                                 loadLiveOrdersAndSessions(selectedDate);
                               } catch (err: any) {
+                                loadCounterAndInventoryData();
                                 alert('Error: ' + err.message);
                               } finally {
                                 setLoading(false);
                               }
                             }}
-                            className="w-full py-3.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer hover:bg-[#c59b27] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(212,175,55,0.45)] cursor-pointer hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
                           </button>
