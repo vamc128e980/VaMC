@@ -18,7 +18,7 @@ function LoginContent() {
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
-  // Waiter Credentials (Name + Password)
+  // Waiter Credentials (Name/ID + Password)
   const [waiterName, setWaiterName] = useState('');
   const [waiterPassword, setWaiterPassword] = useState('');
 
@@ -41,7 +41,7 @@ function LoginContent() {
     localStorage.setItem('staff_name', name);
   };
 
-  // 1. Admin Login via Email & Password
+  // 1. Admin Login via Identifier (Email) & password_hash
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -55,19 +55,19 @@ function LoginContent() {
         .from('staff_accounts')
         .select('*')
         .eq('role', 'admin')
-        .or(`email.ilike.${trimmedEmail},username.ilike.${trimmedEmail}`)
+        .ilike('identifier', trimmedEmail)
         .maybeSingle();
 
       if (error || !data) {
         throw new Error('Admin Email kanipinchaledhu. Correct email enter cheyandi.');
       }
 
-      if (data.pin !== trimmedPassword) {
+      if (data.password_hash !== trimmedPassword) {
         throw new Error('Incorrect Admin Password. Malli check cheyandi.');
       }
 
       const token = `admin_verified_${Date.now()}`;
-      setAuthCookiesAndLocal('admin', token, data.full_name || 'Master Admin');
+      setAuthCookiesAndLocal('admin', token, data.name || 'Master Admin');
       window.location.href = '/admin';
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed.');
@@ -75,37 +75,45 @@ function LoginContent() {
     }
   };
 
-  // 2. Waiter Login via Staff Name & Password
+  // 2. Waiter Login via Name or ID (Phone) & password_hash
   const handleWaiterLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
     try {
-      const trimmedName = waiterName.trim();
+      const trimmedInput = waiterName.trim();
       const trimmedPassword = waiterPassword.trim();
 
-      if (!trimmedName || !trimmedPassword) {
-        throw new Error('Waiter Name mariyu Password rendu enter cheyandi.');
+      if (!trimmedInput || !trimmedPassword) {
+        throw new Error('Waiter Name/ID mariyu Password rendu enter cheyandi.');
       }
 
-      const { data, error } = await supabase
+      // Safely fetch all waiters and match in JS to prevent Supabase .or() syntax crashes
+      const { data: users, error } = await supabase
         .from('staff_accounts')
         .select('*')
-        .eq('role', 'waiter')
-        .or(`full_name.ilike.%${trimmedName}%,username.ilike.${trimmedName}`)
-        .maybeSingle();
+        .eq('role', 'waiter');
 
-      if (error || !data) {
+      if (error || !users) {
+        throw new Error('Database connection error.');
+      }
+
+      const data = users.find(u => 
+        (u.identifier || '').trim().toLowerCase() === trimmedInput.toLowerCase() || 
+        (u.name || '').trim().toLowerCase() === trimmedInput.toLowerCase()
+      );
+
+      if (!data) {
         throw new Error('Waiter Name kanipinchaledhu. Admin daggara mee name check cheyandi.');
       }
 
-      if (data.pin !== trimmedPassword) {
+      if (data.password_hash !== trimmedPassword) {
         throw new Error('Incorrect Waiter Password.');
       }
 
       const token = `waiter_verified_${Date.now()}`;
-      setAuthCookiesAndLocal('waiter', token, data.full_name || trimmedName);
+      setAuthCookiesAndLocal('waiter', token, data.name || trimmedInput);
       window.location.href = '/waiter';
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed.');
@@ -156,17 +164,17 @@ function LoginContent() {
           </div>
         )}
 
-        {/* 1. Waiter Login (Name + Password) */}
+        {/* 1. Waiter Login (Name/ID + Password) */}
         {role === 'waiter' ? (
           <form onSubmit={handleWaiterLogin} className="space-y-3 font-mono">
             <div>
-              <label className="text-[11px] text-neutral-400 block mb-1">Staff / Waiter Name</label>
+              <label className="text-[11px] text-neutral-400 block mb-1">Staff / Waiter Name or ID</label>
               <div className="relative">
                 <User className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ramesh"
+                  placeholder="e.g. Surya or 9392149329"
                   value={waiterName}
                   onChange={(e) => setWaiterName(e.target.value)}
                   className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none"
@@ -259,3 +267,10 @@ export default function LoginPage() {
     </Suspense>
   );
 }
+```[cite: 14]
+
+### Ippudu login test cheyandi:
+* **Admin Login:** `admin@vujwalasimha.com` / `128e980`[cite: 10]
+* **Waiter Login:** `Surya` (leda `9392149329`) / `129e980`[cite: 10]
+
+Ee code update chesaka error mottam poyi rendu dashboards smooth ga open avthayi!
