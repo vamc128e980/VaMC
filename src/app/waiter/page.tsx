@@ -127,14 +127,16 @@ export default function WaiterPanel() {
 
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. UPDATED AUTH GUARD: Verifies secure session with the API
+  // 1. SECURE AUTH GUARD
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const verifySession = async () => {
       try {
-        // Change '/api/auth' if your route.ts is in a different folder (e.g. '/api/login')
-        const res = await fetch('/api/auth', { method: 'GET' });
+        const res = await fetch('/api/auth', { 
+          method: 'GET',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         const data = await res.json();
 
         if (res.ok && data.authenticated && (data.role === 'waiter' || data.role === 'admin')) {
@@ -150,7 +152,7 @@ export default function WaiterPanel() {
         document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
         setIsAuthenticated(false);
         setAuthChecking(false);
-        window.location.replace('/'); // Redirects to login
+        window.location.replace('/login'); 
       }
     };
 
@@ -274,10 +276,9 @@ export default function WaiterPanel() {
     };
   }, [isAuthenticated]);
 
-  // UPDATED LOGOUT FUNCTION: Securely clears server cookie
+  // SECURE LOGOUT FUNCTION
   const handleLogout = async () => {
     try {
-      // Calls the DELETE method from your route.ts
       await fetch('/api/auth', { method: 'DELETE' });
     } catch (e) {
       console.error('Logout error', e);
@@ -287,7 +288,7 @@ export default function WaiterPanel() {
     if (typeof window !== 'undefined') {
       localStorage.clear();
     }
-    window.location.replace('/');
+    window.location.replace('/login');
   };
 
   const recalculateSessionBill = async (sessionId: string) => {
