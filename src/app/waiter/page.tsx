@@ -1389,6 +1389,3 @@ export default function WaiterPanel() {
     </div>
   );
 }
-```[cite: 12]
-
-GitHub lo ee code commit chesi, build complete ayyaka waiter login try cheyandi. Ippudu Waiter panel login success ayi direct ga open aypothundi[cite: 12]!
