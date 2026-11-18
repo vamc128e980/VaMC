@@ -19,7 +19,9 @@ import {
   Minus,
   Search,
   Hash,
-  Trash2
+  Trash2,
+  Sparkles,
+  ShoppingBag
 } from 'lucide-react';
 
 const fluidSpring = {
@@ -35,6 +37,14 @@ const triggerHaptic = (ms = 15) => {
   }
 };
 
+interface PunchCartEntry {
+  key: string;
+  menuItem: any;
+  quantity: number;
+  selectedAddons: any[];
+  selectedWeightVariant: any | null;
+}
+
 export default function WaiterPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
@@ -46,7 +56,7 @@ export default function WaiterPanel() {
     setTimeout(() => setToastMsg(prev => (prev === msg ? null : prev)), 3200);
   };
 
-  // Shared AudioContext to prevent browser context limit crash
+  // Shared AudioContext
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playChimeTone = () => {
     try {
@@ -91,21 +101,29 @@ export default function WaiterPanel() {
   const [batches, setBatches] = useState<any[]>([]);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [addons, setAddons] = useState<any[]>([]);
 
-  // Store table number instead of stale snapshot object
+  // Selected Table & Action Modals
   const [selectedTableNumber, setSelectedTableNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoadingBatchId, setActionLoadingBatchId] = useState<string | null>(null);
 
-  // Walk-in Direct Table Punching Modal
+  // Walk-in Direct Table Punching Modal (Grid + Categories + Add-ons)
   const [showPunchOrderModal, setShowPunchOrderModal] = useState(false);
   const [punchTable, setPunchTable] = useState<any | null>(null);
-  const [punchCart, setPunchCart] = useState<Record<number, number>>({});
+  const [punchCart, setPunchCart] = useState<PunchCartEntry[]>([]);
+  const [punchCategory, setPunchCategory] = useState<number | 'all'>('all');
   const [punchSearch, setPunchSearch] = useState('');
   const [punchNotes, setPunchNotes] = useState('');
   const [punchCustomerName, setPunchCustomerName] = useState('Walk-in Guest');
   const [punchCustomerPhone, setPunchCustomerPhone] = useState('9999999999');
+
+  // Add-on / Variant Customization Drawer inside Punch Modal
+  const [customizingPunchItem, setCustomizingPunchItem] = useState<any | null>(null);
+  const [selectedPunchAddonIds, setSelectedPunchAddonIds] = useState<number[]>([]);
+  const [selectedPunchVariant, setSelectedPunchVariant] = useState<any | null>(null);
 
   const [timeStr, setTimeStr] = useState('');
 
@@ -151,7 +169,6 @@ export default function WaiterPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  // Scoped Live Floor Data Loader (avoids downloading full historical DB)
   const loadFloorState = async () => {
     try {
       const [
@@ -196,14 +213,24 @@ export default function WaiterPanel() {
     }
   };
 
-  const loadMenuItems = async () => {
+  const loadMenuAndAddons = async () => {
     try {
-      const { data: mItems } = await supabase
-        .from('menu_items')
-        .select('id, name, name_en, price, is_available')
-        .eq('is_available', true)
-        .order('name_en');
+      const [
+        { data: cats },
+        { data: mItems },
+        { data: adns }
+      ] = await Promise.all([
+        supabase.from('categories').select('*').order('sort_order', { ascending: true }),
+        supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
+        supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true })
+      ]);
+
+      if (cats && cats.length > 0) {
+        setCategories(cats);
+        setPunchCategory(prev => (prev === 'all' ? cats[0].id : prev));
+      }
       if (mItems) setMenuItems(mItems);
+      if (adns) setAddons(adns);
     } catch (err) {
       console.error('Menu fetch error:', err);
     }
@@ -212,7 +239,7 @@ export default function WaiterPanel() {
   const loadWaiterData = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadFloorState(), loadMenuItems()]);
+      await Promise.all([loadFloorState(), loadMenuAndAddons()]);
     } finally {
       setLoading(false);
     }
@@ -239,7 +266,9 @@ export default function WaiterPanel() {
         loadFloorState();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'waiter_calls' }, () => loadFloorState())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadMenuItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadMenuAndAddons())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadMenuAndAddons())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadMenuAndAddons())
       .subscribe();
 
     return () => {
@@ -256,7 +285,6 @@ export default function WaiterPanel() {
     window.location.replace('/');
   };
 
-  // Recalculate Table Session Bill from live database items (prevents stale total drift)
   const recalculateSessionBill = async (sessionId: string) => {
     try {
       const { data: liveItems, error: fErr } = await supabase
@@ -289,7 +317,6 @@ export default function WaiterPanel() {
     }
   };
 
-  // Waiter edits quantity before kitchen verification
   const handleModifyQuantity = async (orderItemId: number, currentQty: number, delta: number, sessionId: string) => {
     if (loading) return;
     const nextQty = currentQty + delta;
@@ -306,7 +333,6 @@ export default function WaiterPanel() {
     }
   };
 
-  // Waiter cancels dish before kitchen verification
   const handleCancelDish = async (orderItemId: number, dishName: string, sessionId: string) => {
     if (loading) return;
     if (!confirm(`"${dishName}" dish ni remove cheyala?`)) return;
@@ -323,7 +349,6 @@ export default function WaiterPanel() {
     }
   };
 
-  // DIRECT VISUAL TOKEN VERIFICATION & DISPATCH TO KITCHEN
   const handleVerifyTokenAndSend = async (batch: any) => {
     if (actionLoadingBatchId) return;
     setActionLoadingBatchId(batch.id);
@@ -356,7 +381,6 @@ export default function WaiterPanel() {
     }
   };
 
-  // Mark Dish as Served
   const handleMarkItemServed = async (itemId: number) => {
     triggerHaptic(15);
     try {
@@ -368,7 +392,6 @@ export default function WaiterPanel() {
     }
   };
 
-  // Dismiss Waiter Call
   const handleDismissWaiterCall = async (callId: number) => {
     triggerHaptic(20);
     try {
@@ -380,16 +403,78 @@ export default function WaiterPanel() {
     }
   };
 
-  // Direct Walk-In Punch Order to Table (with live DB session check & atomic bill recalculation)
+  // =========================================================
+  // PUNCH CART HELPERS (WITH ADD-ONS & WEIGHT VARIANTS)
+  // =========================================================
+  const addPunchCartItem = (dish: any, chosenAddons: any[] = [], chosenVariant: any = null) => {
+    triggerHaptic(15);
+    const sortedAddonIds = chosenAddons.map(a => Number(a.id)).sort().join(',');
+    const variantKey = chosenVariant?.size || 'std';
+    const key = `${dish.id}-${variantKey}-${sortedAddonIds}`;
+
+    setPunchCart(prev => {
+      const existing = prev.find(e => e.key === key);
+      if (existing) {
+        return prev.map(e => e.key === key ? { ...e, quantity: e.quantity + 1 } : e);
+      }
+      return [...prev, {
+        key,
+        menuItem: dish,
+        quantity: 1,
+        selectedAddons: chosenAddons,
+        selectedWeightVariant: chosenVariant
+      }];
+    });
+  };
+
+  const updatePunchCartQty = (key: string, delta: number) => {
+    triggerHaptic(10);
+    setPunchCart(prev =>
+      prev
+        .map(e => e.key === key ? { ...e, quantity: e.quantity + delta } : e)
+        .filter(e => e.quantity > 0)
+    );
+  };
+
+  const handlePunchTileClick = (dish: any) => {
+    const applicableAddons = dish.has_addons
+      ? addons.filter(a => Array.isArray(dish.addon_ids) ? dish.addon_ids.map(Number).includes(Number(a.id)) : true)
+      : [];
+    const hasVariants = dish.is_retail_item && Array.isArray(dish.weight_variants) && dish.weight_variants.length > 0;
+
+    if (applicableAddons.length > 0 || hasVariants) {
+      setCustomizingPunchItem(dish);
+      setSelectedPunchAddonIds([]);
+      setSelectedPunchVariant(hasVariants ? dish.weight_variants[0] : null);
+    } else {
+      addPunchCartItem(dish, [], null);
+    }
+  };
+
+  const confirmPunchCustomization = () => {
+    if (!customizingPunchItem) return;
+    const chosenAddons = addons.filter(a => selectedPunchAddonIds.includes(Number(a.id)));
+    addPunchCartItem(customizingPunchItem, chosenAddons, selectedPunchVariant);
+    setCustomizingPunchItem(null);
+    setSelectedPunchAddonIds([]);
+    setSelectedPunchVariant(null);
+  };
+
+  const punchCartTotal = useMemo(() => {
+    return punchCart.reduce((sum, entry) => {
+      const basePr = Number(entry.selectedWeightVariant ? entry.selectedWeightVariant.price : entry.menuItem.price || 0);
+      const addonsPr = entry.selectedAddons.reduce((aSum, a) => aSum + Number(a.price || 0), 0);
+      return sum + ((basePr + addonsPr) * entry.quantity);
+    }, 0);
+  }, [punchCart]);
+
   const handlePunchOrderSubmit = async () => {
     if (!punchTable || loading) return;
-    const itemIds = Object.keys(punchCart).filter(id => punchCart[Number(id)] > 0);
-    if (itemIds.length === 0) return alert('At least 1 dish select cheyandi.');
+    if (punchCart.length === 0) return showToast('At least 1 dish select cheyandi.');
 
     setLoading(true);
     triggerHaptic(35);
     try {
-      // Check live DB for an active session on this table to avoid duplicate sessions
       const { data: liveSession } = await supabase
         .from('table_sessions')
         .select('id')
@@ -401,11 +486,6 @@ export default function WaiterPanel() {
 
       let sessionId = liveSession?.id;
 
-      const punchTotal = itemIds.reduce((sum, id) => {
-        const dish = menuItems.find(m => m.id === Number(id));
-        return sum + (Number(dish?.price || 0) * punchCart[Number(id)]);
-      }, 0);
-
       if (!sessionId) {
         const { data: newSession, error: sErr } = await supabase
           .from('table_sessions')
@@ -413,12 +493,12 @@ export default function WaiterPanel() {
             table_number: punchTable.table_number,
             customer_name: punchCustomerName.trim() || 'Walk-in Guest',
             customer_phone: punchCustomerPhone.trim() || '9999999999',
-            subtotal: punchTotal,
+            subtotal: punchCartTotal,
             cgst_amount: 0,
             sgst_amount: 0,
-            total_amount: punchTotal,
+            total_amount: punchCartTotal,
             discount_amount: 0,
-            final_payable: punchTotal,
+            final_payable: punchCartTotal,
             status: 'active',
             payment_status: 'unpaid'
           })
@@ -446,27 +526,28 @@ export default function WaiterPanel() {
 
       if (bErr) throw bErr;
 
-      const payload = itemIds.map(id => {
-        const dish = menuItems.find(m => m.id === Number(id));
+      const payload = punchCart.map(entry => {
+        const basePr = Number(entry.selectedWeightVariant ? entry.selectedWeightVariant.price : entry.menuItem.price || 0);
         return {
           batch_id: batch.id,
           session_id: sessionId,
-          menu_item_id: Number(id),
+          menu_item_id: entry.menuItem.id,
           station_id: 'kitchen_hot',
-          quantity: punchCart[Number(id)],
-          unit_price: Number(dish?.price || 0),
+          quantity: entry.quantity,
+          unit_price: basePr,
           item_status: 'preparing',
-          cooking_notes: punchNotes.trim() || null
+          cooking_notes: punchNotes.trim() || null,
+          selected_addons: entry.selectedAddons,
+          selected_weight_variant: entry.selectedWeightVariant?.size || null
         };
       });
 
       const { error: oiErr } = await supabase.from('order_items').insert(payload);
       if (oiErr) throw oiErr;
 
-      // Recalculate from live DB items so concurrent QR orders never overwrite total
       await recalculateSessionBill(sessionId);
 
-      setPunchCart({});
+      setPunchCart([]);
       setPunchNotes('');
       setShowPunchOrderModal(false);
       showToast(`Order punched to Table #${punchTable.table_number}!`);
@@ -477,7 +558,7 @@ export default function WaiterPanel() {
     }
   };
 
-  // Pre-index orderItems by batch_id for fast O(1) lookup
+  // Pre-index orderItems by batch_id
   const itemsByBatch = useMemo(() => {
     const map: Record<string, any[]> = {};
     for (const oi of orderItems) {
@@ -488,7 +569,6 @@ export default function WaiterPanel() {
     return map;
   }, [orderItems]);
 
-  // Live derived data for the currently open table modal (never goes stale)
   const selectedTableLive = useMemo(() => {
     if (selectedTableNumber === null) return null;
     const tbl = tables.find(t => t.table_number === selectedTableNumber);
@@ -499,12 +579,16 @@ export default function WaiterPanel() {
     return { ...tbl, activeSession, tableBatches };
   }, [selectedTableNumber, tables, sessions, batches]);
 
-  const filteredMenuItems = useMemo(() => {
+  const filteredPunchMenuItems = useMemo(() => {
     return menuItems.filter(m => {
       const name = (m.name_en || m.name || '').toLowerCase();
-      return name.includes(punchSearch.toLowerCase());
+      if (punchSearch.trim()) {
+        return name.includes(punchSearch.toLowerCase());
+      }
+      if (punchCategory === 'all') return true;
+      return m.category_id === punchCategory;
     });
-  }, [menuItems, punchSearch]);
+  }, [menuItems, punchSearch, punchCategory]);
 
   if (authChecking || !isAuthenticated) {
     return (
@@ -742,7 +826,9 @@ export default function WaiterPanel() {
                   <button
                     onClick={() => {
                       setPunchTable(t);
-                      setPunchCart({});
+                      setPunchCart([]);
+                      setPunchSearch('');
+                      setPunchNotes('');
                       setPunchCustomerName(activeSession?.customer_name || 'Walk-in Guest');
                       setPunchCustomerPhone(activeSession?.customer_phone || '9999999999');
                       setShowPunchOrderModal(true);
@@ -851,7 +937,6 @@ export default function WaiterPanel() {
                                   </span>
                                 </div>
 
-                                {/* Steward modifier buttons for pending items */}
                                 {isPending ? (
                                   <div className="flex items-center gap-1.5">
                                     <button
@@ -897,7 +982,6 @@ export default function WaiterPanel() {
                                 )}
                               </div>
 
-                              {/* Selected Add-ons Badges */}
                               {Array.isArray(item.selected_addons) && item.selected_addons.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {item.selected_addons.map((a: any, aIdx: number) => (
@@ -919,7 +1003,6 @@ export default function WaiterPanel() {
                         })}
                       </div>
 
-                      {/* ONE-TAP VERIFY & DISPATCH */}
                       {isPending && (
                         <div className="mt-3 pt-3 border-t border-amber-400/30 flex items-center justify-between gap-3">
                           <span className="text-[11px] font-mono text-neutral-300">
@@ -964,69 +1047,208 @@ export default function WaiterPanel() {
         )}
       </AnimatePresence>
 
-      {/* MODAL 2: Direct Walk-In Order Punching */}
+      {/* MODAL 2: Direct Walk-In Order Punching (Categories + Grid View + Add-ons) */}
       <AnimatePresence>
         {showPunchOrderModal && punchTable && (
-          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
             <motion.div
               initial={{ scale: 0.94, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.94, opacity: 0 }}
               transition={fluidSpring}
-              className="w-full max-w-lg bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[32px] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-gold-scrollbar font-mono text-xs"
+              className="w-full max-w-2xl bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[32px] p-5 sm:p-6 shadow-2xl space-y-3.5 max-h-[92vh] overflow-y-auto custom-gold-scrollbar font-mono text-xs relative"
             >
+              {/* Header */}
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div>
                   <h3 className="text-base font-black text-white uppercase">
                     Punch Order ➔ {punchTable.table_name || `Table #${punchTable.table_number}`}
                   </h3>
-                  <span className="text-[11px] text-[#D4AF37]">Direct Offline Order to Kitchen</span>
+                  <span className="text-[11px] text-[#D4AF37]">Tap dish to add or pick Add-ons</span>
                 </div>
-                <button onClick={() => setShowPunchOrderModal(false)} className="cursor-pointer"><X className="w-5 h-5 text-neutral-400" /></button>
+                <button onClick={() => setShowPunchOrderModal(false)} className="cursor-pointer p-1 hover:text-white text-neutral-400">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
+              {/* Search Bar */}
               <div className="relative">
-                <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-[#D4AF37]/80 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Search dish name..."
                   value={punchSearch}
                   onChange={(e) => setPunchSearch(e.target.value)}
-                  className="w-full bg-[#161619] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-white outline-none"
+                  className="w-full bg-[#161619] border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-white outline-none focus:border-[#D4AF37] transition"
                 />
               </div>
 
-              <div className="max-h-52 overflow-y-auto custom-gold-scrollbar space-y-1.5 p-2 bg-black/40 border border-white/5 rounded-2xl">
-                {filteredMenuItems.map(dish => {
-                  const qty = punchCart[dish.id] || 0;
+              {/* Categories Scrollable Pills (Same as QR Menu) */}
+              <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1 select-none">
+                <button
+                  type="button"
+                  onClick={() => { setPunchCategory('all'); setPunchSearch(''); }}
+                  className={`px-3.5 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap border transition cursor-pointer shrink-0 ${
+                    punchCategory === 'all' && !punchSearch
+                      ? 'bg-[#D4AF37] text-black border-transparent font-black'
+                      : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  All ({menuItems.length})
+                </button>
+                {categories.map((cat) => {
+                  const isSel = punchCategory === cat.id && !punchSearch;
                   return (
-                    <div key={dish.id} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-white block">{dish.name_en || dish.name}</span>
-                        <span className="text-[#D4AF37] font-bold">₹{Number(dish.price).toFixed(2)}</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {qty > 0 && (
-                          <button
-                            onClick={() => setPunchCart({ ...punchCart, [dish.id]: Math.max(0, qty - 1) })}
-                            className="p-1 rounded-lg bg-white/[0.05] text-white cursor-pointer"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {qty > 0 && <span className="font-black text-white px-1">{qty}</span>}
-                        <button
-                          onClick={() => setPunchCart({ ...punchCart, [dish.id]: qty + 1 })}
-                          className="p-1 rounded-lg bg-[#D4AF37] text-black font-black cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      key={cat.id}
+                      onClick={() => { setPunchCategory(cat.id); setPunchSearch(''); }}
+                      className={`px-3.5 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap border transition cursor-pointer shrink-0 ${
+                        isSel
+                          ? 'bg-[#D4AF37] text-black border-transparent font-black shadow-md'
+                          : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      {cat.name_en || cat.name}
+                    </button>
                   );
                 })}
               </div>
+
+              {/* Grid View of Menu Items */}
+              <div className="max-h-60 overflow-y-auto custom-gold-scrollbar p-2 bg-black/40 border border-white/5 rounded-2xl">
+                {filteredPunchMenuItems.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-500">No items found in this category.</div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {filteredPunchMenuItems.map(dish => {
+                      const matchingEntries = punchCart.filter(e => e.menuItem.id === dish.id);
+                      const totalDishQty = matchingEntries.reduce((s, e) => s + e.quantity, 0);
+                      const hasAddons = dish.has_addons && (Array.isArray(dish.addon_ids) ? dish.addon_ids.length > 0 : addons.length > 0);
+                      const hasVariants = dish.is_retail_item && Array.isArray(dish.weight_variants) && dish.weight_variants.length > 0;
+                      const isCustomizable = hasAddons || hasVariants;
+
+                      return (
+                        <div
+                          key={dish.id}
+                          onClick={() => handlePunchTileClick(dish)}
+                          className={`p-3 rounded-2xl border transition cursor-pointer flex flex-col justify-between select-none ${
+                            totalDishQty > 0
+                              ? 'bg-[#D4AF37]/15 border-[#D4AF37] shadow-md'
+                              : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/40'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-1">
+                              <span className="font-bold text-white text-xs line-clamp-2 leading-snug">
+                                {dish.name_en || dish.name}
+                              </span>
+                              {totalDishQty > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-[#D4AF37] text-black font-black text-[10px] shrink-0">
+                                  {totalDishQty}x
+                                </span>
+                              )}
+                            </div>
+                            {isCustomizable && (
+                              <span className="inline-flex items-center gap-1 text-[9px] text-amber-300 mt-1">
+                                <Sparkles className="w-2.5 h-2.5" /> + Add-ons
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/10">
+                            <span className="text-[#D4AF37] font-black text-xs">₹{Number(dish.price).toFixed(0)}</span>
+
+                            {totalDishQty > 0 ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const lastEntry = matchingEntries[matchingEntries.length - 1];
+                                    if (lastEntry) updatePunchCartQty(lastEntry.key, -1);
+                                  }}
+                                  className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="font-black text-white px-1">{totalDishQty}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePunchTileClick(dish)}
+                                  className="p-1 rounded-lg bg-[#D4AF37] text-black font-black cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="w-6 h-6 rounded-lg bg-[#D4AF37] text-black flex items-center justify-center font-black shadow-sm">
+                                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Items & Add-ons Summary Cart */}
+              {punchCart.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-[#D4AF37]/30 space-y-2">
+                  <div className="flex justify-between items-center border-b border-white/10 pb-1.5">
+                    <span className="text-[11px] font-black text-[#FCF6BA] uppercase flex items-center gap-1.5">
+                      <ShoppingBag className="w-3.5 h-3.5 text-[#D4AF37]" /> Selected Dishes ({punchCart.reduce((s, e) => s + e.quantity, 0)})
+                    </span>
+                    <span className="text-sm font-black text-[#D4AF37]">₹{punchCartTotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto custom-gold-scrollbar pr-1">
+                    {punchCart.map(entry => {
+                      const basePr = Number(entry.selectedWeightVariant ? entry.selectedWeightVariant.price : entry.menuItem.price || 0);
+                      const addonsPr = entry.selectedAddons.reduce((s, a) => s + Number(a.price || 0), 0);
+                      const lineAmt = (basePr + addonsPr) * entry.quantity;
+
+                      return (
+                        <div key={entry.key} className="flex items-center justify-between gap-2 text-[11px] border-b border-white/5 pb-1.5 last:border-b-0">
+                          <div className="truncate">
+                            <span className="text-white font-bold">
+                              {entry.menuItem.name_en || entry.menuItem.name}
+                              {entry.selectedWeightVariant ? ` (${entry.selectedWeightVariant.size})` : ''}
+                            </span>
+                            {entry.selectedAddons.length > 0 && (
+                              <span className="block text-[10px] text-amber-300">
+                                + {entry.selectedAddons.map(a => a.name).join(', ')}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[#D4AF37] font-bold">₹{lineAmt.toFixed(0)}</span>
+                            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5 border border-white/10">
+                              <button
+                                type="button"
+                                onClick={() => updatePunchCartQty(entry.key, -1)}
+                                className="p-1 text-white hover:text-rose-300 cursor-pointer"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="px-1 font-black text-white">{entry.quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => updatePunchCartQty(entry.key, 1)}
+                                className="p-1 text-[#D4AF37] cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-neutral-400 block mb-1">Cooking Instructions / Notes (Optional):</label>
@@ -1035,18 +1257,112 @@ export default function WaiterPanel() {
                   placeholder="e.g. Less ice, no sugar, parcel..."
                   value={punchNotes}
                   onChange={(e) => setPunchNotes(e.target.value)}
-                  className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
+                  className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37]"
                 />
               </div>
 
               <motion.button
                 whileTap={{ scale: 0.96 }}
-                disabled={loading}
+                disabled={loading || punchCart.length === 0}
                 onClick={handlePunchOrderSubmit}
                 className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer disabled:opacity-50"
               >
-                {loading ? 'Punching to Kitchen...' : 'Confirm & Dispatch to Kitchen'}
+                {loading
+                  ? 'Punching to Kitchen...'
+                  : `Confirm & Dispatch to Kitchen ${punchCart.length > 0 ? `(₹${punchCartTotal.toFixed(0)})` : ''}`}
               </motion.button>
+
+              {/* ADD-ONS / VARIANT PICKER OVERLAY INSIDE PUNCH MODAL */}
+              <AnimatePresence>
+                {customizingPunchItem && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+                  >
+                    <div className="w-full max-w-sm bg-[#121216] border border-[#D4AF37] rounded-[28px] p-5 space-y-4 shadow-2xl">
+                      <div className="flex justify-between items-center border-b border-white/10 pb-2.5">
+                        <div>
+                          <h4 className="font-black text-white text-sm">{customizingPunchItem.name_en || customizingPunchItem.name}</h4>
+                          <span className="text-[10px] text-[#D4AF37]">Base: ₹{Number(customizingPunchItem.price).toFixed(0)}</span>
+                        </div>
+                        <button onClick={() => setCustomizingPunchItem(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* Pack Sizes if Retail */}
+                      {customizingPunchItem.is_retail_item && Array.isArray(customizingPunchItem.weight_variants) && customizingPunchItem.weight_variants.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-neutral-400 text-[11px] block">Select Pack Size:</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {customizingPunchItem.weight_variants.map((v: any, idx: number) => {
+                              const isSel = selectedPunchVariant?.size === v.size;
+                              return (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setSelectedPunchVariant(v)}
+                                  className={`p-2.5 rounded-xl border text-center cursor-pointer transition ${
+                                    isSel ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white' : 'bg-white/[0.02] border-white/10 text-neutral-300'
+                                  }`}
+                                >
+                                  <span className="font-bold block">{v.size}</span>
+                                  <span className="text-[#D4AF37] font-black">₹{Number(v.price).toFixed(0)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add-ons List */}
+                      {customizingPunchItem.has_addons && (
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto custom-gold-scrollbar pr-1">
+                          <span className="text-neutral-400 text-[11px] block">Select Add-ons (Optional):</span>
+                          {addons
+                            .filter(a => Array.isArray(customizingPunchItem.addon_ids) ? customizingPunchItem.addon_ids.map(Number).includes(Number(a.id)) : true)
+                            .map(addon => {
+                              const isChecked = selectedPunchAddonIds.includes(Number(addon.id));
+                              return (
+                                <div
+                                  key={addon.id}
+                                  onClick={() => {
+                                    const aId = Number(addon.id);
+                                    if (isChecked) setSelectedPunchAddonIds(selectedPunchAddonIds.filter(id => id !== aId));
+                                    else setSelectedPunchAddonIds([...selectedPunchAddonIds, aId]);
+                                  }}
+                                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                                    isChecked ? 'bg-[#D4AF37]/15 border-[#D4AF37] text-white' : 'bg-white/[0.02] border-white/10 text-neutral-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center text-black font-black ${
+                                      isChecked ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-white/30'
+                                    }`}>
+                                      {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                    </div>
+                                    <span className="font-bold">{addon.name}</span>
+                                  </div>
+                                  <span className="text-[#D4AF37] font-black">+₹{Number(addon.price).toFixed(0)}</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={confirmPunchCustomization}
+                        className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer hover:bg-[#c59b27]"
+                      >
+                        Add Item to Order
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </div>
         )}
