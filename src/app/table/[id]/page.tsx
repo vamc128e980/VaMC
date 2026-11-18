@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import AdminSecurityModal from '@/components/AdminSecurityModal';
+import WaiterSecurityModal from '@/components/WaiterSecurityModal';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import { 
   Plus, Minus, ShoppingBag, X, Receipt, Sparkles, Image as ImgIcon, 
@@ -629,7 +631,24 @@ export default function LuxuryCustomerTablePage() {
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImgIcon className="w-5 h-5" /></div>
                     )}
-                    <span className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-full ${item.food_type === 'non_veg' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                    {/* FSSAI Compliant Veg (Green Dot in Square) & Non-Veg (Red Triangle in Square) Symbol */}
+                    {item.food_type === 'non_veg' ? (
+                      <span
+                        title="Non-Vegetarian"
+                        className="absolute top-1.5 left-1.5 w-3.5 h-3.5 rounded-[3px] bg-black/80 backdrop-blur-sm border-[1.5px] border-red-500 flex items-center justify-center shadow-md"
+                      >
+                        <svg viewBox="0 0 12 12" className="w-2 h-2 fill-red-500">
+                          <polygon points="6,1.5 11,10.5 1,10.5" />
+                        </svg>
+                      </span>
+                    ) : (
+                      <span
+                        title="Vegetarian"
+                        className="absolute top-1.5 left-1.5 w-3.5 h-3.5 rounded-[3px] bg-black/80 backdrop-blur-sm border-[1.5px] border-emerald-500 flex items-center justify-center shadow-md"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      </span>
+                    )}
                   </div>
                   <h4 className="text-[11px] font-bold text-white line-clamp-1">{dishTitle}</h4>
                 </div>
