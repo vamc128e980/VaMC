@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import { supabase } from '@/lib/supabase';
 
-const AUTH_SECRET = process.env.AUTH_SECRET || 'change-this-in-vercel-env-immediately';
+const AUTH_SECRET = process.env.AUTH_SECRET || 'vamc-royal-secret-key-2026';
 
 function signSession(role: string, name: string): string {
-  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
   const payload = `${role}|${name}|${expiresAt}`;
   const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
   return Buffer.from(`${payload}|${sig}`).toString('base64url');
@@ -25,6 +24,7 @@ function verifySession(token: string): { valid: boolean; role?: string; name?: s
       .update(`${role}|${name}|${expiresAtStr}`)
       .digest('hex');
 
+    if (sig.length !== expectedSig.length) return { valid: false };
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
       return { valid: false };
     }
@@ -34,7 +34,7 @@ function verifySession(token: string): { valid: boolean; role?: string; name?: s
   }
 }
 
-// 1. GET METHOD: Server-Verified Session Guard
+// 1. GET: Verify Active HttpOnly Session
 export async function GET() {
   try {
     const cookieStore = await cookies();
@@ -55,11 +55,11 @@ export async function GET() {
       name: check.name
     });
   } catch {
-    return NextResponse.json({ authenticated: false, error: 'Session check failed' }, { status: 500 });
+    return NextResponse.json({ authenticated: false }, { status: 500 });
   }
 }
 
-// 2. POST METHOD: Secure Login Authorization
+// 2. POST: Login via Supabase staff_accounts
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -79,22 +79,9 @@ export async function POST(request: Request) {
       .eq('identifier', cleanId)
       .maybeSingle();
 
-    if (error || !user || !user.password_hash) {
+    if (error || !user || user.password_hash !== cleanPass) {
       return NextResponse.json(
-        { error: 'Invalid credentials. Check your details and try again.' },
-        { status: 401 }
-      );
-    }
-
-    // Supports bcrypt hashes (and legacy plaintext fallback during migration)
-    const isBcrypt = user.password_hash.startsWith('$2a$') || user.password_hash.startsWith('$2b$');
-    const passwordMatches = isBcrypt
-      ? await bcrypt.compare(cleanPass, user.password_hash)
-      : user.password_hash === cleanPass;
-
-    if (!passwordMatches) {
-      return NextResponse.json(
-        { error: 'Invalid credentials. Check your details and try again.' },
+        { error: 'Invalid credentials. Please verify your details.' },
         { status: 401 }
       );
     }
@@ -127,11 +114,11 @@ export async function POST(request: Request) {
 
     return response;
   } catch {
-    return NextResponse.json({ error: 'Server authentication failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Server authentication failed.' }, { status: 500 });
   }
 }
 
-// 3. DELETE METHOD: Proper HttpOnly Cookie Logout
+// 3. DELETE: Clear Session Cookies on Logout
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
   response.cookies.set('staff_role', '', { path: '/', maxAge: 0 });
