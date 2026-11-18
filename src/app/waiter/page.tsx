@@ -127,36 +127,34 @@ export default function WaiterPanel() {
 
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. Auth Guard
+  // 1. UPDATED AUTH GUARD: Verifies secure session with the API
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const rawCookies = document.cookie || '';
-    const cookies = rawCookies.split(';').map(c => c.trim());
-    const roleCookie = cookies.find(c => c.startsWith('staff_role='));
-    const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
-    const localRole = localStorage.getItem('staff_role')?.toLowerCase();
-    const token = localStorage.getItem('session_token');
-    const storedName = localStorage.getItem('staff_name');
 
-    if (storedName) setStaffName(storedName);
+    const verifySession = async () => {
+      try {
+        // Change '/api/auth' if your route.ts is in a different folder (e.g. '/api/login')
+        const res = await fetch('/api/auth', { method: 'GET' });
+        const data = await res.json();
 
-    const activeRole = cookieRole || localRole;
-    const hasValidToken = Boolean(token && (token.startsWith('waiter_verified_') || token.startsWith('admin_verified_')));
-
-    if ((activeRole === 'waiter' || activeRole === 'admin') && hasValidToken) {
-      if (!cookieRole) {
-        document.cookie = `staff_role=${activeRole}; path=/; max-age=86400; SameSite=Lax`;
+        if (res.ok && data.authenticated && (data.role === 'waiter' || data.role === 'admin')) {
+          setStaffName(data.name || 'Floor Steward');
+          setIsAuthenticated(true);
+          setAuthChecking(false);
+        } else {
+          throw new Error('Not authenticated');
+        }
+      } catch (err) {
+        localStorage.clear();
+        document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+        document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+        setIsAuthenticated(false);
+        setAuthChecking(false);
+        window.location.replace('/'); // Redirects to login
       }
-      setIsAuthenticated(true);
-      setAuthChecking(false);
-    } else {
-      localStorage.clear();
-      document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-      document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-      setIsAuthenticated(false);
-      setAuthChecking(false);
-      window.location.replace('/login');
-    }
+    };
+
+    verifySession();
   }, []);
 
   // Live Digital Clock
@@ -276,7 +274,14 @@ export default function WaiterPanel() {
     };
   }, [isAuthenticated]);
 
-  const handleLogout = () => {
+  // UPDATED LOGOUT FUNCTION: Securely clears server cookie
+  const handleLogout = async () => {
+    try {
+      // Calls the DELETE method from your route.ts
+      await fetch('/api/auth', { method: 'DELETE' });
+    } catch (e) {
+      console.error('Logout error', e);
+    }
     document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') {
