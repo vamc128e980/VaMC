@@ -63,7 +63,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const cleanId = (body?.identifier || '').trim().toLowerCase();
+    const cleanId = (body?.identifier || '').trim(); // toLowerCase theesesam, case-insensitive match kosam
     const cleanPass = (body?.password || '').trim();
 
     if (!cleanId || !cleanPass) {
@@ -73,11 +73,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: user, error } = await supabase
+    // KOTHA LOGIC: Identifier thonaina leda Name thonaina match chesthundhi (Case-insensitive ga)
+    const { data: users, error } = await supabase
       .from('staff_accounts')
       .select('role, identifier, password_hash, name')
-      .eq('identifier', cleanId)
-      .maybeSingle();
+      .or(`identifier.ilike.${cleanId},name.ilike.${cleanId}`);
+
+    // Match ayina first user ni thesukuntundi
+    const user = users && users.length > 0 ? users[0] : null;
 
     if (error || !user || user.password_hash !== cleanPass) {
       return NextResponse.json(
