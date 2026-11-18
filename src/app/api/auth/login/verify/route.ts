@@ -1,73 +1,12 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import crypto from 'crypto';
-import { supabase } from '@/lib/supabase';
-
-const AUTH_SECRET = process.env.AUTH_SECRET || 'vamc-royal-secret-key-2026';
-
-function signSession(role: string, name: string): string {
-  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-  const payload = `${role}|${name}|${expiresAt}`;
-  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
-  return Buffer.from(`${payload}|${sig}`).toString('base64url');
-}
-
-function verifySession(token: string): { valid: boolean; role?: string; name?: string } {
-  try {
-    const decoded = Buffer.from(token, 'base64url').toString('utf8');
-    const [role, name, expiresAtStr, sig] = decoded.split('|');
-    if (!role || !expiresAtStr || !sig) return { valid: false };
-    if (Date.now() > Number(expiresAtStr)) return { valid: false };
-
-    const expectedSig = crypto
-      .createHmac('sha256', AUTH_SECRET)
-      .update(`${role}|${name}|${expiresAtStr}`)
-      .digest('hex');
-
-    if (sig.length !== expectedSig.length) return { valid: false };
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
-      return { valid: false };
-    }
-    return { valid: true, role, name };
-  } catch {
-    return { valid: false };
-  }
-}
-
-// 1. GET: Verify Active HttpOnly Session
-export async function GET() {
-  try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get('session_token')?.value;
-
-    if (!sessionToken) {
-      return NextResponse.json({ authenticated: false }, { status: 401 });
-    }
-
-    const check = verifySession(sessionToken);
-    if (!check.valid || !check.role) {
-      return NextResponse.json({ authenticated: false }, { status: 401 });
-    }
-
-    return NextResponse.json({
-      authenticated: true,
-      role: check.role,
-      name: check.name
-    });
-  } catch {
-    return NextResponse.json({ authenticated: false }, { status: 500 });
-  }
-}
-
 // 2. POST: Login via Supabase staff_accounts
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // UPDATED LOGIC: Frontend nunchi em peru tho (identifier/username/name) vachina capture chesthundi
-    const rawId = body?.identifier || body?.username || body?.name || body?.waiterName || '';
+    // FIX 1: Frontend nunchi 'pin', 'loginId', 'waiterName' ila eh peru tho vachina accept chesthundi
+    const rawId = body?.identifier || body?.username || body?.name || body?.waiterName || body?.loginId || '';
     const cleanId = rawId.trim(); 
-    const cleanPass = (body?.password || '').trim();
+    const cleanPass = (body?.password || body?.pin || '').trim();
 
     if (!cleanId || !cleanPass) {
       return NextResponse.json(
@@ -76,16 +15,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // LOGIC: Identifier thonaina leda Name thonaina match chesthundhi (Case-insensitive ga)
+    // FIX 2: Variables chuttu double quotes ("") pettam. Deeni valla spaces unna names ki crash avvadu!
     const { data: users, error } = await supabase
       .from('staff_accounts')
       .select('role, identifier, password_hash, name')
-      .or(`identifier.ilike.${cleanId},name.ilike.${cleanId}`);
+      .or(`identifier.ilike."${cleanId}",name.ilike."${cleanId}"`);
 
-    // Match ayina first user ni thesukuntundi
     const user = users && users.length > 0 ? users[0] : null;
 
+    // Password exact ga match ayyindo ledo check chesthundi
     if (error || !user || user.password_hash !== cleanPass) {
+      console.error("Login Error:", error?.message || "Invalid password/ID");
       return NextResponse.json(
         { error: 'Invalid credentials. Please verify your details.' },
         { status: 401 }
@@ -119,15 +59,8 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch {
+  } catch (err) {
+    console.error("Server catch block error:", err);
     return NextResponse.json({ error: 'Server authentication failed.' }, { status: 500 });
   }
-}
-
-// 3. DELETE: Clear Session Cookies on Logout
-export async function DELETE() {
-  const response = NextResponse.json({ success: true });
-  response.cookies.set('staff_role', '', { path: '/', maxAge: 0 });
-  response.cookies.set('session_token', '', { httpOnly: true, path: '/', maxAge: 0 });
-  return response;
 }
