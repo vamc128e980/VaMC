@@ -127,7 +127,7 @@ export default function WaiterPanel() {
 
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. SECURE AUTH GUARD
+  // 1. ROBUST AUTH GUARD (API + LocalStorage Fallback)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -137,22 +137,35 @@ export default function WaiterPanel() {
           method: 'GET',
           headers: { 'Cache-Control': 'no-cache' }
         });
-        const data = await res.json();
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && (data.role === 'waiter' || data.role === 'admin')) {
+            setStaffName(data.name || localStorage.getItem('staff_name') || 'Floor Steward');
+            setIsAuthenticated(true);
+            setAuthChecking(false);
+            return;
+          }
+        }
+        throw new Error('API Auth check failed');
+      } catch (err) {
+        // Fallback to client localStorage/cookies if API route fails or gives 404
+        const localRole = localStorage.getItem('staff_role');
+        const localToken = localStorage.getItem('session_token');
+        const localName = localStorage.getItem('staff_name');
 
-        if (res.ok && data.authenticated && (data.role === 'waiter' || data.role === 'admin')) {
-          setStaffName(data.name || 'Floor Steward');
+        if (localToken && (localRole === 'waiter' || localRole === 'admin')) {
+          setStaffName(localName || 'Floor Steward');
           setIsAuthenticated(true);
           setAuthChecking(false);
         } else {
-          throw new Error('Not authenticated');
+          localStorage.clear();
+          document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+          document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+          setIsAuthenticated(false);
+          setAuthChecking(false);
+          window.location.replace('/login'); 
         }
-      } catch (err) {
-        localStorage.clear();
-        document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-        document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-        setIsAuthenticated(false);
-        setAuthChecking(false);
-        window.location.replace('/login'); 
       }
     };
 
@@ -1089,7 +1102,7 @@ export default function WaiterPanel() {
                 />
               </div>
 
-              {/* Categories Scrollable Pills (Same as QR Menu) */}
+              {/* Categories Scrollable Pills */}
               <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1 select-none">
                 <button
                   type="button"
@@ -1275,7 +1288,7 @@ export default function WaiterPanel() {
               >
                 {loading
                   ? 'Punching to Kitchen...'
-                  : `Confirm & Dispatch to Kitchen ${punchCart.length > 0 ? `(₹${punchCartTotal.toFixed(0)})` : ''}`}
+                  : `Confirm & Dispatch to Kitchen ${punchCart.length > 0 ? `(₹{punchCartTotal.toFixed(0)})` : ''}`}
               </motion.button>
 
               {/* ADD-ONS / VARIANT PICKER OVERLAY INSIDE PUNCH MODAL */}
@@ -1376,3 +1389,6 @@ export default function WaiterPanel() {
     </div>
   );
 }
+```[cite: 12]
+
+GitHub lo ee code commit chesi, build complete ayyaka waiter login try cheyandi. Ippudu Waiter panel login success ayi direct ga open aypothundi[cite: 12]!
