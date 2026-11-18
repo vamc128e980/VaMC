@@ -56,7 +56,7 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
       const updates: { identifier?: string; password_hash?: string; updated_at?: string } = {
         updated_at: new Date().toISOString()
       };
-      if (newEmail.trim()) updates.identifier = newEmail.trim();
+      if (newEmail.trim()) updates.identifier = newEmail.trim().toLowerCase();
       if (newPassword.trim()) updates.password_hash = newPassword.trim();
 
       if (!newEmail.trim() && !newPassword.trim()) {
@@ -196,3 +196,4 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
     </div>
   );
 }
+```[cite: 23]
