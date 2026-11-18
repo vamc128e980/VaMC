@@ -1,3 +1,33 @@
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import crypto from 'crypto';
+import { supabase } from '@/lib/supabase';
+
+const AUTH_SECRET = process.env.AUTH_SECRET || 'vamc-royal-secret-key-2026';
+
+function signSession(role: string, name: string): string {
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  const payload = `${role}|${name}|${expiresAt}`;
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}|${sig}`).toString('base64url');
+}
+
+// 1. GET: Verify Active HttpOnly Session
+export async function GET() {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token')?.value;
+
+    if (!sessionToken) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
+    }
+
+    return NextResponse.json({ authenticated: true });
+  } catch {
+    return NextResponse.json({ authenticated: false }, { status: 500 });
+  }
+}
+
 // 2. POST: Login via Supabase staff_accounts
 export async function POST(request: Request) {
   try {
@@ -13,7 +43,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch all staff records to match safely in JS and avoid Supabase query syntax errors
     const { data: users, error } = await supabase
       .from('staff_accounts')
       .select('role, identifier, password_hash, name');
@@ -22,7 +51,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database connection error.' }, { status: 500 });
     }
 
-    // Match either identifier (email/phone) or name case-insensitively
     const user = users?.find(u => 
       (u.identifier || '').toLowerCase() === cleanId || 
       (u.name || '').toLowerCase() === cleanId
@@ -65,4 +93,12 @@ export async function POST(request: Request) {
   } catch (err) {
     return NextResponse.json({ error: 'Server authentication failed.' }, { status: 500 });
   }
+}
+
+// 3. DELETE: Logout
+export async function DELETE() {
+  const response = NextResponse.json({ success: true });
+  response.cookies.set('staff_role', '', { path: '/', maxAge: 0 });
+  response.cookies.set('session_token', '', { httpOnly: true, path: '/', maxAge: 0 });
+  return response;
 }
