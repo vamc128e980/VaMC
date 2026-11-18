@@ -4,7 +4,6 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
 import { ShieldCheck, UserCheck, Mail, Lock, User, ArrowRight, Store } from 'lucide-react';
 
 function LoginContent() {
@@ -14,12 +13,10 @@ function LoginContent() {
 
   const [role, setRole] = useState<'waiter' | 'admin'>('waiter');
   
-  // Admin Credentials (Email + Password)
+  // Credentials States
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
-
-  // Waiter Credentials (Name/ID + Password)
-  const [waiterName, setWaiterName] = useState('');
+  const [waiterInput, setWaiterInput] = useState('');
   const [waiterPassword, setWaiterPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -33,88 +30,43 @@ function LoginContent() {
     }
   }, [queryRole]);
 
-  const setAuthCookiesAndLocal = (userRole: 'admin' | 'waiter', token: string, name: string) => {
-    document.cookie = `staff_role=${userRole}; path=/; max-age=86400; SameSite=Lax`;
-    document.cookie = `session_token=${token}; path=/; max-age=86400; SameSite=Lax`;
-    localStorage.setItem('staff_role', userRole);
-    localStorage.setItem('session_token', token);
-    localStorage.setItem('staff_name', name);
-  };
-
-  // 1. Admin Login via Identifier (Email) & password_hash
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Unified Secure Login Handler via Backend API (/api/auth)
+  const handleLoginSubmit = async (identifierVal: string, passwordVal: string, targetRole: 'admin' | 'waiter') => {
     setErrorMsg('');
     setLoading(true);
 
     try {
-      const trimmedEmail = adminEmail.trim().toLowerCase();
-      const trimmedPassword = adminPassword.trim();
+      const cleanId = identifierVal.trim();
+      const cleanPass = passwordVal.trim();
 
-      const { data, error } = await supabase
-        .from('staff_accounts')
-        .select('*')
-        .eq('role', 'admin')
-        .ilike('identifier', trimmedEmail)
-        .maybeSingle();
-
-      if (error || !data) {
-        throw new Error('Admin Email kanipinchaledhu. Correct email enter cheyandi.');
+      if (!cleanId || !cleanPass) {
+        throw new Error('All fields are required.');
       }
 
-      if (data.password_hash !== trimmedPassword) {
-        throw new Error('Incorrect Admin Password. Malli check cheyandi.');
+      // Calls route.ts POST method which properly verifies Supabase and creates encrypted session cookies
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId, password: cleanPass })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Invalid credentials. Please verify your details.');
       }
 
-      const token = `admin_verified_${Date.now()}`;
-      setAuthCookiesAndLocal('admin', token, data.name || 'Master Admin');
-      window.location.href = '/admin';
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Login failed.');
-      setLoading(false);
-    }
-  };
-
-  // 2. Waiter Login via Name or ID (Phone) & password_hash
-  const handleWaiterLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setLoading(true);
-
-    try {
-      const trimmedInput = waiterName.trim();
-      const trimmedPassword = waiterPassword.trim();
-
-      if (!trimmedInput || !trimmedPassword) {
-        throw new Error('Waiter Name/ID mariyu Password rendu enter cheyandi.');
+      // Role check
+      if (data.role !== targetRole) {
+        throw new Error(`Access denied. This account is not a ${targetRole}.`);
       }
 
-      // Safely fetch all waiters and match in JS to prevent Supabase .or() syntax crashes
-      const { data: users, error } = await supabase
-        .from('staff_accounts')
-        .select('*')
-        .eq('role', 'waiter');
-
-      if (error || !users) {
-        throw new Error('Database connection error.');
+      // Successful redirect based on verified role
+      if (data.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/waiter';
       }
-
-      const data = users.find(u => 
-        (u.identifier || '').trim().toLowerCase() === trimmedInput.toLowerCase() || 
-        (u.name || '').trim().toLowerCase() === trimmedInput.toLowerCase()
-      );
-
-      if (!data) {
-        throw new Error('Waiter Name kanipinchaledhu. Admin daggara mee name check cheyandi.');
-      }
-
-      if (data.password_hash !== trimmedPassword) {
-        throw new Error('Incorrect Waiter Password.');
-      }
-
-      const token = `waiter_verified_${Date.now()}`;
-      setAuthCookiesAndLocal('waiter', token, data.name || trimmedInput);
-      window.location.href = '/waiter';
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed.');
       setLoading(false);
@@ -164,9 +116,12 @@ function LoginContent() {
           </div>
         )}
 
-        {/* 1. Waiter Login (Name/ID + Password) */}
+        {/* 1. Waiter Login */}
         {role === 'waiter' ? (
-          <form onSubmit={handleWaiterLogin} className="space-y-3 font-mono">
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleLoginSubmit(waiterInput, waiterPassword, 'waiter'); }} 
+            className="space-y-3 font-mono"
+          >
             <div>
               <label className="text-[11px] text-neutral-400 block mb-1">Staff / Waiter Name or ID</label>
               <div className="relative">
@@ -175,8 +130,8 @@ function LoginContent() {
                   type="text"
                   required
                   placeholder="e.g. Surya or 9392149329"
-                  value={waiterName}
-                  onChange={(e) => setWaiterName(e.target.value)}
+                  value={waiterInput}
+                  onChange={(e) => setWaiterInput(e.target.value)}
                   className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none"
                 />
               </div>
@@ -208,8 +163,11 @@ function LoginContent() {
             </motion.button>
           </form>
         ) : (
-          /* 2. Admin Login (Email + Password) */
-          <form onSubmit={handleAdminLogin} className="space-y-3 font-mono">
+          /* 2. Admin Login */
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleLoginSubmit(adminEmail, adminPassword, 'admin'); }} 
+            className="space-y-3 font-mono"
+          >
             <div>
               <label className="text-[11px] text-neutral-400 block mb-1">Admin Email Address</label>
               <div className="relative">
