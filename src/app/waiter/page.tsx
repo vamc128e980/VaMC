@@ -1,10 +1,8 @@
-// @ts-nocheck
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 import { 
   Bell, 
   CheckCircle2, 
@@ -13,22 +11,19 @@ import {
   RefreshCw, 
   ChefHat, 
   Receipt, 
-  Sparkles, 
   Check, 
   X, 
   LogOut, 
   MessageSquare,
   Plus,
   Minus,
-  Droplets,
   Search,
   Hash,
-  Trash2,
-  ShieldCheck
+  Trash2
 } from 'lucide-react';
 
 const fluidSpring = {
-  type: 'spring',
+  type: 'spring' as const,
   stiffness: 440,
   damping: 32,
   mass: 0.55
@@ -36,48 +31,59 @@ const fluidSpring = {
 
 const triggerHaptic = (ms = 15) => {
   if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-    try { navigator.vibrate(ms); } catch (e) {}
-  }
-};
-
-const playChimeTone = () => {
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(880, ctx.currentTime);
-    osc1.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
-
-    osc2.type = 'triangle';
-    osc2.frequency.setValueAtTime(587.33, ctx.currentTime);
-
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-
-    osc1.connect(gainNode);
-    osc2.connect(gainNode);
-    gainNode.connect(ctx.destination);
-
-    osc1.start();
-    osc2.start();
-    osc1.stop(ctx.currentTime + 0.6);
-    osc2.stop(ctx.currentTime + 0.6);
-  } catch (e) {
-    console.error('Audio play error:', e);
+    try { navigator.vibrate(ms); } catch {}
   }
 };
 
 export default function WaiterPanel() {
-  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
   const [staffName, setStaffName] = useState('Floor Steward');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(prev => (prev === msg ? null : prev)), 3200);
+  };
+
+  // Shared AudioContext to prevent browser context limit crash
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const playChimeTone = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
+
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(587.33, ctx.currentTime);
+
+      gainNode.gain.setValueAtTime(0.25, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc1.start();
+      osc2.start();
+      osc1.stop(ctx.currentTime + 0.55);
+      osc2.stop(ctx.currentTime + 0.55);
+    } catch (e) {
+      console.error('Audio play error:', e);
+    }
+  };
 
   // Core Data States
   const [tables, setTables] = useState<any[]>([]);
@@ -87,8 +93,8 @@ export default function WaiterPanel() {
   const [waiterCalls, setWaiterCalls] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]);
 
-  // Selected Table & Action Modals
-  const [selectedTable, setSelectedTable] = useState<any | null>(null);
+  // Store table number instead of stale snapshot object
+  const [selectedTableNumber, setSelectedTableNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoadingBatchId, setActionLoadingBatchId] = useState<string | null>(null);
 
@@ -105,34 +111,33 @@ export default function WaiterPanel() {
 
   // 1. Auth Guard
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const rawCookies = document.cookie || '';
-      const cookies = rawCookies.split(';').map(c => c.trim());
-      const roleCookie = cookies.find(c => c.startsWith('staff_role='));
-      const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
-      const localRole = localStorage.getItem('staff_role')?.toLowerCase();
-      const token = localStorage.getItem('session_token');
-      const storedName = localStorage.getItem('staff_name');
+    if (typeof window === 'undefined') return;
+    const rawCookies = document.cookie || '';
+    const cookies = rawCookies.split(';').map(c => c.trim());
+    const roleCookie = cookies.find(c => c.startsWith('staff_role='));
+    const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
+    const localRole = localStorage.getItem('staff_role')?.toLowerCase();
+    const token = localStorage.getItem('session_token');
+    const storedName = localStorage.getItem('staff_name');
 
-      if (storedName) setStaffName(storedName);
+    if (storedName) setStaffName(storedName);
 
-      const activeRole = cookieRole || localRole;
-      const hasValidToken = token && (token.startsWith('waiter_verified_') || token.startsWith('admin_verified_'));
+    const activeRole = cookieRole || localRole;
+    const hasValidToken = Boolean(token && (token.startsWith('waiter_verified_') || token.startsWith('admin_verified_')));
 
-      if ((activeRole === 'waiter' || activeRole === 'admin') && hasValidToken) {
-        if (!cookieRole) {
-          document.cookie = `staff_role=${activeRole}; path=/; max-age=86400; SameSite=Lax`;
-        }
-        setIsAuthenticated(true);
-        setAuthChecking(false);
-      } else {
-        localStorage.clear();
-        document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-        document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-        setIsAuthenticated(false);
-        setAuthChecking(false);
-        window.location.replace('/login');
+    if ((activeRole === 'waiter' || activeRole === 'admin') && hasValidToken) {
+      if (!cookieRole) {
+        document.cookie = `staff_role=${activeRole}; path=/; max-age=86400; SameSite=Lax`;
       }
+      setIsAuthenticated(true);
+      setAuthChecking(false);
+    } else {
+      localStorage.clear();
+      document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+      document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+      setIsAuthenticated(false);
+      setAuthChecking(false);
+      window.location.replace('/login');
     }
   }, []);
 
@@ -146,64 +151,100 @@ export default function WaiterPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadWaiterData = async () => {
-    setLoading(true);
+  // Scoped Live Floor Data Loader (avoids downloading full historical DB)
+  const loadFloorState = async () => {
     try {
       const [
-        { data: tbls },
-        { data: sess },
-        { data: bths },
-        { data: items },
-        { data: calls },
-        { data: mItems }
+        { data: tbls, error: tErr },
+        { data: sess, error: sErr },
+        { data: calls, error: cErr }
       ] = await Promise.all([
         supabase.from('restaurant_tables').select('*').order('table_number'),
         supabase.from('table_sessions').select('*').eq('status', 'active'),
-        supabase.from('order_batches').select('*').order('created_at', { ascending: false }),
-        supabase.from('order_items').select('*, menu_items(name_en, name, price)'),
-        supabase.from('waiter_calls').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
-        supabase.from('menu_items').select('*').eq('is_available', true).order('name_en')
+        supabase.from('waiter_calls').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       ]);
 
+      if (tErr) throw tErr;
+      if (sErr) throw sErr;
+      if (cErr) throw cErr;
+
       if (tbls) setTables(tbls);
-      if (sess) setSessions(sess);
-      if (bths) setBatches(bths);
-      if (items) setOrderItems(items);
       if (calls) setWaiterCalls(calls);
+
+      const activeSess = sess || [];
+      setSessions(activeSess);
+
+      const activeSessionIds = activeSess.map((s: any) => s.id);
+      if (activeSessionIds.length > 0) {
+        const [
+          { data: bths, error: bErr },
+          { data: items, error: iErr }
+        ] = await Promise.all([
+          supabase.from('order_batches').select('*').in('session_id', activeSessionIds).order('created_at', { ascending: true }),
+          supabase.from('order_items').select('*, menu_items(name_en, name, price)').in('session_id', activeSessionIds)
+        ]);
+        if (bErr) throw bErr;
+        if (iErr) throw iErr;
+        setBatches(bths || []);
+        setOrderItems(items || []);
+      } else {
+        setBatches([]);
+        setOrderItems([]);
+      }
+    } catch (err) {
+      console.error('Waiter floor sync error:', err);
+    }
+  };
+
+  const loadMenuItems = async () => {
+    try {
+      const { data: mItems } = await supabase
+        .from('menu_items')
+        .select('id, name, name_en, price, is_available')
+        .eq('is_available', true)
+        .order('name_en');
       if (mItems) setMenuItems(mItems);
     } catch (err) {
-      console.error('Waiter data error:', err);
+      console.error('Menu fetch error:', err);
+    }
+  };
+
+  const loadWaiterData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadFloorState(), loadMenuItems()]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadWaiterData();
+    if (!isAuthenticated) return;
+    loadWaiterData();
 
-      const channel = supabase
-        .channel(`waiter-sync-${Date.now()}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadWaiterData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadWaiterData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => {
-          triggerHaptic(25);
-          playChimeTone();
-          loadWaiterData();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadWaiterData())
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'waiter_calls' }, () => {
-          triggerHaptic(50);
-          playChimeTone();
-          loadWaiterData();
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'waiter_calls' }, () => loadWaiterData())
-        .subscribe();
+    const channel = supabase
+      .channel(`waiter-sync-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadFloorState())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadFloorState())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_batches' }, () => {
+        triggerHaptic(25);
+        playChimeTone();
+        loadFloorState();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'order_batches' }, () => loadFloorState())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadFloorState())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'waiter_calls' }, () => {
+        triggerHaptic(50);
+        playChimeTone();
+        loadFloorState();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'waiter_calls' }, () => loadFloorState())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadMenuItems())
+      .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAuthenticated]);
 
   const handleLogout = () => {
@@ -215,14 +256,15 @@ export default function WaiterPanel() {
     window.location.replace('/');
   };
 
-  // Recalculate Table Session Bill when waiter modifies dishes
+  // Recalculate Table Session Bill from live database items (prevents stale total drift)
   const recalculateSessionBill = async (sessionId: string) => {
     try {
-      const { data: liveItems } = await supabase
+      const { data: liveItems, error: fErr } = await supabase
         .from('order_items')
         .select('*, menu_items(price)')
         .eq('session_id', sessionId)
         .neq('item_status', 'cancelled');
+      if (fErr) throw fErr;
 
       const newGross = (liveItems || []).reduce((sum, it) => {
         if (it.is_complimentary) return sum;
@@ -234,13 +276,14 @@ export default function WaiterPanel() {
         return sum + (it.quantity * (basePr + addOnsSum));
       }, 0);
 
-      await supabase.from('table_sessions').update({
+      const { error: uErr } = await supabase.from('table_sessions').update({
         subtotal: newGross,
         total_amount: newGross,
         final_payable: newGross
       }).eq('id', sessionId);
+      if (uErr) throw uErr;
 
-      await loadWaiterData();
+      await loadFloorState();
     } catch (err) {
       console.error('Session recalculate error:', err);
     }
@@ -248,11 +291,13 @@ export default function WaiterPanel() {
 
   // Waiter edits quantity before kitchen verification
   const handleModifyQuantity = async (orderItemId: number, currentQty: number, delta: number, sessionId: string) => {
+    if (loading) return;
     const nextQty = currentQty + delta;
-    if (nextQty <= 0) return alert('Dish remove cheyalante "Remove" (Trash) button press cheyandi.');
+    if (nextQty <= 0) return showToast('Use the Trash icon to remove a dish completely.');
     try {
       setLoading(true);
-      await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      const { error } = await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      if (error) throw error;
       await recalculateSessionBill(sessionId);
     } catch (err: any) {
       alert('Qty error: ' + err.message);
@@ -263,11 +308,14 @@ export default function WaiterPanel() {
 
   // Waiter cancels dish before kitchen verification
   const handleCancelDish = async (orderItemId: number, dishName: string, sessionId: string) => {
+    if (loading) return;
     if (!confirm(`"${dishName}" dish ni remove cheyala?`)) return;
     try {
       setLoading(true);
-      await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      const { error } = await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      if (error) throw error;
       await recalculateSessionBill(sessionId);
+      showToast(`Removed ${dishName}`);
     } catch (err: any) {
       alert('Cancel failed: ' + err.message);
     } finally {
@@ -277,11 +325,12 @@ export default function WaiterPanel() {
 
   // DIRECT VISUAL TOKEN VERIFICATION & DISPATCH TO KITCHEN
   const handleVerifyTokenAndSend = async (batch: any) => {
+    if (actionLoadingBatchId) return;
     setActionLoadingBatchId(batch.id);
     triggerHaptic(20);
 
     try {
-      await supabase
+      const { error: bErr } = await supabase
         .from('order_batches')
         .update({ 
           status: 'sent_to_kitchen',
@@ -289,22 +338,17 @@ export default function WaiterPanel() {
           verified_at: new Date().toISOString()
         })
         .eq('id', batch.id);
+      if (bErr) throw bErr;
 
-      await supabase
+      const { error: iErr } = await supabase
         .from('order_items')
         .update({ item_status: 'preparing' })
         .eq('batch_id', batch.id)
         .neq('item_status', 'cancelled');
+      if (iErr) throw iErr;
 
-      alert(`Token #${batch.order_pin || 'ORDER'} Verified for Table #${batch.table_number}! Sent to Kitchen.`);
-      await loadWaiterData();
-
-      if (selectedTable) {
-        setSelectedTable(prev => prev ? {
-          ...prev,
-          tableBatches: prev.tableBatches?.map(b => b.id === batch.id ? { ...b, status: 'sent_to_kitchen' } : b)
-        } : null);
-      }
+      showToast(`Token #${batch.order_pin || 'ORDER'} verified for Table #${batch.table_number}!`);
+      await loadFloorState();
     } catch (err: any) {
       alert('Verification error: ' + err.message);
     } finally {
@@ -316,9 +360,9 @@ export default function WaiterPanel() {
   const handleMarkItemServed = async (itemId: number) => {
     triggerHaptic(15);
     try {
-      await supabase.from('order_items').update({ item_status: 'served' }).eq('id', itemId);
+      const { error } = await supabase.from('order_items').update({ item_status: 'served' }).eq('id', itemId);
+      if (error) throw error;
       setOrderItems(prev => prev.map(oi => oi.id === itemId ? { ...oi, item_status: 'served' } : oi));
-      await loadWaiterData();
     } catch (err: any) {
       alert('Error marking served: ' + err.message);
     }
@@ -328,24 +372,34 @@ export default function WaiterPanel() {
   const handleDismissWaiterCall = async (callId: number) => {
     triggerHaptic(20);
     try {
-      await supabase.from('waiter_calls').update({ status: 'attended' }).eq('id', callId);
+      const { error } = await supabase.from('waiter_calls').update({ status: 'attended' }).eq('id', callId);
+      if (error) throw error;
       setWaiterCalls(prev => prev.filter(c => c.id !== callId));
     } catch (e) {
       console.error(e);
     }
   };
 
-  // Direct Walk-In Punch Order to Table
+  // Direct Walk-In Punch Order to Table (with live DB session check & atomic bill recalculation)
   const handlePunchOrderSubmit = async () => {
-    if (!punchTable) return;
+    if (!punchTable || loading) return;
     const itemIds = Object.keys(punchCart).filter(id => punchCart[Number(id)] > 0);
     if (itemIds.length === 0) return alert('At least 1 dish select cheyandi.');
 
     setLoading(true);
     triggerHaptic(35);
     try {
-      const activeSession = sessions.find(s => s.table_number === punchTable.table_number && s.status === 'active');
-      let sessionId = activeSession?.id;
+      // Check live DB for an active session on this table to avoid duplicate sessions
+      const { data: liveSession } = await supabase
+        .from('table_sessions')
+        .select('id')
+        .eq('table_number', punchTable.table_number)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let sessionId = liveSession?.id;
 
       const punchTotal = itemIds.reduce((sum, id) => {
         const dish = menuItems.find(m => m.id === Number(id));
@@ -374,16 +428,8 @@ export default function WaiterPanel() {
         if (sErr) throw sErr;
         sessionId = newSession.id;
         await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', punchTable.table_number);
-      } else {
-        const newTotal = Number(activeSession.total_amount || 0) + punchTotal;
-        await supabase.from('table_sessions').update({
-          subtotal: newTotal,
-          total_amount: newTotal,
-          final_payable: newTotal
-        }).eq('id', sessionId);
       }
 
-      // Punch by waiter is direct
       const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
@@ -414,19 +460,44 @@ export default function WaiterPanel() {
         };
       });
 
-      await supabase.from('order_items').insert(payload);
+      const { error: oiErr } = await supabase.from('order_items').insert(payload);
+      if (oiErr) throw oiErr;
+
+      // Recalculate from live DB items so concurrent QR orders never overwrite total
+      await recalculateSessionBill(sessionId);
 
       setPunchCart({});
       setPunchNotes('');
       setShowPunchOrderModal(false);
-      await loadWaiterData();
-      alert(`Order punched to Table #${punchTable.table_number}! Dispatched to Kitchen.`);
+      showToast(`Order punched to Table #${punchTable.table_number}!`);
     } catch (err: any) {
       alert('Punch error: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // Pre-index orderItems by batch_id for fast O(1) lookup
+  const itemsByBatch = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const oi of orderItems) {
+      if (oi.item_status === 'cancelled') continue;
+      if (!map[oi.batch_id]) map[oi.batch_id] = [];
+      map[oi.batch_id].push(oi);
+    }
+    return map;
+  }, [orderItems]);
+
+  // Live derived data for the currently open table modal (never goes stale)
+  const selectedTableLive = useMemo(() => {
+    if (selectedTableNumber === null) return null;
+    const tbl = tables.find(t => t.table_number === selectedTableNumber);
+    if (!tbl) return null;
+    const activeSession = sessions.find(s => s.table_number === selectedTableNumber && s.status === 'active');
+    if (!activeSession) return null;
+    const tableBatches = batches.filter(b => b.table_number === selectedTableNumber && b.session_id === activeSession.id);
+    return { ...tbl, activeSession, tableBatches };
+  }, [selectedTableNumber, tables, sessions, batches]);
 
   const filteredMenuItems = useMemo(() => {
     return menuItems.filter(m => {
@@ -448,6 +519,21 @@ export default function WaiterPanel() {
 
   return (
     <div className="min-h-screen bg-[#060608] text-[#FCF6BA] font-sans pb-28 relative overflow-x-hidden antialiased">
+      {/* Non-blocking Toast Banner */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 right-6 z-[80] px-4 py-3 rounded-2xl bg-[#111115] border border-[#D4AF37] text-[#FCF6BA] font-mono text-xs font-bold shadow-2xl flex items-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{toastMsg}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#0c0c0e]/95 backdrop-blur-2xl border-b border-[#D4AF37]/30 px-4 sm:px-6 py-3.5 shadow-2xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -647,7 +733,7 @@ export default function WaiterPanel() {
                 <div className="flex gap-2 pt-3 border-t border-white/10 mt-3">
                   {isOccupied && (
                     <button
-                      onClick={() => setSelectedTable({ ...t, activeSession, tableBatches })}
+                      onClick={() => setSelectedTableNumber(t.table_number)}
                       className="flex-1 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-mono font-bold text-white text-center cursor-pointer"
                     >
                       {pendingBatch ? 'Match & Verify' : 'View Ledger'}
@@ -674,7 +760,7 @@ export default function WaiterPanel() {
 
       {/* MODAL 1: Table Service Ledger, Visual Token Matching & Dish Modifiers */}
       <AnimatePresence>
-        {selectedTable && (
+        {selectedTableLive && (
           <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.94, opacity: 0 }}
@@ -686,14 +772,14 @@ export default function WaiterPanel() {
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div>
                   <h3 className="text-lg font-black text-white flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> {selectedTable.table_name || `Table #${selectedTable.table_number}`}
+                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> {selectedTableLive.table_name || `Table #${selectedTableLive.table_number}`}
                   </h3>
                   <span className="text-xs text-neutral-400 font-mono">
-                    Guest: {selectedTable.activeSession?.customer_name || 'Guest'} ({selectedTable.activeSession?.customer_phone || '-'})
+                    Guest: {selectedTableLive.activeSession?.customer_name || 'Guest'} ({selectedTableLive.activeSession?.customer_phone || '-'})
                   </span>
                 </div>
                 <button
-                  onClick={() => setSelectedTable(null)}
+                  onClick={() => setSelectedTableNumber(null)}
                   className="p-1 rounded-full text-neutral-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -702,8 +788,8 @@ export default function WaiterPanel() {
 
               {/* Running Batches List */}
               <div className="space-y-4">
-                {selectedTable.tableBatches?.map((batch, bIdx) => {
-                  const bItems = orderItems.filter(oi => oi.batch_id === batch.id && oi.item_status !== 'cancelled');
+                {selectedTableLive.tableBatches?.map((batch: any, bIdx: number) => {
+                  const bItems = itemsByBatch[batch.id] || [];
                   const isPending = batch.status === 'pending_waiter';
 
                   return (
@@ -738,13 +824,13 @@ export default function WaiterPanel() {
 
                       {/* Dishes in this batch */}
                       <div className="space-y-2 divide-y divide-white/5 text-xs">
-                        {bItems.map(item => {
+                        {bItems.map((item: any) => {
                           const dPrice = Number(item.unit_price || item.menu_items?.price || 0);
                           const addOnsCost = Array.isArray(item.selected_addons)
                             ? item.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
                             : 0;
                           const lineTotal = item.is_complimentary ? 0 : (dPrice + addOnsCost) * item.quantity;
-                          const dName = item.menu_items?.name_en || item.menu_items?.name || 'Dish #' + item.menu_item_id;
+                          const dName = item.menu_items?.name_en || item.menu_items?.name || (item.cooking_notes?.replace(/VaMC Counter Item: \[[A-Z]+\] /g, '') || 'Dish #' + item.menu_item_id);
 
                           return (
                             <div key={item.id} className="pt-2 flex flex-col gap-1.5">
@@ -769,21 +855,24 @@ export default function WaiterPanel() {
                                 {isPending ? (
                                   <div className="flex items-center gap-1.5">
                                     <button
-                                      onClick={() => handleModifyQuantity(item.id, item.quantity, -1, selectedTable.activeSession?.id)}
-                                      className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white"
+                                      disabled={loading}
+                                      onClick={() => handleModifyQuantity(item.id, item.quantity, -1, selectedTableLive.activeSession?.id)}
+                                      className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer disabled:opacity-50"
                                     >
                                       <Minus className="w-3 h-3" />
                                     </button>
                                     <span className="font-mono font-bold text-white px-1">{item.quantity}</span>
                                     <button
-                                      onClick={() => handleModifyQuantity(item.id, item.quantity, 1, selectedTable.activeSession?.id)}
-                                      className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white"
+                                      disabled={loading}
+                                      onClick={() => handleModifyQuantity(item.id, item.quantity, 1, selectedTableLive.activeSession?.id)}
+                                      className="p-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer disabled:opacity-50"
                                     >
                                       <Plus className="w-3 h-3" />
                                     </button>
                                     <button
-                                      onClick={() => handleCancelDish(item.id, dName, selectedTable.activeSession?.id)}
-                                      className="p-1 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-950/70 ml-1"
+                                      disabled={loading}
+                                      onClick={() => handleCancelDish(item.id, dName, selectedTableLive.activeSession?.id)}
+                                      className="p-1 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-950/70 ml-1 cursor-pointer disabled:opacity-50"
                                       title="Remove Dish"
                                     >
                                       <Trash2 className="w-3 h-3" />
@@ -819,7 +908,7 @@ export default function WaiterPanel() {
                                 </div>
                               )}
 
-                              {item.cooking_notes && (
+                              {item.cooking_notes && !item.cooking_notes.startsWith('VaMC Counter Item:') && (
                                 <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-500/30 font-sans">
                                   <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
                                   <span>Note: {item.cooking_notes}</span>
@@ -863,11 +952,11 @@ export default function WaiterPanel() {
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 text-xs font-mono space-y-1">
                 <div className="flex justify-between text-neutral-400">
                   <span>Gross Flat Amount (Zero GST):</span>
-                  <span className="text-white">₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
+                  <span className="text-white">₹{Number(selectedTableLive.activeSession?.total_amount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-white font-black text-sm pt-2 border-t border-white/10">
                   <span>Final Net Settle:</span>
-                  <span className="text-[#D4AF37] font-mono text-base">₹{Number(selectedTable.activeSession?.total_amount || 0).toFixed(2)}</span>
+                  <span className="text-[#D4AF37] font-mono text-base">₹{Number(selectedTableLive.activeSession?.total_amount || 0).toFixed(2)}</span>
                 </div>
               </div>
             </motion.div>
@@ -920,7 +1009,7 @@ export default function WaiterPanel() {
                       <div className="flex items-center gap-2">
                         {qty > 0 && (
                           <button
-                            onClick={() => setPunchCart({ ...punchCart, [dish.id]: qty - 1 })}
+                            onClick={() => setPunchCart({ ...punchCart, [dish.id]: Math.max(0, qty - 1) })}
                             className="p-1 rounded-lg bg-white/[0.05] text-white cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
@@ -954,7 +1043,7 @@ export default function WaiterPanel() {
                 whileTap={{ scale: 0.96 }}
                 disabled={loading}
                 onClick={handlePunchOrderSubmit}
-                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer"
+                className="w-full py-3.5 rounded-2xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer disabled:opacity-50"
               >
                 {loading ? 'Punching to Kitchen...' : 'Confirm & Dispatch to Kitchen'}
               </motion.button>
