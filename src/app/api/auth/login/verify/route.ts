@@ -1,33 +1,65 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { supabase } from '@/lib/supabase';
 
-// 1. GET METHOD: Session Guard Verification (Protects Admin & Waiter Pages)
+const AUTH_SECRET = process.env.AUTH_SECRET || 'change-this-in-vercel-env-immediately';
+
+function signSession(role: string, name: string): string {
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  const payload = `${role}|${name}|${expiresAt}`;
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}|${sig}`).toString('base64url');
+}
+
+function verifySession(token: string): { valid: boolean; role?: string; name?: string } {
+  try {
+    const decoded = Buffer.from(token, 'base64url').toString('utf8');
+    const [role, name, expiresAtStr, sig] = decoded.split('|');
+    if (!role || !expiresAtStr || !sig) return { valid: false };
+    if (Date.now() > Number(expiresAtStr)) return { valid: false };
+
+    const expectedSig = crypto
+      .createHmac('sha256', AUTH_SECRET)
+      .update(`${role}|${name}|${expiresAtStr}`)
+      .digest('hex');
+
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+      return { valid: false };
+    }
+    return { valid: true, role, name };
+  } catch {
+    return { valid: false };
+  }
+}
+
+// 1. GET METHOD: Server-Verified Session Guard
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const staffRole = cookieStore.get('staff_role')?.value;
     const sessionToken = cookieStore.get('session_token')?.value;
 
-    // Strict validation: cookie unte and session token valid ga role tho match aithe matrame access
-    if (
-      staffRole && 
-      sessionToken && 
-      sessionToken.startsWith(`${staffRole}_verified_`)
-    ) {
-      return NextResponse.json({ 
-        authenticated: true, 
-        role: staffRole 
-      });
+    if (!sessionToken) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    return NextResponse.json({ authenticated: false }, { status: 401 });
-  } catch (err: any) {
+    const check = verifySession(sessionToken);
+    if (!check.valid || !check.role) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
+    }
+
+    return NextResponse.json({
+      authenticated: true,
+      role: check.role,
+      name: check.name
+    });
+  } catch {
     return NextResponse.json({ authenticated: false, error: 'Session check failed' }, { status: 500 });
   }
 }
 
-// 2. POST METHOD: Login Authorization (Verifies Credentials)
+// 2. POST METHOD: Secure Login Authorization
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -41,54 +73,51 @@ export async function POST(request: Request) {
       );
     }
 
-    let role: string | null = null;
-    let staffName = 'Staff Member';
+    const { data: user, error } = await supabase
+      .from('staff_accounts')
+      .select('role, identifier, password_hash, name')
+      .eq('identifier', cleanId)
+      .maybeSingle();
 
-    // Master Bypass Credentials
-    if (cleanId === 'admin@restaurant.com' && cleanPass === 'admin123') {
-      role = 'admin';
-      staffName = 'Royal Admin';
-    } else if (cleanId === '9876543210' && cleanPass === 'waiter123') {
-      role = 'waiter';
-      staffName = 'Floor Steward';
-    } else {
-      // Supabase staff_accounts database check
-      const { data: user, error } = await supabase
-        .from('staff_accounts')
-        .select('role, identifier, password_hash, name')
-        .eq('identifier', cleanId)
-        .maybeSingle();
-
-      if (!error && user && user.password_hash === cleanPass) {
-        role = user.role?.toLowerCase();
-        staffName = user.name || (role === 'admin' ? 'Royal Admin' : 'Floor Steward');
-      }
-    }
-
-    if (!role) {
+    if (error || !user || !user.password_hash) {
       return NextResponse.json(
         { error: 'Invalid credentials. Check your details and try again.' },
         { status: 401 }
       );
     }
 
-    const response = NextResponse.json({ 
-      success: true, 
+    // Supports bcrypt hashes (and legacy plaintext fallback during migration)
+    const isBcrypt = user.password_hash.startsWith('$2a$') || user.password_hash.startsWith('$2b$');
+    const passwordMatches = isBcrypt
+      ? await bcrypt.compare(cleanPass, user.password_hash)
+      : user.password_hash === cleanPass;
+
+    if (!passwordMatches) {
+      return NextResponse.json(
+        { error: 'Invalid credentials. Check your details and try again.' },
+        { status: 401 }
+      );
+    }
+
+    const role = user.role?.toLowerCase();
+    const staffName = user.name || (role === 'admin' ? 'Royal Admin' : 'Floor Steward');
+    const signedToken = signSession(role, staffName);
+
+    const response = NextResponse.json({
+      success: true,
       role,
       name: staffName
     });
-    
-    // Client-Accessible Cookie for instant UI rendering
+
     response.cookies.set('staff_role', role, {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 // 24 Hours
+      maxAge: 60 * 60 * 24
     });
 
-    // Anti-Tamper Server Session Token
-    response.cookies.set('session_token', `${role}_verified_${Date.now()}`, {
+    response.cookies.set('session_token', signedToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -97,7 +126,15 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch {
     return NextResponse.json({ error: 'Server authentication failed' }, { status: 500 });
   }
+}
+
+// 3. DELETE METHOD: Proper HttpOnly Cookie Logout
+export async function DELETE() {
+  const response = NextResponse.json({ success: true });
+  response.cookies.set('staff_role', '', { path: '/', maxAge: 0 });
+  response.cookies.set('session_token', '', { httpOnly: true, path: '/', maxAge: 0 });
+  return response;
 }
