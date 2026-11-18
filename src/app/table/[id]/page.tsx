@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -8,14 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import { 
   Plus, Minus, ShoppingBag, X, Receipt, Sparkles, Image as ImgIcon, 
-  AlertTriangle, Search, BellRing, Gift, Check, Hash, Store
+  AlertTriangle, Search, BellRing, Gift, Check, Hash, Store, CheckCircle2
 } from 'lucide-react';
 
-const butterSpring = { type: 'spring', stiffness: 420, damping: 32, mass: 0.45 };
+const butterSpring = { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.45 };
 
 const triggerHaptic = (ms = 12) => {
   if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-    try { navigator.vibrate(ms); } catch (e) {}
+    try { navigator.vibrate(ms); } catch {}
   }
 };
 
@@ -32,6 +31,7 @@ export default function LuxuryCustomerTablePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuAddon[]>([]);
   
+  // VaMC Ledger Inventories for Upselling in Cart & Add-ons
   const [dfItems, setDfItems] = useState<any[]>([]); 
   const [iceItems, setIceItems] = useState<any[]>([]);
   const [vamcItems, setVamcItems] = useState<any[]>([]);
@@ -42,6 +42,7 @@ export default function LuxuryCustomerTablePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
+  // Customization Bottom Sheet States
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [selectedCounterItemIds, setSelectedCounterItemIds] = useState<{id: number, type: string}[]>([]);
@@ -50,6 +51,7 @@ export default function LuxuryCustomerTablePage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // Customer & Loyalty States
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -64,9 +66,14 @@ export default function LuxuryCustomerTablePage() {
   const [sessionOrderedItems, setSessionOrderedItems] = useState<any[]>([]);
   const [isTotalBillModalOpen, setIsTotalBillModalOpen] = useState(false);
 
-  const [waiterToast, setWaiterToast] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(prev => (prev === msg ? null : prev)), 3800);
+  };
 
   const resolveTableIdentity = async () => {
     if (!rawTableParam) return;
@@ -95,7 +102,7 @@ export default function LuxuryCustomerTablePage() {
       } else {
         setTableNotFound(true);
       }
-    } catch (err) {
+    } catch {
       setTableNotFound(true);
     }
   };
@@ -106,24 +113,41 @@ export default function LuxuryCustomerTablePage() {
 
   const fetchSessionItems = async (sessionId: string) => {
     try {
-      const { data } = await supabase.from('order_items').select('*, menu_items(name_en, name, price)').eq('session_id', sessionId).neq('item_status', 'cancelled');
+      const { data } = await supabase
+        .from('order_items')
+        .select('*, menu_items(name_en, name, price)')
+        .eq('session_id', sessionId)
+        .neq('item_status', 'cancelled');
       if (data) setSessionOrderedItems(data);
-    } catch (e) {}
+    } catch {}
   };
 
   const fetchLatestOrderToken = async (sessionId: string) => {
     try {
-      const { data } = await supabase.from('order_batches').select('id, order_pin, status').eq('session_id', sessionId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const { data } = await supabase
+        .from('order_batches')
+        .select('id, order_pin, status')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (data) {
         setActiveOrderToken(data.order_pin);
         setActiveBatchStatus(data.status);
       }
-    } catch (e) {}
+    } catch {}
   };
 
   const syncSessionData = async () => {
     if (!realTableNumber) return;
-    const { data: session } = await supabase.from('table_sessions').select('*').eq('table_number', realTableNumber).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const { data: session } = await supabase
+      .from('table_sessions')
+      .select('*')
+      .eq('table_number', realTableNumber)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (session) {
       setActiveSessionId(session.id);
@@ -138,6 +162,7 @@ export default function LuxuryCustomerTablePage() {
       setActiveSessionTotal(0);
       setSessionOrderedItems([]);
       setActiveOrderToken(null);
+      setActiveBatchStatus(null);
     }
   };
 
@@ -157,7 +182,19 @@ export default function LuxuryCustomerTablePage() {
       const { data } = await supabase.from('customer_loyalty').select('*').eq('phone', phone).maybeSingle();
       if (data) setCustomerVisitCount(data.total_visits || 0);
       else setCustomerVisitCount(0);
-    } catch (e) {}
+    } catch {}
+  };
+
+  const fetchBannersOnly = async () => {
+    const { data: bnrs } = await supabase
+      .from('promo_banners')
+      .select('*')
+      .eq('is_active', true)
+      .order('id', { ascending: false });
+    if (bnrs) {
+      setBanners(bnrs);
+      setCurrentBannerIndex(0);
+    }
   };
 
   const fetchMenuData = async () => {
@@ -176,7 +213,7 @@ export default function LuxuryCustomerTablePage() {
 
     if (cats && cats.length > 0) {
       setCategories(cats);
-      setSelectedCategory(cats[0].id);
+      setSelectedCategory(prev => prev ?? cats[0].id);
     }
     if (items) setMenuItems(items);
     if (adns) setAddons(adns);
@@ -184,7 +221,7 @@ export default function LuxuryCustomerTablePage() {
     if (ices) setIceItems(ices);
     if (vamcs) setVamcItems(vamcs);
     
-    if (bnrs && bnrs.length > 0) {
+    if (bnrs) {
       setBanners(bnrs);
       setCurrentBannerIndex(0);
     }
@@ -198,7 +235,10 @@ export default function LuxuryCustomerTablePage() {
     const channel = supabase
       .channel(`table-${realTableNumber}-rt`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions', filter: `table_number=eq.${realTableNumber}` }, () => syncSessionData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchMenuData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches', filter: `table_number=eq.${realTableNumber}` }, () => {
+        if (activeSessionId) fetchLatestOrderToken(activeSessionId);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => fetchBannersOnly())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -229,7 +269,7 @@ export default function LuxuryCustomerTablePage() {
 
   const addToCartDirect = (item: any, isCombo = false, chosenAddons: MenuAddon[] = [], chosenVariant: any = null, isFree = false, itemType = 'main') => {
     triggerHaptic(15);
-    let basePrice = itemType === 'main' ? item.price : item.selling_price;
+    const basePrice = itemType === 'main' ? item.price : item.selling_price;
     const effectivePrice = isFree ? 0 : (chosenVariant ? chosenVariant.price : basePrice);
 
     setCart(prev => {
@@ -313,40 +353,55 @@ export default function LuxuryCustomerTablePage() {
     addToCartDirect(drink, false, [], null, true, 'main');
     setIsRewardClaimedThisSession(true);
     setShowRewardModal(false);
-    setWaiterToast(`🎁 ${drink.name_en || drink.name} added FREE!`);
-    setTimeout(() => setWaiterToast(null), 4000);
+    showToast(`🎁 ${drink.name_en || drink.name} added FREE!`);
   };
 
   const handleCallWaiter = async (callType: 'water' | 'waiter') => {
     if (!realTableNumber) return;
     triggerHaptic(25);
     try {
-      await supabase.from('waiter_calls').insert({ table_number: realTableNumber, call_type: callType, status: 'pending' });
-      setWaiterToast(`🔔 Steward notified for ${displayTableName}!`);
-      setTimeout(() => setWaiterToast(null), 4000);
-    } catch (e) {
-      alert('Unable to notify waiter.');
+      const { error } = await supabase.from('waiter_calls').insert({
+        table_number: realTableNumber,
+        call_type: callType,
+        status: 'pending'
+      });
+      if (error) throw error;
+      showToast(`🔔 Steward notified for ${displayTableName}!`);
+    } catch {
+      showToast('Unable to notify steward right now.');
     }
   };
 
   const handlePlaceOrder = async () => {
+    if (loading || cart.length === 0) return;
     triggerHaptic(30);
-    if (!realTableNumber) return alert('Invalid table.');
-    
-    if (!activeSessionId) {
-      if (customerName.trim().length < 2) return alert('Please enter Guest Name.');
-      if (!isValidPhone(customerPhone)) {
-        setPhoneError('Please enter a valid 10-digit mobile number.');
-        return;
-      }
-    }
+    if (!realTableNumber) return showToast('Invalid table QR.');
 
     setLoading(true);
     try {
-      let sessionId = activeSessionId;
-      const newTotal = activeSessionTotal + cartGrandTotal;
+      // Verify live DB for an active session (prevents attaching to a settled session)
+      const { data: liveSession } = await supabase
+        .from('table_sessions')
+        .select('id, total_amount')
+        .eq('table_number', realTableNumber)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let sessionId = liveSession?.id || null;
 
       if (!sessionId) {
+        if (customerName.trim().length < 2) {
+          setLoading(false);
+          return showToast('Please enter Guest Name (at least 2 letters).');
+        }
+        if (!isValidPhone(customerPhone)) {
+          setLoading(false);
+          setPhoneError('Please enter a valid 10-digit mobile number.');
+          return;
+        }
+
         const { data: newSession, error: sErr } = await supabase
           .from('table_sessions')
           .insert({
@@ -358,7 +413,9 @@ export default function LuxuryCustomerTablePage() {
             final_payable: cartGrandTotal,
             status: 'active',
             payment_status: 'unpaid'
-          }).select().single();
+          })
+          .select()
+          .single();
 
         if (sErr) throw sErr;
         sessionId = newSession.id;
@@ -366,14 +423,22 @@ export default function LuxuryCustomerTablePage() {
         setActiveSessionTotal(cartGrandTotal);
         await supabase.from('restaurant_tables').update({ status: 'occupied' }).eq('table_number', realTableNumber);
       } else {
-        await supabase.from('table_sessions').update({ subtotal: newTotal, total_amount: newTotal, final_payable: newTotal }).eq('id', sessionId);
-        setActiveSessionTotal(newTotal);
+        const updatedTotal = Number(liveSession?.total_amount || 0) + cartGrandTotal;
+        const { error: updErr } = await supabase
+          .from('table_sessions')
+          .update({ subtotal: updatedTotal, total_amount: updatedTotal, final_payable: updatedTotal })
+          .eq('id', sessionId);
+        if (updErr) throw updErr;
+        setActiveSessionId(sessionId);
+        setActiveSessionTotal(updatedTotal);
       }
 
       const randomToken = Math.floor(1000 + Math.random() * 9000).toString();
       const { data: batch, error: bErr } = await supabase
         .from('order_batches')
-        .insert({ session_id: sessionId, table_number: realTableNumber, status: 'pending_waiter', order_pin: randomToken }).select().single();
+        .insert({ session_id: sessionId, table_number: realTableNumber, status: 'pending_waiter', order_pin: randomToken })
+        .select()
+        .single();
 
       if (bErr) throw bErr;
       setActiveOrderToken(batch.order_pin || randomToken);
@@ -403,29 +468,25 @@ export default function LuxuryCustomerTablePage() {
       const { error: oiErr } = await supabase.from('order_items').insert(orderPayload);
       if (oiErr) throw oiErr;
 
-      // ATOMIC STOCK MINUS VIA RPC
-      for (const item of cart) {
-        if (item.itemType === 'df') {
-          await supabase.rpc('adjust_inventory_stock', {
-            p_table_name: 'df_menu_items',
-            p_item_id: item.menuItem.id,
-            p_delta: -item.quantity
-          });
-        }
-        if (item.itemType === 'ice_cream') {
-          await supabase.rpc('adjust_inventory_stock', {
-            p_table_name: 'ice_cream_menu_items',
-            p_item_id: item.menuItem.id,
-            p_delta: -item.quantity
-          });
-        }
-      }
+      // Atomic stock deduction via RPC
+      await Promise.all(
+        cart
+          .filter(item => item.itemType === 'df' || item.itemType === 'ice_cream')
+          .map(item =>
+            supabase.rpc('adjust_inventory_stock', {
+              p_table_name: item.itemType === 'df' ? 'df_menu_items' : 'ice_cream_menu_items',
+              p_item_id: item.menuItem.id,
+              p_delta: -item.quantity
+            })
+          )
+      );
 
       setCart([]);
       setIsCartOpen(false);
       fetchSessionItems(sessionId);
+      showToast(`Order placed! Token #${batch.order_pin || randomToken}`);
     } catch (err: any) {
-      alert('Order error: ' + err.message);
+      showToast('Order error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -451,7 +512,21 @@ export default function LuxuryCustomerTablePage() {
 
   return (
     <div className="min-h-screen bg-[#060608] text-[#FCF6BA] pb-36 font-sans antialiased relative overflow-x-hidden">
-      
+      {/* Non-blocking Toast Banner */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 inset-x-4 max-w-md mx-auto z-[70] px-4 py-3 rounded-2xl bg-[#111115]/95 border border-[#D4AF37] text-[#FCF6BA] font-mono text-xs font-bold shadow-2xl flex items-center gap-2 backdrop-blur-xl"
+          >
+            <CheckCircle2 className="w-4 h-4 text-[#D4AF37] shrink-0" />
+            <span>{toastMsg}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#060608]/90 backdrop-blur-2xl px-4 pt-3.5 pb-3 border-b border-white/[0.08] shadow-2xl">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
@@ -495,19 +570,25 @@ export default function LuxuryCustomerTablePage() {
         {/* Search Bar */}
         <div className="relative">
           <Search className="w-4 h-4 text-[#D4AF37]/80 absolute left-4 top-1/2 -translate-y-1/2" />
-          <input type="text" placeholder="Search our handcrafted delights..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08]" />
+          <input
+            type="text"
+            placeholder="Search our handcrafted delights..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white/[0.03] text-white placeholder-neutral-500 rounded-2xl pl-11 pr-4 py-2.5 text-xs outline-none border border-white/[0.08]"
+          />
         </div>
 
-        {/* PROMO SLIDER BANNERS (Synced with Admin Panel) */}
+        {/* PROMO SLIDER BANNERS (Auto-Aspect Fit — Zero Cropping, Synced with Admin) */}
         {banners.length > 0 && (
-          <div className="relative w-full h-36 overflow-hidden rounded-[24px] border border-[#D4AF37]/35 shadow-xl bg-neutral-950">
+          <div className="relative w-full aspect-[16/7] overflow-hidden rounded-[24px] border border-[#D4AF37]/35 shadow-xl bg-neutral-950">
             <AnimatePresence mode="wait">
               {banners[currentBannerIndex] && (
                 <motion.img
                   key={banners[currentBannerIndex].id}
-                  initial={{ opacity: 0, scale: 1.03 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.97 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   transition={{ duration: 0.4 }}
                   src={banners[currentBannerIndex].image_url}
                   alt={banners[currentBannerIndex].title || 'Promo Banner'}
@@ -515,27 +596,40 @@ export default function LuxuryCustomerTablePage() {
                 />
               )}
             </AnimatePresence>
-            <div className="absolute bottom-2.5 right-3 flex gap-1 z-10">
-              {banners.map((_, idx) => (
-                <span
-                  key={idx}
-                  className={`h-1.5 rounded-full transition-all ${idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'}`}
-                />
-              ))}
-            </div>
+            {banners.length > 1 && (
+              <div className="absolute bottom-2.5 right-3 flex gap-1 z-10">
+                {banners.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setCurrentBannerIndex(idx)}
+                    aria-label={`Slide ${idx + 1}`}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${idx === currentBannerIndex ? 'w-5 bg-[#D4AF37]' : 'w-1.5 bg-white/40'}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Categories Bar */}
         <div className="sticky top-[58px] z-30 py-2 bg-[#060608]/95 backdrop-blur-xl border-b border-white/[0.05]">
-          <div ref={categoryScrollRef} className="p-1.5 rounded-[26px] bg-white/[0.03] border border-white/[0.08] flex gap-2 overflow-x-auto select-none items-center scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div
+            ref={categoryScrollRef}
+            className="p-1.5 rounded-[26px] bg-white/[0.03] border border-white/[0.08] flex gap-2 overflow-x-auto select-none items-center scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
             {categories.map((cat) => {
               const isSelected = selectedCategory === cat.id;
               return (
                 <button
                   type="button"
                   key={cat.id}
-                  onClick={(e) => { triggerHaptic(15); setSelectedCategory(cat.id); e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }}
+                  onClick={(e) => {
+                    triggerHaptic(15);
+                    setSelectedCategory(cat.id);
+                    e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                  }}
                   className={`relative px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${isSelected ? 'text-black font-black bg-[#D4AF37] shadow-md' : 'text-neutral-400 hover:text-white'}`}
                 >
                   <span>{cat.name_en || cat.name}</span>
@@ -668,7 +762,7 @@ export default function LuxuryCustomerTablePage() {
                   <span className="font-bold text-white block">Guest Identification</span>
                   <input
                     type="text"
-                    placeholder="Guest Name (Optional)"
+                    placeholder="Guest Name *"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     className="w-full bg-transparent border border-white/20 rounded-xl px-4 py-3 text-white outline-none focus:border-[#D4AF37] transition"
@@ -684,7 +778,7 @@ export default function LuxuryCustomerTablePage() {
                         setCustomerPhone(clean);
                         setPhoneError('');
                         if (clean.length === 10) {
-                          if(isValidPhone(clean)) checkLoyaltyProfile(clean);
+                          if (isValidPhone(clean)) checkLoyaltyProfile(clean);
                           else {
                             setPhoneError('Please enter a valid Indian mobile number.');
                             setCustomerVisitCount(0);
