@@ -82,6 +82,7 @@ function LoginContent() {
 
       setAuthCookiesAndLocal(verifiedRole, token, staffName);
 
+      // Hard redirect to respective dashboard without router lagging
       if (verifiedRole === 'admin') {
         window.location.href = '/admin';
       } else {
