@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const cleanId = (body?.identifier || '').trim().toLowerCase();
-    const cleanPass = (body?.password || '').trim();
+    const rawId = body?.identifier || body?.username || body?.name || body?.waiterName || body?.loginId || '';
+    const cleanId = rawId.trim();
+    const cleanPass = (body?.password || body?.pin || '').trim();
 
     if (!cleanId || !cleanPass) {
       return NextResponse.json(
@@ -18,23 +19,28 @@ export async function POST(request: Request) {
     let staffName = 'Staff Member';
 
     // 1. Master Emergency Fallback
-    if (cleanId === 'admin@restaurant.com' && cleanPass === 'admin123') {
+    if (cleanId.toLowerCase() === 'admin@restaurant.com' && cleanPass === 'admin123') {
       role = 'admin';
       staffName = 'Royal Admin';
     } else if (cleanId === '9876543210' && cleanPass === 'waiter123') {
       role = 'waiter';
       staffName = 'Floor Steward';
     } else {
-      // 2. Supabase DB Lookup
-      const { data: user, error } = await supabase
+      // 2. Supabase DB Lookup (Safely matching both identifier and name in JavaScript)
+      const { data: users, error } = await supabase
         .from('staff_accounts')
-        .select('role, identifier, password_hash, name')
-        .eq('identifier', cleanId)
-        .maybeSingle();
+        .select('role, identifier, password_hash, name, is_active');
 
-      if (!error && user && user.password_hash === cleanPass) {
-        role = user.role?.toLowerCase();
-        staffName = user.name || (role === 'admin' ? 'Admin' : 'Waiter');
+      if (!error && users) {
+        const user = users.find(u => 
+          (u.identifier || '').trim().toLowerCase() === cleanId.toLowerCase() || 
+          (u.name || '').trim().toLowerCase() === cleanId.toLowerCase()
+        );
+
+        if (user && user.password_hash === cleanPass) {
+          role = user.role?.toLowerCase();
+          staffName = user.name || (role === 'admin' ? 'Admin' : 'Waiter');
+        }
       }
     }
 
