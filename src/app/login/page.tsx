@@ -267,10 +267,3 @@ export default function LoginPage() {
     </Suspense>
   );
 }
-```[cite: 14]
-
-### Ippudu login test cheyandi:
-* **Admin Login:** `admin@vujwalasimha.com` / `128e980`[cite: 10]
-* **Waiter Login:** `Surya` (leda `9392149329`) / `129e980`[cite: 10]
-
-Ee code update chesaka error mottam poyi rendu dashboards smooth ga open avthayi!
