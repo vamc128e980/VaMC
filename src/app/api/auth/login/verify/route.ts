@@ -3,9 +3,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // FIX 1: Frontend nunchi 'pin', 'loginId', 'waiterName' ila eh peru tho vachina accept chesthundi
+    // Frontend nunchi em peru tho vachina theeskuntundi
     const rawId = body?.identifier || body?.username || body?.name || body?.waiterName || body?.loginId || '';
-    const cleanId = rawId.trim(); 
+    const cleanId = rawId.trim().toLowerCase(); 
     const cleanPass = (body?.password || body?.pin || '').trim();
 
     if (!cleanId || !cleanPass) {
@@ -15,17 +15,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // FIX 2: Variables chuttu double quotes ("") pettam. Deeni valla spaces unna names ki crash avvadu!
+    // FIX: Supabase .or() query theesesi direct ga table data thechukuntunnam
     const { data: users, error } = await supabase
       .from('staff_accounts')
-      .select('role, identifier, password_hash, name')
-      .or(`identifier.ilike."${cleanId}",name.ilike."${cleanId}"`);
+      .select('role, identifier, password_hash, name');
 
-    const user = users && users.length > 0 ? users[0] : null;
+    if (error) {
+      console.error("Database Fetch Error:", error.message);
+      return NextResponse.json(
+        { error: 'Database connection error.' }, 
+        { status: 500 }
+      );
+    }
 
-    // Password exact ga match ayyindo ledo check chesthundi
-    if (error || !user || user.password_hash !== cleanPass) {
-      console.error("Login Error:", error?.message || "Invalid password/ID");
+    // JavaScript lo case-insensitive ga match chesthunnam (Crash avve chance eh ledu)
+    const user = users?.find(u => 
+      (u.identifier || '').toLowerCase() === cleanId || 
+      (u.name || '').toLowerCase() === cleanId
+    );
+
+    // Password verification
+    if (!user || user.password_hash !== cleanPass) {
+      console.error("Login Error: User not found or password mismatch");
       return NextResponse.json(
         { error: 'Invalid credentials. Please verify your details.' },
         { status: 401 }
@@ -34,6 +45,8 @@ export async function POST(request: Request) {
 
     const role = user.role?.toLowerCase();
     const staffName = user.name || (role === 'admin' ? 'Royal Admin' : 'Floor Steward');
+    
+    // Token generation (mee existing function)
     const signedToken = signSession(role, staffName);
 
     const response = NextResponse.json({
