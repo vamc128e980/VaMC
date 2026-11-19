@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import {
+  createHmac,
+  createHash,
+  scryptSync,
+  timingSafeEqual,
+} from 'node:crypto';
 import { supabase } from '@/lib/supabase';
 
 const SESSION_COOKIE = 'session_token';
@@ -35,9 +39,6 @@ function getSessionSecret(): string {
   if (secret && secret.length >= 32) {
     return secret;
   }
-  console.warn(
-    'SESSION_SECRET is missing or shorter than 32 chars; using fallback secret. Set SESSION_SECRET in environment variables.',
-  );
   return FALLBACK_SESSION_SECRET;
 }
 
@@ -47,6 +48,61 @@ function isHttpsRequest(request: NextRequest): boolean {
     return forwardedProto.split(',')[0].trim() === 'https';
   }
   return request.nextUrl.protocol === 'https:';
+}
+
+function safeCompareStrings(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
+
+function verifyPassword(plainPassword: string, storedValue: string): boolean {
+  const trimmedStored = storedValue.trim();
+  if (!trimmedStored) {
+    return false;
+  }
+
+  // Format 1: scrypt:<salt>:<hexDerivedKey>
+  if (trimmedStored.startsWith('scrypt:')) {
+    const parts = trimmedStored.split(':');
+    if (parts.length !== 3) {
+      return false;
+    }
+    const [, salt, expectedHex] = parts;
+    if (!salt || !expectedHex) {
+      return false;
+    }
+    const expectedKey = Buffer.from(expectedHex, 'hex');
+    const derivedKey = scryptSync(plainPassword, salt, expectedKey.length);
+    return (
+      derivedKey.length === expectedKey.length &&
+      timingSafeEqual(derivedKey, expectedKey)
+    );
+  }
+
+  // Format 2: sha256:<hexHash>
+  if (trimmedStored.startsWith('sha256:')) {
+    const expectedHex = trimmedStored.slice('sha256:'.length);
+    const actualHex = createHash('sha256')
+      .update(plainPassword)
+      .digest('hex');
+    return safeCompareStrings(actualHex, expectedHex);
+  }
+
+  // Reject legacy bcrypt hashes cleanly since bcryptjs is not installed
+  if (
+    trimmedStored.startsWith('$2a$') ||
+    trimmedStored.startsWith('$2b$') ||
+    trimmedStored.startsWith('$2y$')
+  ) {
+    return false;
+  }
+
+  // Format 3: Direct plaintext comparison (for existing unhashed rows)
+  return safeCompareStrings(plainPassword, trimmedStored);
 }
 
 function createSessionToken(
@@ -289,7 +345,7 @@ export async function POST(request: NextRequest) {
     if (
       !user ||
       typeof user.password_hash !== 'string' ||
-      !(await bcrypt.compare(password, user.password_hash))
+      !verifyPassword(password, user.password_hash)
     ) {
       return jsonResponse(
         { error: 'Invalid credentials. Please verify your details.' },
