@@ -75,13 +75,11 @@ async function verifySession(
     }
 
     const parts = token.split('.');
-
     if (parts.length !== 2) {
       return null;
     }
 
     const [encodedPayload, encodedSignature] = parts;
-
     if (!encodedPayload || !encodedSignature) {
       return null;
     }
@@ -224,14 +222,6 @@ export async function middleware(request: NextRequest) {
 
   const isAdmin = session?.role === 'admin';
   const isWaiter = session?.role === 'waiter';
-
-  if (token && !session && (isAdminRoute || isWaiterRoute)) {
-    return loginRedirect(
-      request,
-      isAdminRoute ? 'admin' : 'waiter',
-      secure,
-    );
-  }
 
   if (isAdminRoute && !isAdmin) {
     return loginRedirect(request, 'admin', secure);
