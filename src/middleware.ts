@@ -168,7 +168,6 @@ function clearAuthCookies(response: NextResponse) {
     expires: new Date(0),
   });
 
-  // Matches how ROLE_COOKIE is set in the login route.
   response.cookies.set(ROLE_COOKIE, '', {
     httpOnly: false,
     secure: isProduction,
@@ -207,7 +206,6 @@ export async function middleware(request: NextRequest) {
   const isAdmin = session?.role === 'admin';
   const isWaiter = session?.role === 'waiter';
 
-  // Clear stale/invalid cookies if a token was present but failed verification.
   if (token && !session && (isAdminRoute || isWaiterRoute)) {
     return loginRedirect(
       request,
