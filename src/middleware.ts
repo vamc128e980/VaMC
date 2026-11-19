@@ -31,6 +31,14 @@ interface SessionPayload {
   v: number;
 }
 
+function isHttpsRequest(request: NextRequest): boolean {
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  if (forwardedProto) {
+    return forwardedProto.split(',')[0].trim() === 'https';
+  }
+  return request.nextUrl.protocol === 'https:';
+}
+
 function decodeBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new Error('Invalid base64url');
@@ -137,6 +145,7 @@ async function verifySession(
 
 function securityHeaders(
   response: NextResponse,
+  secure: boolean,
 ): NextResponse {
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'SAMEORIGIN');
@@ -153,7 +162,7 @@ function securityHeaders(
     'private, no-store, no-cache, must-revalidate',
   );
 
-  if (process.env.NODE_ENV === 'production') {
+  if (secure) {
     response.headers.set(
       'Strict-Transport-Security',
       'max-age=31536000; includeSubDomains',
@@ -163,12 +172,13 @@ function securityHeaders(
   return response;
 }
 
-function clearAuthCookies(response: NextResponse) {
-  const isProduction = process.env.NODE_ENV === 'production';
-
+function clearAuthCookies(
+  response: NextResponse,
+  secure: boolean,
+) {
   response.cookies.set(SESSION_COOKIE, '', {
     httpOnly: true,
-    secure: isProduction,
+    secure,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
@@ -177,7 +187,7 @@ function clearAuthCookies(response: NextResponse) {
 
   response.cookies.set(ROLE_COOKIE, '', {
     httpOnly: false,
-    secure: isProduction,
+    secure,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
@@ -188,17 +198,19 @@ function clearAuthCookies(response: NextResponse) {
 function loginRedirect(
   request: NextRequest,
   role: UserRole,
+  secure: boolean,
 ): NextResponse {
   const url = new URL('/login', request.url);
   url.searchParams.set('role', role);
 
   const response = NextResponse.redirect(url);
-  clearAuthCookies(response);
+  clearAuthCookies(response, secure);
 
-  return securityHeaders(response);
+  return securityHeaders(response, secure);
 }
 
 export async function middleware(request: NextRequest) {
+  const secure = isHttpsRequest(request);
   const { pathname, searchParams } = request.nextUrl;
 
   const isAdminRoute =
@@ -217,15 +229,16 @@ export async function middleware(request: NextRequest) {
     return loginRedirect(
       request,
       isAdminRoute ? 'admin' : 'waiter',
+      secure,
     );
   }
 
   if (isAdminRoute && !isAdmin) {
-    return loginRedirect(request, 'admin');
+    return loginRedirect(request, 'admin', secure);
   }
 
   if (isWaiterRoute && !isWaiter && !isAdmin) {
-    return loginRedirect(request, 'waiter');
+    return loginRedirect(request, 'waiter', secure);
   }
 
   if (isLoginRoute) {
@@ -238,23 +251,27 @@ export async function middleware(request: NextRequest) {
       if (isAdmin) {
         return securityHeaders(
           NextResponse.redirect(new URL('/admin', request.url)),
+          secure,
         );
       }
 
       if (isWaiter) {
         return securityHeaders(
           NextResponse.redirect(new URL('/waiter', request.url)),
+          secure,
         );
       }
     }
   }
 
-  return securityHeaders(NextResponse.next());
+  return securityHeaders(NextResponse.next(), secure);
 }
 
 export const config = {
   matcher: [
+    '/admin',
     '/admin/:path*',
+    '/waiter',
     '/waiter/:path*',
     '/login',
   ],
