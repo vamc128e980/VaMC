@@ -18,15 +18,14 @@ export default function AdminHeader() {
         .from("restaurant_settings")
         .select("*")
         .eq("id", 1)
-        .single();
+        .maybeSingle();
       if (data) {
-        setShopName(data.restaurant_name);
-        setTagline(data.tagline);
+        if (data.restaurant_name) setShopName(data.restaurant_name);
+        if (data.tagline) setTagline(data.tagline);
       }
     }
     fetchSettings();
 
-    // Real-time listener for brand name & tagline updates across devices/tabs
     const channel = supabase
       .channel("restaurant-settings-sync")
       .on(
@@ -53,14 +52,23 @@ export default function AdminHeader() {
   };
 
   const handleSave = async () => {
+    const cleanName = tempName.trim();
+    const cleanTagline = tempTagline.trim();
+    if (!cleanName) return;
+
     setLoading(true);
     const { error } = await supabase
       .from("restaurant_settings")
-      .upsert({ id: 1, restaurant_name: tempName, tagline: tempTagline, updated_at: new Date().toISOString() });
+      .upsert({
+        id: 1,
+        restaurant_name: cleanName,
+        tagline: cleanTagline || "Fine-Dine Operations",
+        updated_at: new Date().toISOString(),
+      });
 
     if (!error) {
-      setShopName(tempName);
-      setTagline(tempTagline);
+      setShopName(cleanName);
+      setTagline(cleanTagline || "Fine-Dine Operations");
       setIsEditing(false);
     }
     setLoading(false);
@@ -116,13 +124,14 @@ export default function AdminHeader() {
           <button
             onClick={handleSave}
             disabled={loading}
-            className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer"
+            className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsEditing(false)}
-            className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 transition cursor-pointer"
+            disabled={loading}
+            className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 transition cursor-pointer disabled:opacity-50"
           >
             <X className="w-4 h-4" />
           </button>
