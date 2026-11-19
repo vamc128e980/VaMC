@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { supabase } from '@/lib/supabase';
 
-// ======================================================
-// CONFIGURATION
-// ======================================================
-
 const SESSION_COOKIE = 'session_token';
 const ROLE_COOKIE = 'staff_role';
 
@@ -30,10 +26,6 @@ interface SessionPayload {
   v: number;
 }
 
-// ======================================================
-// ENVIRONMENT VALIDATION
-// ======================================================
-
 function getSessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) {
@@ -41,10 +33,6 @@ function getSessionSecret(): string | null {
   }
   return secret;
 }
-
-// ======================================================
-// SESSION TOKEN GENERATION & VERIFICATION
-// ======================================================
 
 function createSessionToken(
   identifier: string,
@@ -140,10 +128,6 @@ function verifySessionToken(
   }
 }
 
-// ======================================================
-// COOKIE & RESPONSE HELPERS
-// ======================================================
-
 function setSessionCookies(
   response: NextResponse,
   token: string,
@@ -208,10 +192,6 @@ function buildLogoutResponse() {
   clearSessionCookies(response);
   return response;
 }
-
-// ======================================================
-// POST: STAFF LOGIN (OR LOGOUT WHEN action === 'logout')
-// ======================================================
 
 export async function POST(request: NextRequest) {
   try {
@@ -342,10 +322,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ======================================================
-// GET: VERIFY ACTIVE SESSION
-// ======================================================
-
 export async function GET(request: NextRequest) {
   try {
     const secret = getSessionSecret();
@@ -368,10 +344,6 @@ export async function GET(request: NextRequest) {
     return jsonResponse({ authenticated: false }, 500);
   }
 }
-
-// ======================================================
-// DELETE: SECURE LOGOUT
-// ======================================================
 
 export async function DELETE() {
   return buildLogoutResponse();
