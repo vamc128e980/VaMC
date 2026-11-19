@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import AdminSecurityModal from '@/components/AdminSecurityModal';
@@ -214,41 +214,63 @@ export default function LuxuryGoldAdminPanel() {
   // Calendar State (Local IST Date)
   const getTodayStr = () => toLocalDateStr(new Date());
   const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
+  const selectedDateRef = useRef<string>(selectedDate);
+  selectedDateRef.current = selectedDate;
+
   const [showCalendar, setShowCalendar] = useState(false);
   const [calViewDate, setCalViewDate] = useState<Date>(new Date());
   const calRef = useRef<HTMLDivElement>(null);
 
-  // Auth Guard
+  // Auth Guard synced with /api/auth/login/verify and staff_role cookie
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const rawCookies = document.cookie || '';
-    const cookies = rawCookies.split(';').map(c => c.trim());
-    const roleCookie = cookies.find(c => c.startsWith('staff_role='));
-    const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
-    const localRole = localStorage.getItem('staff_role')?.toLowerCase();
-    const token = localStorage.getItem('session_token');
+    let active = true;
 
-    const isValidAdmin = (cookieRole === 'admin' || localRole === 'admin') && token && token.startsWith('admin_verified_');
+    const verifyAdminSession = async () => {
+      try {
+        const res = await fetch('/api/auth/login/verify', {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        const data = res.ok ? await res.json() : null;
 
-    if (isValidAdmin) {
-      if (!cookieRole) {
-        document.cookie = 'staff_role=admin; path=/; max-age=86400; SameSite=Lax';
+        if (!active) return;
+        if (res.ok && data?.authenticated && data?.role === 'admin') {
+          document.cookie = 'staff_role=admin; path=/; max-age=86400; SameSite=Lax';
+          setIsAuthenticated(true);
+          setAuthChecking(false);
+          return;
+        }
+      } catch {
+        // Fallback cookie check below
       }
-      setIsAuthenticated(true);
-      setAuthChecking(false);
-    } else {
-      localStorage.clear();
-      document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-      document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-      setIsAuthenticated(false);
-      setAuthChecking(false);
-      window.location.replace('/login');
-    }
+
+      const rawCookies = document.cookie || '';
+      const cookies = rawCookies.split(';').map(c => c.trim());
+      const roleCookie = cookies.find(c => c.startsWith('staff_role='));
+      const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
+
+      if (!active) return;
+      if (cookieRole === 'admin') {
+        setIsAuthenticated(true);
+        setAuthChecking(false);
+      } else {
+        setIsAuthenticated(false);
+        setAuthChecking(false);
+        window.location.replace('/login?role=admin');
+      }
+    };
+
+    verifyAdminSession();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const loadBrandSettings = async () => {
+  const loadBrandSettings = useCallback(async () => {
     try {
-      const { data } = await supabase.from('restaurant_settings').select('*').eq('id', 1).single();
+      const { data } = await supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle();
       if (data) {
         if (data.restaurant_name) setShopName(data.restaurant_name);
         if (data.tagline) setTagline(data.tagline);
@@ -256,9 +278,9 @@ export default function LuxuryGoldAdminPanel() {
     } catch (err) {
       console.error('Settings load err:', err);
     }
-  };
+  }, []);
 
-  const loadCounterAndInventoryData = async () => {
+  const loadCounterAndInventoryData = useCallback(async () => {
     try {
       const [
         { data: vItems },
@@ -276,10 +298,10 @@ export default function LuxuryGoldAdminPanel() {
     } catch (e) {
       console.error('Error loading counter/inventory data', e);
     }
-  };
+  }, []);
 
   // Decoupled Live Orders, Batches & Selected Date Sessions Loader
-  const loadLiveOrdersAndSessions = async (targetDate = selectedDate) => {
+  const loadLiveOrdersAndSessions = useCallback(async (targetDate = selectedDateRef.current) => {
     try {
       const startOfDay = new Date(`${targetDate}T00:00:00`).toISOString();
       const endOfDay = new Date(`${targetDate}T23:59:59.999`).toISOString();
@@ -329,10 +351,10 @@ export default function LuxuryGoldAdminPanel() {
     } catch (err) {
       console.error('Live Orders Load Error:', err);
     }
-  };
+  }, []);
 
   // Decoupled Menu & Catalog Loader
-  const loadMenuCatalog = async () => {
+  const loadMenuCatalog = useCallback(async () => {
     try {
       const [
         { data: cats },
@@ -363,38 +385,42 @@ export default function LuxuryGoldAdminPanel() {
     } catch (err) {
       console.error('Menu Catalog Load Error:', err);
     }
-  };
+  }, []);
 
-  const loadAdminData = async () => {
+  const loadAdminData = useCallback(async () => {
     setLoading(true);
     try {
       await Promise.all([
-        loadLiveOrdersAndSessions(selectedDate),
+        loadLiveOrdersAndSessions(selectedDateRef.current),
         loadMenuCatalog(),
         loadCounterAndInventoryData()
       ]);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    loadLiveOrdersAndSessions(selectedDate);
-  }, [selectedDate, isAuthenticated]);
+  }, [loadLiveOrdersAndSessions, loadMenuCatalog, loadCounterAndInventoryData]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     loadBrandSettings();
     loadAdminData();
+  }, [isAuthenticated, loadBrandSettings, loadAdminData]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadLiveOrdersAndSessions(selectedDate);
+  }, [selectedDate, isAuthenticated, loadLiveOrdersAndSessions]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
     const channel = supabase
-      .channel(`admin-sync-${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadLiveOrdersAndSessions(selectedDate))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadLiveOrdersAndSessions(selectedDate))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadLiveOrdersAndSessions(selectedDate))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadLiveOrdersAndSessions(selectedDate))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => loadLiveOrdersAndSessions(selectedDate))
+      .channel('admin-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadMenuCatalog())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadMenuCatalog())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadMenuCatalog())
@@ -408,7 +434,7 @@ export default function LuxuryGoldAdminPanel() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated, selectedDate]);
+  }, [isAuthenticated, loadLiveOrdersAndSessions, loadMenuCatalog, loadCounterAndInventoryData]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -483,7 +509,7 @@ export default function LuxuryGoldAdminPanel() {
       }).eq('id', sessionId);
       if (updErr) throw updErr;
 
-      await loadLiveOrdersAndSessions(selectedDate);
+      await loadLiveOrdersAndSessions(selectedDateRef.current);
     } catch (err) {
       console.error('Recalculate error:', err);
     }
@@ -566,7 +592,7 @@ export default function LuxuryGoldAdminPanel() {
       const { error: tblErr } = await supabase.from('restaurant_tables').update({ status: 'available' }).eq('table_number', tableNum);
       if (tblErr) throw tblErr;
 
-      await loadLiveOrdersAndSessions(selectedDate);
+      await loadLiveOrdersAndSessions(selectedDateRef.current);
       showToast(`Table #${tableNum} Bill settled via ${mode.toUpperCase()}!`);
     } catch (err: any) {
       alert('Settle error: ' + err.message);
@@ -583,7 +609,7 @@ export default function LuxuryGoldAdminPanel() {
       if (sErr) throw sErr;
       const { error: tErr } = await supabase.from('restaurant_tables').update({ status: 'available' }).gte('table_number', 0);
       if (tErr) throw tErr;
-      await loadLiveOrdersAndSessions(selectedDate);
+      await loadLiveOrdersAndSessions(selectedDateRef.current);
       showToast('Floor reset aindi! All tables vacant.');
     } catch (err: any) {
       alert('Reset error: ' + err.message);
@@ -592,11 +618,21 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/login/verify', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      });
+    } catch {
+      // Fallback to client cookie/storage cleanup
+    }
     document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') localStorage.clear();
-    window.location.replace('/');
+    window.location.replace('/login?role=admin');
   };
 
   const handleAddTable = async (e: React.FormEvent) => {
@@ -620,7 +656,7 @@ export default function LuxuryGoldAdminPanel() {
       setNewTableNumber('');
       setNewTableName('');
       setShowAddTableModal(false);
-      await loadLiveOrdersAndSessions(selectedDate);
+      await loadLiveOrdersAndSessions(selectedDateRef.current);
     } catch (err: any) {
       alert('Error: ' + err.message);
     } finally {
@@ -643,7 +679,7 @@ export default function LuxuryGoldAdminPanel() {
 
       setShowEditTableNameModal(false);
       setEditingTableObj(null);
-      await loadLiveOrdersAndSessions(selectedDate);
+      await loadLiveOrdersAndSessions(selectedDateRef.current);
     } catch (err: any) {
       alert('Name update error: ' + err.message);
     } finally {
@@ -658,7 +694,7 @@ export default function LuxuryGoldAdminPanel() {
       setLoading(true);
       const { error } = await supabase.from('restaurant_tables').delete().eq('table_number', tableNum);
       if (error) throw error;
-      await loadLiveOrdersAndSessions(selectedDate);
+      await loadLiveOrdersAndSessions(selectedDateRef.current);
     } catch (err: any) {
       alert('Error: ' + err.message);
     } finally {
@@ -2817,7 +2853,7 @@ export default function LuxuryGoldAdminPanel() {
                                   setActiveVamcTabId(nextTabs[0].id);
                                 }
 
-                                loadLiveOrdersAndSessions(selectedDate);
+                                loadLiveOrdersAndSessions(selectedDateRef.current);
                               } catch (err: any) {
                                 loadCounterAndInventoryData();
                                 alert('Error: ' + err.message);
