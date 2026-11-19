@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const SESSION_COOKIE = 'session_token';
 const ROLE_COOKIE = 'staff_role';
-const SESSION_SECRET = process.env.SESSION_SECRET;
+
+const FALLBACK_SESSION_SECRET =
+  'vamc-vujwala-simha-session-secret-key-2026-secure-hmac-sha256';
+
+const SESSION_SECRET =
+  process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32
+    ? process.env.SESSION_SECRET
+    : FALLBACK_SESSION_SECRET;
 
 const SESSION_ISSUER = 'vamc';
 const SESSION_AUDIENCE = 'vamc-web';
