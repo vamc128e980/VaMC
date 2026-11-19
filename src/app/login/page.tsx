@@ -40,10 +40,6 @@ function LoginContent() {
     setErrorMsg('');
   }, [queryRole]);
 
-  // ====================================================
-  // SECURE SERVER-SIDE LOGIN
-  // ====================================================
-
   const handleLogin = async (
     identifier: string,
     password: string,
@@ -95,11 +91,8 @@ function LoginContent() {
         throw new Error('Invalid authentication response.');
       }
 
-      if (targetRole === 'admin') {
-        window.location.replace('/admin');
-      } else {
-        window.location.replace('/waiter');
-      }
+      const nextPath = targetRole === 'admin' ? '/admin' : '/waiter';
+      window.location.assign(nextPath);
     } catch (error) {
       setErrorMsg(
         error instanceof Error
@@ -111,10 +104,6 @@ function LoginContent() {
     }
   };
 
-  // ====================================================
-  // UI
-  // ====================================================
-
   return (
     <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] flex items-center justify-center p-4 antialiased selection:bg-[#D4AF37] selection:text-black">
       <motion.div
@@ -123,7 +112,6 @@ function LoginContent() {
         transition={{ duration: 0.3 }}
         className="w-full max-w-sm rounded-[32px] bg-gradient-to-b from-[#111115] via-[#0b0b0e] to-[#070709] border border-[#D4AF37]/40 p-6 sm:p-8 shadow-[0_12px_45px_rgba(0,0,0,0.85)] space-y-5"
       >
-        {/* HEADER */}
         <div className="text-center space-y-1.5">
           <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/50 flex items-center justify-center mx-auto shadow-lg text-[#D4AF37]">
             <Store className="w-6 h-6" />
@@ -138,7 +126,6 @@ function LoginContent() {
           </p>
         </div>
 
-        {/* ROLE SELECTOR */}
         <div className="grid grid-cols-2 p-1 rounded-2xl bg-white/[0.03] border border-white/10 font-mono text-xs">
           <button
             type="button"
@@ -175,7 +162,6 @@ function LoginContent() {
           </button>
         </div>
 
-        {/* ERROR MESSAGE */}
         {errorMsg && (
           <div
             role="alert"
@@ -186,17 +172,11 @@ function LoginContent() {
           </div>
         )}
 
-        {/* WAITER LOGIN */}
         {role === 'waiter' ? (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-
-              handleLogin(
-                waiterInput,
-                waiterPassword,
-                'waiter',
-              );
+              handleLogin(waiterInput, waiterPassword, 'waiter');
             }}
             className="space-y-3 font-mono"
           >
@@ -249,27 +229,17 @@ function LoginContent() {
               className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <span>
-                {loading
-                  ? 'Verifying Staff...'
-                  : 'Access Waiter Floor'}
+                {loading ? 'Verifying Staff...' : 'Access Waiter Floor'}
               </span>
 
-              {!loading && (
-                <ArrowRight className="w-4 h-4" />
-              )}
+              {!loading && <ArrowRight className="w-4 h-4" />}
             </motion.button>
           </form>
         ) : (
-          /* ADMIN LOGIN */
           <form
             onSubmit={(e) => {
               e.preventDefault();
-
-              handleLogin(
-                adminEmail,
-                adminPassword,
-                'admin',
-              );
+              handleLogin(adminEmail, adminPassword, 'admin');
             }}
             className="space-y-3 font-mono"
           >
@@ -322,14 +292,10 @@ function LoginContent() {
               className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <span>
-                {loading
-                  ? 'Verifying Admin...'
-                  : 'Access Admin Dashboard'}
+                {loading ? 'Verifying Admin...' : 'Access Admin Dashboard'}
               </span>
 
-              {!loading && (
-                <ArrowRight className="w-4 h-4" />
-              )}
+              {!loading && <ArrowRight className="w-4 h-4" />}
             </motion.button>
           </form>
         )}
@@ -337,10 +303,6 @@ function LoginContent() {
     </div>
   );
 }
-
-// ======================================================
-// PAGE
-// ======================================================
 
 export default function LoginPage() {
   return (
