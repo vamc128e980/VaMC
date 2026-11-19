@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   ShieldCheck,
@@ -16,6 +16,7 @@ import {
 type UserRole = 'waiter' | 'admin';
 
 function LoginContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const queryRole = searchParams.get('role');
 
@@ -31,12 +32,16 @@ function LoginContent() {
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    router.prefetch('/admin');
+    router.prefetch('/waiter');
+  }, [router]);
+
+  useEffect(() => {
     if (queryRole === 'admin') {
       setRole('admin');
     } else {
       setRole('waiter');
     }
-
     setErrorMsg('');
   }, [queryRole]);
 
@@ -48,7 +53,6 @@ function LoginContent() {
     if (loading) return;
 
     setErrorMsg('');
-
     const cleanIdentifier = identifier.trim();
     const cleanPassword = password.trim();
 
@@ -83,7 +87,7 @@ function LoginContent() {
       if (!response.ok || !result?.success) {
         throw new Error(
           result?.error ||
-            `Login failed (${response.status}). Please verify /api/auth/login/verify and try again.`,
+            `Login failed (${response.status}). Please try again.`,
         );
       }
 
@@ -91,15 +95,20 @@ function LoginContent() {
         throw new Error('Invalid authentication response.');
       }
 
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('staff_role', targetRole);
+        localStorage.setItem('staff_name', result.name || (targetRole === 'admin' ? 'Master Admin' : 'Floor Steward'));
+        localStorage.setItem('session_token', result.token || 'verified_session');
+      }
+
       const nextPath = targetRole === 'admin' ? '/admin' : '/waiter';
-      window.location.assign(nextPath);
+      window.location.replace(nextPath);
     } catch (error) {
       setErrorMsg(
         error instanceof Error
           ? error.message
           : 'Unable to login. Please try again.',
       );
-
       setLoading(false);
     }
   };
@@ -109,7 +118,7 @@ function LoginContent() {
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: 0.25 }}
         className="w-full max-w-sm rounded-[32px] bg-gradient-to-b from-[#111115] via-[#0b0b0e] to-[#070709] border border-[#D4AF37]/40 p-6 sm:p-8 shadow-[0_12px_45px_rgba(0,0,0,0.85)] space-y-5"
       >
         <div className="text-center space-y-1.5">
@@ -181,7 +190,7 @@ function LoginContent() {
             className="space-y-3 font-mono"
           >
             <div>
-              <label className="text-[11px] text-neutral-400 block mb-1">
+              <label htmlFor="waiter-identifier" className="text-[11px] text-neutral-400 block mb-1">
                 Staff / Waiter Name or ID
               </label>
 
@@ -189,6 +198,8 @@ function LoginContent() {
                 <User className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
+                  id="waiter-identifier"
+                  name="waiterIdentifier"
                   type="text"
                   required
                   autoComplete="username"
@@ -202,7 +213,7 @@ function LoginContent() {
             </div>
 
             <div>
-              <label className="text-[11px] text-neutral-400 block mb-1">
+              <label htmlFor="waiter-password" className="text-[11px] text-neutral-400 block mb-1">
                 Waiter Password
               </label>
 
@@ -210,6 +221,8 @@ function LoginContent() {
                 <Lock className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
+                  id="waiter-password"
+                  name="waiterPassword"
                   type="password"
                   required
                   autoComplete="current-password"
@@ -244,7 +257,7 @@ function LoginContent() {
             className="space-y-3 font-mono"
           >
             <div>
-              <label className="text-[11px] text-neutral-400 block mb-1">
+              <label htmlFor="admin-email" className="text-[11px] text-neutral-400 block mb-1">
                 Admin Email Address
               </label>
 
@@ -252,6 +265,8 @@ function LoginContent() {
                 <Mail className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
+                  id="admin-email"
+                  name="adminEmail"
                   type="email"
                   required
                   autoComplete="username"
@@ -265,7 +280,7 @@ function LoginContent() {
             </div>
 
             <div>
-              <label className="text-[11px] text-neutral-400 block mb-1">
+              <label htmlFor="admin-password" className="text-[11px] text-neutral-400 block mb-1">
                 Admin Password
               </label>
 
@@ -273,6 +288,8 @@ function LoginContent() {
                 <Lock className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
+                  id="admin-password"
+                  name="adminPassword"
                   type="password"
                   required
                   autoComplete="current-password"
