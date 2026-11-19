@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { 
@@ -58,7 +58,7 @@ export default function WaiterPanel() {
 
   // Shared AudioContext
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const playChimeTone = () => {
+  const playChimeTone = useCallback(() => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
@@ -93,7 +93,7 @@ export default function WaiterPanel() {
     } catch (e) {
       console.error('Audio play error:', e);
     }
-  };
+  }, []);
 
   // Core Data States
   const [tables, setTables] = useState<any[]>([]);
@@ -127,49 +127,59 @@ export default function WaiterPanel() {
 
   const [timeStr, setTimeStr] = useState('');
 
-  // 1. ROBUST AUTH GUARD (API + LocalStorage Fallback)
+  // 1. ROBUST AUTH GUARD SYNCED WITH /api/auth/login/verify + staff_role COOKIE
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    let active = true;
 
     const verifySession = async () => {
       try {
-        const res = await fetch('/api/auth', { 
+        const res = await fetch('/api/auth/login/verify', {
           method: 'GET',
+          credentials: 'same-origin',
           headers: { 'Cache-Control': 'no-cache' }
         });
-        
+
         if (res.ok) {
           const data = await res.json();
-          if (data.authenticated && (data.role === 'waiter' || data.role === 'admin')) {
+          if (!active) return;
+          if (data?.authenticated && (data?.role === 'waiter' || data?.role === 'admin')) {
             setStaffName(data.name || localStorage.getItem('staff_name') || 'Floor Steward');
             setIsAuthenticated(true);
             setAuthChecking(false);
             return;
           }
         }
-        throw new Error('API Auth check failed');
-      } catch (err) {
-        // Fallback to client localStorage/cookies if API route fails or gives 404
-        const localRole = localStorage.getItem('staff_role');
-        const localToken = localStorage.getItem('session_token');
-        const localName = localStorage.getItem('staff_name');
+      } catch {
+        // Fallback cookie check below
+      }
 
-        if (localToken && (localRole === 'waiter' || localRole === 'admin')) {
-          setStaffName(localName || 'Floor Steward');
-          setIsAuthenticated(true);
-          setAuthChecking(false);
-        } else {
-          localStorage.clear();
-          document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-          document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-          setIsAuthenticated(false);
-          setAuthChecking(false);
-          window.location.replace('/login'); 
-        }
+      const roleCookie = document.cookie
+        .split(';')
+        .map(c => c.trim())
+        .find(c => c.startsWith('staff_role='))
+        ?.split('=')[1]
+        ?.toLowerCase();
+
+      if (!active) return;
+      if (roleCookie === 'waiter' || roleCookie === 'admin') {
+        setStaffName(localStorage.getItem('staff_name') || 'Floor Steward');
+        setIsAuthenticated(true);
+        setAuthChecking(false);
+      } else {
+        localStorage.clear();
+        document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+        document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+        setIsAuthenticated(false);
+        setAuthChecking(false);
+        window.location.replace('/login?role=waiter');
       }
     };
 
     verifySession();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Live Digital Clock
@@ -182,7 +192,7 @@ export default function WaiterPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadFloorState = async () => {
+  const loadFloorState = useCallback(async () => {
     try {
       const [
         { data: tbls, error: tErr },
@@ -224,9 +234,9 @@ export default function WaiterPanel() {
     } catch (err) {
       console.error('Waiter floor sync error:', err);
     }
-  };
+  }, []);
 
-  const loadMenuAndAddons = async () => {
+  const loadMenuAndAddons = useCallback(async () => {
     try {
       const [
         { data: cats },
@@ -247,23 +257,23 @@ export default function WaiterPanel() {
     } catch (err) {
       console.error('Menu fetch error:', err);
     }
-  };
+  }, []);
 
-  const loadWaiterData = async () => {
+  const loadWaiterData = useCallback(async () => {
     setLoading(true);
     try {
       await Promise.all([loadFloorState(), loadMenuAndAddons()]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadFloorState, loadMenuAndAddons]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     loadWaiterData();
 
     const channel = supabase
-      .channel(`waiter-sync-${Date.now()}`)
+      .channel('waiter-realtime-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadFloorState())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadFloorState())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_batches' }, () => {
@@ -287,12 +297,17 @@ export default function WaiterPanel() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadWaiterData, loadFloorState, loadMenuAndAddons, playChimeTone]);
 
-  // SECURE LOGOUT FUNCTION
+  // SECURE LOGOUT FUNCTION SYNCED WITH /api/auth/login/verify
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth', { method: 'DELETE' });
+      await fetch('/api/auth/login/verify', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      });
     } catch (e) {
       console.error('Logout error', e);
     }
@@ -301,7 +316,7 @@ export default function WaiterPanel() {
     if (typeof window !== 'undefined') {
       localStorage.clear();
     }
-    window.location.replace('/login');
+    window.location.replace('/login?role=waiter');
   };
 
   const recalculateSessionBill = async (sessionId: string) => {
@@ -1288,7 +1303,7 @@ export default function WaiterPanel() {
               >
                 {loading
                   ? 'Punching to Kitchen...'
-                  : `Confirm & Dispatch to Kitchen ${punchCart.length > 0 ? `(₹{punchCartTotal.toFixed(0)})` : ''}`}
+                  : `Confirm & Dispatch to Kitchen ${punchCart.length > 0 ? `(₹${punchCartTotal.toFixed(0)})` : ''}`}
               </motion.button>
 
               {/* ADD-ONS / VARIANT PICKER OVERLAY INSIDE PUNCH MODAL */}
