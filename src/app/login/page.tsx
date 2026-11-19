@@ -64,7 +64,7 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/login/verify', {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
@@ -87,7 +87,7 @@ function LoginContent() {
       if (!response.ok || !result?.success) {
         throw new Error(
           result?.error ||
-            `Login failed (${response.status}). Please verify the API route and try again.`,
+            `Login failed (${response.status}). Please verify /api/auth/login/verify and try again.`,
         );
       }
 
@@ -95,7 +95,6 @@ function LoginContent() {
         throw new Error('Invalid authentication response.');
       }
 
-      // Server sets the HttpOnly session cookie; redirect to the role dashboard.
       if (targetRole === 'admin') {
         window.location.replace('/admin');
       } else {
