@@ -4,17 +4,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  UserCheck, 
-  KeyRound, 
-  Trash2, 
-  Plus, 
-  Check, 
-  X, 
-  Eye, 
-  EyeOff, 
+import {
+  UserCheck,
+  KeyRound,
+  Trash2,
+  Plus,
+  Check,
+  X,
+  Eye,
+  EyeOff,
   Sparkles,
-  Edit2
+  Edit2,
 } from 'lucide-react';
 
 const butterSpring = { type: 'spring', stiffness: 420, damping: 30, mass: 0.6 };
@@ -24,12 +24,10 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // New Waiter Details
   const [newName, setNewName] = useState('');
   const [newIdentifier, setNewIdentifier] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  // Editing States
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<'name' | 'identifier' | 'password' | null>(null);
   const [tempValue, setTempValue] = useState('');
@@ -43,6 +41,7 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
         .select('*')
         .eq('role', 'waiter')
         .order('id', { ascending: true });
+      if (error) throw error;
       if (data) setWaiters(data);
     } catch (err) {
       console.error('Waiters fetch error:', err);
@@ -67,7 +66,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
 
   if (!isOpen) return null;
 
-  // 1. Add Waiter with explicit Phone/Username Identifier
   const handleAddWaiter = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = newName.trim();
@@ -85,7 +83,7 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
         role: 'waiter',
         identifier: cleanId,
         password_hash: cleanPass,
-        is_active: true
+        is_active: true,
       });
 
       if (error) {
@@ -107,7 +105,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     }
   };
 
-  // 2. Change Name
   const handleSaveName = async (waiterId: number) => {
     const cleanName = tempValue.trim();
     if (!cleanName) return alert('Name empty ga undakudadhu.');
@@ -116,9 +113,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     try {
       const { error } = await supabase
         .from('staff_accounts')
-        .update({ 
+        .update({
           name: cleanName,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', waiterId);
 
@@ -132,7 +129,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     }
   };
 
-  // 3. Change Login ID (Phone / Username)
   const handleSaveIdentifier = async (waiterId: number) => {
     const cleanId = tempValue.trim().toLowerCase();
     if (!cleanId) return alert('Identifier empty ga undakudadhu.');
@@ -141,13 +137,18 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     try {
       const { error } = await supabase
         .from('staff_accounts')
-        .update({ 
+        .update({
           identifier: cleanId,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', waiterId);
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('unique') || error.code === '23505') {
+          throw new Error(`"${cleanId}" ID tho already account undi.`);
+        }
+        throw error;
+      }
       cancelEdit();
       await fetchWaiters();
     } catch (err: any) {
@@ -157,7 +158,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     }
   };
 
-  // 4. Change Password / PIN
   const handleSavePassword = async (waiterId: number) => {
     const cleanPass = tempValue.trim();
     if (!cleanPass) return alert('Password empty ga undakudadhu.');
@@ -166,9 +166,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     try {
       const { error } = await supabase
         .from('staff_accounts')
-        .update({ 
+        .update({
           password_hash: cleanPass,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', waiterId);
 
@@ -182,19 +182,23 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
     }
   };
 
-  // 5. Delete Waiter
   const handleDeleteWaiter = async (waiterId: number, name: string) => {
     if (!confirm(`Are you sure? "${name}" waiter account delete aipothundi.`)) return;
+    setLoading(true);
     try {
-      await supabase.from('staff_accounts').delete().eq('id', waiterId);
+      const { error } = await supabase.from('staff_accounts').delete().eq('id', waiterId);
+      if (error) throw error;
+      if (editingId === waiterId) cancelEdit();
       await fetchWaiters();
     } catch (err: any) {
       alert('Delete failed: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const toggleShowPass = (id: number) => {
-    setShowPassMap(prev => ({ ...prev, [id]: !prev[id] }));
+    setShowPassMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -293,7 +297,7 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1 cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-1 cursor-pointer disabled:opacity-50"
               >
                 {loading ? 'Creating Account...' : 'Save Waiter Account'}
               </button>
@@ -319,7 +323,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                 >
                   {/* Staff Name & ID */}
                   <div className="space-y-1">
-                    {/* Name Edit */}
                     {isEditingThis && editMode === 'name' ? (
                       <div className="flex items-center gap-1.5">
                         <input
@@ -330,8 +333,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                           placeholder="New Name"
                         />
                         <button
+                          disabled={loading}
                           onClick={() => handleSaveName(w.id)}
-                          className="p-1 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
+                          className="p-1 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 disabled:opacity-50"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
                         </button>
@@ -355,7 +359,6 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                       </div>
                     )}
 
-                    {/* Login ID Edit */}
                     <div className="flex items-center gap-2 text-[11px] text-neutral-400">
                       <span>Login ID:</span>
                       {isEditingThis && editMode === 'identifier' ? (
@@ -367,8 +370,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                             className="bg-[#161619] border border-[#D4AF37] rounded-lg px-2 py-0.5 text-white text-xs outline-none font-mono"
                           />
                           <button
+                            disabled={loading}
                             onClick={() => handleSaveIdentifier(w.id)}
-                            className="p-1 rounded bg-emerald-500/20 text-emerald-300"
+                            className="p-1 rounded bg-emerald-500/20 text-emerald-300 disabled:opacity-50"
                           >
                             <Check className="w-3 h-3 stroke-[3]" />
                           </button>
@@ -406,8 +410,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                           className="w-24 bg-[#161619] border border-[#D4AF37] rounded-lg px-2.5 py-1 text-white font-mono text-xs outline-none"
                         />
                         <button
+                          disabled={loading}
                           onClick={() => handleSavePassword(w.id)}
-                          className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
+                          className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 disabled:opacity-50"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
                         </button>
@@ -440,8 +445,9 @@ export default function WaiterSecurityModal({ isOpen, onClose }: { isOpen: boole
                         </button>
 
                         <button
+                          disabled={loading}
                           onClick={() => handleDeleteWaiter(w.id, w.name)}
-                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 cursor-pointer"
+                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 cursor-pointer disabled:opacity-50"
                           title="Delete Waiter"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
