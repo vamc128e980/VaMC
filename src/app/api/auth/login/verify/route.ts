@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { supabase } from '@/lib/supabase';
@@ -15,7 +14,9 @@ const SESSION_AUDIENCE = 'vamc-web';
 const SESSION_VERSION = 1;
 
 const SESSION_DURATION = 24 * 60 * 60;
-const MAX_REQUEST_SIZE = 4096;
+const CLOCK_TOLERANCE = 60;
+const MAX_TOKEN_LENGTH = 4096;
+const MAX_BODY_SIZE = 8192;
 
 type UserRole = 'admin' | 'waiter';
 
@@ -33,23 +34,22 @@ interface SessionPayload {
 // ENVIRONMENT VALIDATION
 // ======================================================
 
-function getSessionSecret(): string {
+function getSessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
-
   if (!secret || secret.length < 32) {
-    throw new Error('SESSION_SECRET is missing or invalid.');
+    return null;
   }
-
   return secret;
 }
 
 // ======================================================
-// SESSION TOKEN GENERATION
+// SESSION TOKEN GENERATION & VERIFICATION
 // ======================================================
 
 function createSessionToken(
   identifier: string,
   role: UserRole,
+  secret: string,
 ): string {
   const now = Math.floor(Date.now() / 1000);
 
@@ -67,47 +67,33 @@ function createSessionToken(
     .from(JSON.stringify(payload))
     .toString('base64url');
 
-  const signature = createHmac(
-    'sha256',
-    getSessionSecret(),
-  )
+  const signature = createHmac('sha256', secret)
     .update(encodedPayload)
     .digest('base64url');
 
   return `${encodedPayload}.${signature}`;
 }
 
-// ======================================================
-// SESSION TOKEN VERIFICATION
-// ======================================================
-
 function verifySessionToken(
-  token?: string,
+  token: string | undefined,
+  secret: string,
 ): SessionPayload | null {
   try {
-    if (
-      !token ||
-      token.length > MAX_REQUEST_SIZE
-    ) {
+    if (!token || token.length > MAX_TOKEN_LENGTH) {
       return null;
     }
 
     const parts = token.split('.');
-
     if (parts.length !== 2) {
       return null;
     }
 
     const [encodedPayload, providedSignature] = parts;
-
     if (!encodedPayload || !providedSignature) {
       return null;
     }
 
-    const expectedSignature = createHmac(
-      'sha256',
-      getSessionSecret(),
-    )
+    const expectedSignature = createHmac('sha256', secret)
       .update(encodedPayload)
       .digest();
 
@@ -140,7 +126,7 @@ function verifySessionToken(
       payload.iss !== SESSION_ISSUER ||
       payload.aud !== SESSION_AUDIENCE ||
       payload.v !== SESSION_VERSION ||
-      payload.iat > now + 60 ||
+      payload.iat > now + CLOCK_TOLERANCE ||
       payload.exp <= now ||
       payload.exp <= payload.iat ||
       payload.exp - payload.iat > SESSION_DURATION
@@ -155,7 +141,7 @@ function verifySessionToken(
 }
 
 // ======================================================
-// COOKIE CONFIGURATION
+// COOKIE & RESPONSE HELPERS
 // ======================================================
 
 function setSessionCookies(
@@ -173,8 +159,6 @@ function setSessionCookies(
     maxAge: SESSION_DURATION,
   });
 
-  // Kept for compatibility with existing UI.
-  // This cookie is NOT trusted for authentication.
   response.cookies.set(ROLE_COOKIE, role, {
     httpOnly: false,
     secure: isProduction,
@@ -206,74 +190,79 @@ function clearSessionCookies(response: NextResponse) {
   });
 }
 
-// ======================================================
-// RESPONSE HELPERS
-// ======================================================
-
 function jsonResponse(
   data: Record<string, unknown>,
   status = 200,
 ) {
   const response = NextResponse.json(data, { status });
+  response.headers.set('Cache-Control', 'no-store, private');
+  return response;
+}
 
-  response.headers.set(
-    'Cache-Control',
-    'no-store, private',
-  );
-
+function buildLogoutResponse() {
+  const response = jsonResponse({
+    success: true,
+    authenticated: false,
+    message: 'Logged out successfully.',
+  });
+  clearSessionCookies(response);
   return response;
 }
 
 // ======================================================
-// POST: STAFF LOGIN
+// POST: STAFF LOGIN (OR LOGOUT WHEN action === 'logout')
 // ======================================================
 
 export async function POST(request: NextRequest) {
   try {
-    // Check request size.
     const contentLength = Number(
       request.headers.get('content-length') || 0,
     );
 
     if (
-      contentLength > 8192 ||
+      contentLength > MAX_BODY_SIZE ||
       !request.headers.get('content-type')?.includes('application/json')
     ) {
-      return jsonResponse(
-        { error: 'Invalid request.' },
-        400,
-      );
+      return jsonResponse({ error: 'Invalid request.' }, 400);
     }
 
     const body = await request.json();
 
     if (!body || typeof body !== 'object') {
+      return jsonResponse({ error: 'Invalid request data.' }, 400);
+    }
+
+    if ((body as { action?: unknown }).action === 'logout') {
+      return buildLogoutResponse();
+    }
+
+    const secret = getSessionSecret();
+    if (!secret) {
       return jsonResponse(
-        { error: 'Invalid request data.' },
-        400,
+        { error: 'Server session configuration is missing.' },
+        500,
       );
     }
 
+    const rawBody = body as Record<string, unknown>;
+
     const rawIdentifier =
-      body.identifier ||
-      body.username ||
-      body.name ||
-      body.waiterName ||
-      body.loginId ||
+      rawBody.identifier ||
+      rawBody.username ||
+      rawBody.name ||
+      rawBody.waiterName ||
+      rawBody.loginId ||
       '';
 
-    const rawPassword = body.password || body.pin || '';
-    const requestedRole = body.role;
+    const rawPassword = rawBody.password || rawBody.pin || '';
+    const requestedRole = rawBody.role;
 
     if (
       typeof rawIdentifier !== 'string' ||
       typeof rawPassword !== 'string' ||
       typeof requestedRole !== 'string'
     ) {
-      return jsonResponse(
-        { error: 'Invalid login details.' },
-        400,
-      );
+      return jsonResponse({ error: 'Invalid login details.' }, 400);
     }
 
     const identifier = rawIdentifier.trim().toLowerCase();
@@ -286,18 +275,15 @@ export async function POST(request: NextRequest) {
       password.length > 1024 ||
       !['admin', 'waiter'].includes(requestedRole)
     ) {
-      return jsonResponse(
-        { error: 'Invalid login details.' },
-        400,
-      );
+      return jsonResponse({ error: 'Invalid login details.' }, 400);
     }
 
     const targetRole = requestedRole as UserRole;
 
-    // Fetch only required staff fields.
     const { data: users, error } = await supabase
       .from('staff_accounts')
-      .select('role, identifier, password_hash, name, is_active');
+      .select('role, identifier, password_hash, name, is_active')
+      .eq('role', targetRole);
 
     if (error || !users) {
       return jsonResponse(
@@ -306,30 +292,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Match identifier, name and requested role.
     const user = users.find((account) => {
-      const accountRole = String(
-        account.role || '',
-      ).toLowerCase();
+      const accountIdentifier = String(account.identifier || '')
+        .trim()
+        .toLowerCase();
+      const accountName = String(account.name || '')
+        .trim()
+        .toLowerCase();
 
-      const accountIdentifier = String(
-        account.identifier || '',
-      ).trim().toLowerCase();
-
-      const accountName = String(
-        account.name || '',
-      ).trim().toLowerCase();
-
-      return (
-        accountRole === targetRole &&
-        (
-          accountIdentifier === identifier ||
-          accountName === identifier
-        )
-      );
+      return accountIdentifier === identifier || accountName === identifier;
     });
 
-    // Reject missing, inactive or invalid accounts.
     if (
       !user ||
       user.is_active === false ||
@@ -342,15 +315,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a cryptographically signed session.
-    const sessionIdentifier = String(
-      user.identifier || identifier,
-    ).trim().toLowerCase();
+    const sessionIdentifier = String(user.identifier || identifier)
+      .trim()
+      .toLowerCase();
 
-    const token = createSessionToken(
-      sessionIdentifier,
-      targetRole,
-    );
+    const token = createSessionToken(sessionIdentifier, targetRole, secret);
 
     const staffName =
       user.name ||
@@ -363,14 +332,8 @@ export async function POST(request: NextRequest) {
       name: staffName,
     });
 
-    setSessionCookies(
-      response,
-      token,
-      targetRole,
-    );
-
+    setSessionCookies(response, token, targetRole);
     return response;
-
   } catch {
     return jsonResponse(
       { error: 'Unable to complete authentication.' },
@@ -385,19 +348,13 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get(
-      SESSION_COOKIE,
-    )?.value;
-
-    const session = verifySessionToken(token);
+    const secret = getSessionSecret();
+    const token = request.cookies.get(SESSION_COOKIE)?.value;
+    const session = secret ? verifySessionToken(token, secret) : null;
 
     if (!session) {
-      const response = jsonResponse({
-        authenticated: false,
-      }, 401);
-
+      const response = jsonResponse({ authenticated: false }, 401);
       clearSessionCookies(response);
-
       return response;
     }
 
@@ -407,12 +364,8 @@ export async function GET(request: NextRequest) {
       identifier: session.sub,
       expiresAt: session.exp,
     });
-
   } catch {
-    return jsonResponse(
-      { authenticated: false },
-      500,
-    );
+    return jsonResponse({ authenticated: false }, 500);
   }
 }
 
@@ -421,13 +374,5 @@ export async function GET(request: NextRequest) {
 // ======================================================
 
 export async function DELETE() {
-  const response = jsonResponse({
-    success: true,
-    authenticated: false,
-    message: 'Logged out successfully.',
-  });
-
-  clearSessionCookies(response);
-
-  return response;
+  return buildLogoutResponse();
 }
