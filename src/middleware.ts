@@ -141,7 +141,7 @@ async function verifySession(
   }
 }
 
-function securityHeaders(
+function applySecurityHeaders(
   response: NextResponse,
   secure: boolean,
 ): NextResponse {
@@ -193,18 +193,17 @@ function clearAuthCookies(
   });
 }
 
-function loginRedirect(
+function redirectToLogin(
   request: NextRequest,
   role: UserRole,
   secure: boolean,
 ): NextResponse {
-  const url = new URL('/login', request.url);
-  url.searchParams.set('role', role);
+  const loginUrl = new URL('/login', request.url);
+  loginUrl.searchParams.set('role', role);
 
-  const response = NextResponse.redirect(url);
+  const response = NextResponse.redirect(loginUrl);
   clearAuthCookies(response, secure);
-
-  return securityHeaders(response, secure);
+  return applySecurityHeaders(response, secure);
 }
 
 export async function middleware(request: NextRequest) {
@@ -224,37 +223,30 @@ export async function middleware(request: NextRequest) {
   const isWaiter = session?.role === 'waiter';
 
   if (isAdminRoute && !isAdmin) {
-    return loginRedirect(request, 'admin', secure);
+    return redirectToLogin(request, 'admin', secure);
   }
 
   if (isWaiterRoute && !isWaiter && !isAdmin) {
-    return loginRedirect(request, 'waiter', secure);
+    return redirectToLogin(request, 'waiter', secure);
   }
 
-  if (isLoginRoute) {
-    const requestedRole = searchParams.get('role');
+  if (isLoginRoute && !searchParams.get('role')) {
+    if (isAdmin) {
+      return applySecurityHeaders(
+        NextResponse.redirect(new URL('/admin', request.url)),
+        secure,
+      );
+    }
 
-    if (
-      requestedRole !== 'admin' &&
-      requestedRole !== 'waiter'
-    ) {
-      if (isAdmin) {
-        return securityHeaders(
-          NextResponse.redirect(new URL('/admin', request.url)),
-          secure,
-        );
-      }
-
-      if (isWaiter) {
-        return securityHeaders(
-          NextResponse.redirect(new URL('/waiter', request.url)),
-          secure,
-        );
-      }
+    if (isWaiter) {
+      return applySecurityHeaders(
+        NextResponse.redirect(new URL('/waiter', request.url)),
+        secure,
+      );
     }
   }
 
-  return securityHeaders(NextResponse.next(), secure);
+  return applySecurityHeaders(NextResponse.next(), secure);
 }
 
 export const config = {
