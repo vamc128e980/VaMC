@@ -14,7 +14,6 @@ const CLOCK_TOLERANCE = 60;
 const MAX_TOKEN_LENGTH = 4096;
 const MAX_BODY_SIZE = 8192;
 
-// Fallback used only when SESSION_SECRET env var is not configured on Vercel
 const FALLBACK_SESSION_SECRET =
   'vamc-vujwala-simha-session-secret-key-2026-secure-hmac-sha256';
 
@@ -36,6 +35,14 @@ function getSessionSecret(): string {
     return secret;
   }
   return FALLBACK_SESSION_SECRET;
+}
+
+function isHttpsRequest(request: NextRequest): boolean {
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  if (forwardedProto) {
+    return forwardedProto.split(',')[0].trim() === 'https';
+  }
+  return request.nextUrl.protocol === 'https:';
 }
 
 function createSessionToken(
@@ -136,12 +143,11 @@ function setSessionCookies(
   response: NextResponse,
   token: string,
   role: UserRole,
+  secure: boolean,
 ) {
-  const isProduction = process.env.NODE_ENV === 'production';
-
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: isProduction,
+    secure,
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_DURATION,
@@ -149,19 +155,20 @@ function setSessionCookies(
 
   response.cookies.set(ROLE_COOKIE, role, {
     httpOnly: false,
-    secure: isProduction,
+    secure,
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_DURATION,
   });
 }
 
-function clearSessionCookies(response: NextResponse) {
-  const isProduction = process.env.NODE_ENV === 'production';
-
+function clearSessionCookies(
+  response: NextResponse,
+  secure: boolean,
+) {
   response.cookies.set(SESSION_COOKIE, '', {
     httpOnly: true,
-    secure: isProduction,
+    secure,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
@@ -170,7 +177,7 @@ function clearSessionCookies(response: NextResponse) {
 
   response.cookies.set(ROLE_COOKIE, '', {
     httpOnly: false,
-    secure: isProduction,
+    secure,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
@@ -187,17 +194,19 @@ function jsonResponse(
   return response;
 }
 
-function buildLogoutResponse() {
+function buildLogoutResponse(secure: boolean) {
   const response = jsonResponse({
     success: true,
     authenticated: false,
     message: 'Logged out successfully.',
   });
-  clearSessionCookies(response);
+  clearSessionCookies(response, secure);
   return response;
 }
 
 export async function POST(request: NextRequest) {
+  const secure = isHttpsRequest(request);
+
   try {
     const contentLength = Number(
       request.headers.get('content-length') || 0,
@@ -217,7 +226,7 @@ export async function POST(request: NextRequest) {
     }
 
     if ((body as { action?: unknown }).action === 'logout') {
-      return buildLogoutResponse();
+      return buildLogoutResponse(secure);
     }
 
     const secret = getSessionSecret();
@@ -309,7 +318,7 @@ export async function POST(request: NextRequest) {
       name: staffName,
     });
 
-    setSessionCookies(response, token, targetRole);
+    setSessionCookies(response, token, targetRole, secure);
     return response;
   } catch {
     return jsonResponse(
@@ -320,6 +329,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const secure = isHttpsRequest(request);
+
   try {
     const secret = getSessionSecret();
     const token = request.cookies.get(SESSION_COOKIE)?.value;
@@ -327,7 +338,7 @@ export async function GET(request: NextRequest) {
 
     if (!session) {
       const response = jsonResponse({ authenticated: false }, 401);
-      clearSessionCookies(response);
+      clearSessionCookies(response, secure);
       return response;
     }
 
@@ -342,6 +353,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function DELETE() {
-  return buildLogoutResponse();
+export async function DELETE(request: NextRequest) {
+  return buildLogoutResponse(isHttpsRequest(request));
 }
