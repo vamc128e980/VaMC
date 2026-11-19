@@ -269,7 +269,8 @@ export async function POST(request: NextRequest) {
     const { data: users, error } = await supabase
       .from('staff_accounts')
       .select('role, identifier, password_hash, name, is_active')
-      .eq('role', targetRole);
+      .eq('role', targetRole)
+      .neq('is_active', false);
 
     if (error || !users) {
       return jsonResponse(
@@ -291,7 +292,6 @@ export async function POST(request: NextRequest) {
 
     if (
       !user ||
-      user.is_active === false ||
       typeof user.password_hash !== 'string' ||
       user.password_hash !== password
     ) {
@@ -316,6 +316,7 @@ export async function POST(request: NextRequest) {
       authenticated: true,
       role: targetRole,
       name: staffName,
+      token,
     });
 
     setSessionCookies(response, token, targetRole, secure);
