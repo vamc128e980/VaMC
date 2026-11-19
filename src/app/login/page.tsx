@@ -39,7 +39,7 @@ function LoginContent() {
   useEffect(() => {
     if (queryRole === 'admin') {
       setRole('admin');
-    } else {
+    } else if (queryRole === 'waiter') {
       setRole('waiter');
     }
     setErrorMsg('');
@@ -66,7 +66,7 @@ function LoginContent() {
     try {
       const response = await fetch('/api/auth/login/verify', {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
@@ -97,13 +97,23 @@ function LoginContent() {
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('staff_role', targetRole);
-        localStorage.setItem('staff_name', result.name || (targetRole === 'admin' ? 'Master Admin' : 'Floor Steward'));
-        localStorage.setItem('session_token', result.token || 'verified_session');
+        localStorage.setItem(
+          'staff_name',
+          result.name ||
+            (targetRole === 'admin' ? 'Master Admin' : 'Floor Steward'),
+        );
+        localStorage.setItem(
+          'session_token',
+          result.token || 'verified_session',
+        );
       }
 
       const nextPath = targetRole === 'admin' ? '/admin' : '/waiter';
-      window.location.replace(nextPath);
+      window.location.assign(nextPath);
     } catch (error) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('session_token');
+      }
       setErrorMsg(
         error instanceof Error
           ? error.message
@@ -190,7 +200,10 @@ function LoginContent() {
             className="space-y-3 font-mono"
           >
             <div>
-              <label htmlFor="waiter-identifier" className="text-[11px] text-neutral-400 block mb-1">
+              <label
+                htmlFor="waiter-identifier"
+                className="text-[11px] text-neutral-400 block mb-1"
+              >
                 Staff / Waiter Name or ID
               </label>
 
@@ -213,7 +226,10 @@ function LoginContent() {
             </div>
 
             <div>
-              <label htmlFor="waiter-password" className="text-[11px] text-neutral-400 block mb-1">
+              <label
+                htmlFor="waiter-password"
+                className="text-[11px] text-neutral-400 block mb-1"
+              >
                 Waiter Password
               </label>
 
@@ -257,7 +273,10 @@ function LoginContent() {
             className="space-y-3 font-mono"
           >
             <div>
-              <label htmlFor="admin-email" className="text-[11px] text-neutral-400 block mb-1">
+              <label
+                htmlFor="admin-email"
+                className="text-[11px] text-neutral-400 block mb-1"
+              >
                 Admin Email Address
               </label>
 
@@ -280,7 +299,10 @@ function LoginContent() {
             </div>
 
             <div>
-              <label htmlFor="admin-password" className="text-[11px] text-neutral-400 block mb-1">
+              <label
+                htmlFor="admin-password"
+                className="text-[11px] text-neutral-400 block mb-1"
+              >
                 Admin Password
               </label>
 
