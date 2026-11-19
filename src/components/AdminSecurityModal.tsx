@@ -23,7 +23,16 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
     e.preventDefault();
     setStatusMsg(null);
 
-    if (newPassword && newPassword !== confirmPassword) {
+    const cleanEmail = newEmail.trim().toLowerCase();
+    const cleanCurrentPass = currentPassword.trim();
+    const cleanNewPass = newPassword.trim();
+
+    if (!cleanEmail && !cleanNewPass) {
+      setStatusMsg({ type: "error", text: "Please enter a new email or new password." });
+      return;
+    }
+
+    if (cleanNewPass && cleanNewPass !== confirmPassword.trim()) {
       setStatusMsg({ type: "error", text: "New passwords do not match." });
       return;
     }
@@ -31,7 +40,6 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
     setLoading(true);
 
     try {
-      // 1. Fetch current admin record
       const { data: currentAdmin, error: fetchErr } = await supabase
         .from("staff_accounts")
         .select("id, identifier, password_hash")
@@ -45,27 +53,18 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
         return;
       }
 
-      // 2. Verify current password
-      if (currentAdmin.password_hash !== currentPassword.trim()) {
+      if (currentAdmin.password_hash !== cleanCurrentPass) {
         setStatusMsg({ type: "error", text: "Incorrect current password. Verification failed." });
         setLoading(false);
         return;
       }
 
-      // 3. Prepare payload
-      const updates: { identifier?: string; password_hash?: string; updated_at?: string } = {
-        updated_at: new Date().toISOString()
+      const updates: { identifier?: string; password_hash?: string; updated_at: string } = {
+        updated_at: new Date().toISOString(),
       };
-      if (newEmail.trim()) updates.identifier = newEmail.trim().toLowerCase();
-      if (newPassword.trim()) updates.password_hash = newPassword.trim();
+      if (cleanEmail) updates.identifier = cleanEmail;
+      if (cleanNewPass) updates.password_hash = cleanNewPass;
 
-      if (!newEmail.trim() && !newPassword.trim()) {
-        setStatusMsg({ type: "error", text: "Please enter a new email or new password." });
-        setLoading(false);
-        return;
-      }
-
-      // 4. Update in staff_accounts
       const { error: updateErr } = await supabase
         .from("staff_accounts")
         .update(updates)
@@ -80,8 +79,9 @@ export default function AdminSecurityModal({ isOpen, onClose }: AdminSecurityMod
         setCurrentPassword("");
         setNewEmail("");
       }
-    } catch (err: any) {
-      setStatusMsg({ type: "error", text: err.message || "Failed to update admin credentials." });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update admin credentials.";
+      setStatusMsg({ type: "error", text: message });
     } finally {
       setLoading(false);
     }
