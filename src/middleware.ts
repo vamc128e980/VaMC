@@ -1,8 +1,12 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 
 const SESSION_COOKIE = 'session_token';
+const ROLE_COOKIE = 'staff_role';
 const SESSION_SECRET = process.env.SESSION_SECRET;
+
+const SESSION_ISSUER = 'vamc';
+const SESSION_AUDIENCE = 'vamc-web';
+const SESSION_VERSION = 1;
 
 const MAX_TOKEN_LENGTH = 4096;
 const MAX_SESSION_AGE = 24 * 60 * 60;
@@ -15,9 +19,9 @@ interface SessionPayload {
   role: UserRole;
   iat: number;
   exp: number;
-  iss: 'vamc';
-  aud: 'vamc-web';
-  v: 1;
+  iss: string;
+  aud: string;
+  v: number;
 }
 
 function decodeBase64Url(value: string): Uint8Array {
@@ -82,9 +86,9 @@ async function verifySession(
       !['admin', 'waiter'].includes(payload.role) ||
       !Number.isSafeInteger(payload.iat) ||
       !Number.isSafeInteger(payload.exp) ||
-      payload.iss !== 'vamc' ||
-      payload.aud !== 'vamc-web' ||
-      payload.v !== 1
+      payload.iss !== SESSION_ISSUER ||
+      payload.aud !== SESSION_AUDIENCE ||
+      payload.v !== SESSION_VERSION
     ) {
       return null;
     }
@@ -127,26 +131,16 @@ async function verifySession(
 function securityHeaders(
   response: NextResponse,
 ): NextResponse {
-  response.headers.set(
-    'X-Content-Type-Options',
-    'nosniff',
-  );
-
-  response.headers.set(
-    'X-Frame-Options',
-    'SAMEORIGIN',
-  );
-
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   response.headers.set(
     'Referrer-Policy',
     'strict-origin-when-cross-origin',
   );
-
   response.headers.set(
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=()',
   );
-
   response.headers.set(
     'Cache-Control',
     'private, no-store, no-cache, must-revalidate',
@@ -162,31 +156,38 @@ function securityHeaders(
   return response;
 }
 
+function clearAuthCookies(response: NextResponse) {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  response.cookies.set(SESSION_COOKIE, '', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+    expires: new Date(0),
+  });
+
+  // Matches how ROLE_COOKIE is set in the login route.
+  response.cookies.set(ROLE_COOKIE, '', {
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+    expires: new Date(0),
+  });
+}
+
 function loginRedirect(
   request: NextRequest,
   role: UserRole,
 ): NextResponse {
   const url = new URL('/login', request.url);
-
   url.searchParams.set('role', role);
 
   const response = NextResponse.redirect(url);
-
-  response.cookies.set(SESSION_COOKIE, '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-  });
-
-  response.cookies.set('staff_role', '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-  });
+  clearAuthCookies(response);
 
   return securityHeaders(response);
 }
@@ -195,23 +196,24 @@ export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
   const isAdminRoute =
-    pathname === '/admin' ||
-    pathname.startsWith('/admin/');
-
+    pathname === '/admin' || pathname.startsWith('/admin/');
   const isWaiterRoute =
-    pathname === '/waiter' ||
-    pathname.startsWith('/waiter/');
-
+    pathname === '/waiter' || pathname.startsWith('/waiter/');
   const isLoginRoute = pathname === '/login';
 
-  const token = request.cookies.get(
-    SESSION_COOKIE,
-  )?.value;
-
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySession(token);
 
   const isAdmin = session?.role === 'admin';
   const isWaiter = session?.role === 'waiter';
+
+  // Clear stale/invalid cookies if a token was present but failed verification.
+  if (token && !session && (isAdminRoute || isWaiterRoute)) {
+    return loginRedirect(
+      request,
+      isAdminRoute ? 'admin' : 'waiter',
+    );
+  }
 
   if (isAdminRoute && !isAdmin) {
     return loginRedirect(request, 'admin');
@@ -230,17 +232,13 @@ export async function middleware(request: NextRequest) {
     ) {
       if (isAdmin) {
         return securityHeaders(
-          NextResponse.redirect(
-            new URL('/admin', request.url),
-          ),
+          NextResponse.redirect(new URL('/admin', request.url)),
         );
       }
 
       if (isWaiter) {
         return securityHeaders(
-          NextResponse.redirect(
-            new URL('/waiter', request.url),
-          ),
+          NextResponse.redirect(new URL('/waiter', request.url)),
         );
       }
     }
