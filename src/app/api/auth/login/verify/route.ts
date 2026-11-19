@@ -1,633 +1,267 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { supabase } from '@/lib/supabase';
+import bcrypt from 'bcryptjs';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { getServerDb } from '@/lib/supabaseAdmin';
+import { blockedFor, recordFailure, clearFailures } from '@/lib/rateLimit';
+import {
+  SESSION_COOKIE,
+  LEGACY_ROLE_COOKIE,
+  SESSION_DURATION,
+  UserRole,
+  createSessionToken,
+  getSessionSecret,
+  verifySessionToken,
+} from '@/lib/session';
 
-const SESSION_COOKIE = 'session_token';
-const ROLE_COOKIE = 'staff_role';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-const SESSION_ISSUER = 'vamc';
-const SESSION_AUDIENCE = 'vamc-web';
-const SESSION_VERSION = 1;
+const MAX_BODY_CHARS = 4096;
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILS_PER_ACCOUNT = 5; // per IP + identifier
+const MAX_FAILS_PER_IP = 20;
+const BCRYPT_COST = 12;
 
-const SESSION_DURATION = 24 * 60 * 60;
-const CLOCK_TOLERANCE = 60;
-const MAX_TOKEN_LENGTH = 4096;
-const MAX_BODY_SIZE = 8192;
+// Used so "unknown user" takes as long as "wrong password" (no user enumeration by timing).
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', BCRYPT_COST);
 
-const FALLBACK_SESSION_SECRET =
-  'vamc-vujwala-simha-session-secret-key-2026-secure-hmac-sha256';
+/* ----------------------------- helpers ----------------------------- */
 
-type UserRole = 'admin' | 'waiter';
-
-interface SessionPayload {
-  sub: string;
-  role: UserRole;
-  iat: number;
-  exp: number;
-  iss: string;
-  aud: string;
-  v: number;
-}
-
-function getSessionSecret(): string {
-  const secret = process.env.SESSION_SECRET;
-  if (secret && secret.length >= 32) {
-    return secret;
-  }
-  return FALLBACK_SESSION_SECRET;
-}
-
-function isHttpsRequest(request: NextRequest): boolean {
-  const forwardedProto = request.headers.get('x-forwarded-proto');
-  if (forwardedProto) {
-    return forwardedProto.split(',')[0].trim() === 'https';
-  }
+function isHttps(request: NextRequest): boolean {
+  const proto = request.headers.get('x-forwarded-proto');
+  if (proto) return proto.split(',')[0].trim() === 'https';
   return request.nextUrl.protocol === 'https:';
 }
 
-function createSessionToken(
-  identifier: string,
-  role: UserRole,
-  secret: string,
-): string {
-  const now = Math.floor(Date.now() / 1000);
-
-  const payload: SessionPayload = {
-    sub: identifier,
-    role,
-    iat: now,
-    exp: now + SESSION_DURATION,
-    iss: SESSION_ISSUER,
-    aud: SESSION_AUDIENCE,
-    v: SESSION_VERSION,
-  };
-
-  const encodedPayload = Buffer
-    .from(JSON.stringify(payload))
-    .toString('base64url');
-
-  const signature = createHmac('sha256', secret)
-    .update(encodedPayload)
-    .digest('base64url');
-
-  return `${encodedPayload}.${signature}`;
+function clientIp(request: NextRequest): string {
+  const fwd = request.headers.get('x-forwarded-for');
+  if (fwd) return fwd.split(',')[0].trim().slice(0, 64);
+  return request.headers.get('x-real-ip')?.slice(0, 64) || 'unknown';
 }
 
-function verifySessionToken(
-  token: string | undefined,
-  secret: string,
-): SessionPayload | null {
+/** Blocks cross-site POST/DELETE (CSRF). Browsers always send Origin on these. */
+function isSameOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) return true; // non-browser clients (curl) — cookies can't be abused cross-site
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
   try {
-    if (!token || token.length > MAX_TOKEN_LENGTH) {
-      return null;
-    }
-
-    const parts = token.split('.');
-    if (parts.length !== 2) {
-      return null;
-    }
-
-    const [encodedPayload, providedSignature] = parts;
-    if (!encodedPayload || !providedSignature) {
-      return null;
-    }
-
-    const expectedSignature = createHmac('sha256', secret)
-      .update(encodedPayload)
-      .digest();
-
-    const actualSignature = Buffer.from(
-      providedSignature,
-      'base64url',
-    );
-
-    if (
-      actualSignature.length !== expectedSignature.length ||
-      !timingSafeEqual(actualSignature, expectedSignature)
-    ) {
-      return null;
-    }
-
-    const payload = JSON.parse(
-      Buffer.from(encodedPayload, 'base64url').toString('utf8'),
-    ) as SessionPayload;
-
-    const now = Math.floor(Date.now() / 1000);
-
-    if (
-      !payload ||
-      typeof payload.sub !== 'string' ||
-      payload.sub.length === 0 ||
-      payload.sub.length > 256 ||
-      !['admin', 'waiter'].includes(payload.role) ||
-      !Number.isSafeInteger(payload.iat) ||
-      !Number.isSafeInteger(payload.exp) ||
-      payload.iss !== SESSION_ISSUER ||
-      payload.aud !== SESSION_AUDIENCE ||
-      payload.v !== SESSION_VERSION ||
-      payload.iat > now + CLOCK_TOLERANCE ||
-      payload.exp <= now ||
-      payload.exp <= payload.iat ||
-      payload.exp - payload.iat > SESSION_DURATION
-    ) {
-      return null;
-    }
-
-    return payload;
+    return !!host && new URL(origin).host === host;
   } catch {
-    return null;
+    return false;
   }
 }
 
-function setSessionCookies(
-  response: NextResponse,
-  token: string,
-  role: UserRole,
-  secure: boolean,
-) {
-  response.cookies.set(SESSION_COOKIE, token, {
+function json(data: Record<string, unknown>, status = 200, headers?: Record<string, string>) {
+  const res = NextResponse.json(data, { status, headers });
+  res.headers.set('Cache-Control', 'no-store, private');
+  return res;
+}
+
+function setSessionCookie(res: NextResponse, token: string, secure: boolean) {
+  res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure,
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_DURATION,
   });
-
-  response.cookies.set(ROLE_COOKIE, role, {
-    httpOnly: false,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_DURATION,
-  });
+  // Remove the old, JS-readable role cookie if the browser still has it.
+  res.cookies.set(LEGACY_ROLE_COOKIE, '', { path: '/', maxAge: 0, expires: new Date(0) });
 }
 
-function clearSessionCookies(
-  response: NextResponse,
-  secure: boolean,
-) {
-  response.cookies.set(SESSION_COOKIE, '', {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-    expires: new Date(0),
-  });
-
-  response.cookies.set(ROLE_COOKIE, '', {
-    httpOnly: false,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-    expires: new Date(0),
-  });
+function clearSessionCookies(res: NextResponse, secure: boolean) {
+  const base = { path: '/', maxAge: 0, expires: new Date(0), sameSite: 'lax' as const, secure };
+  res.cookies.set(SESSION_COOKIE, '', { ...base, httpOnly: true });
+  res.cookies.set(LEGACY_ROLE_COOKIE, '', { ...base, httpOnly: false });
 }
 
-function jsonResponse(
-  data: Record<string, unknown>,
-  status = 200,
-) {
-  const response = NextResponse.json(data, { status });
-  response.headers.set('Cache-Control', 'no-store, private');
-  return response;
+function logoutResponse(secure: boolean) {
+  const res = json({ success: true, authenticated: false });
+  clearSessionCookies(res, secure);
+  return res;
 }
 
-function buildLogoutResponse(secure: boolean) {
-  const response = jsonResponse({
-    success: true,
-    authenticated: false,
-    message: 'Logged out successfully.',
-  });
-  clearSessionCookies(response, secure);
-  return response;
+function sha256(value: string): Buffer {
+  return createHash('sha256').update(value, 'utf8').digest();
 }
+
+/**
+ * Checks a password against what is stored.
+ *  - bcrypt hash ("$2a$/$2b$/$2y$...")  -> normal, secure path
+ *  - anything else = LEGACY PLAIN TEXT  -> compared in constant time, then upgraded to bcrypt
+ */
+async function checkPassword(stored: unknown, supplied: string): Promise<{ ok: boolean; legacy: boolean }> {
+  if (typeof stored !== 'string' || stored.length === 0) return { ok: false, legacy: false };
+
+  if (/^\$2[aby]\$/.test(stored)) {
+    return { ok: await bcrypt.compare(supplied, stored), legacy: false };
+  }
+  return { ok: timingSafeEqual(sha256(stored), sha256(supplied)), legacy: true };
+}
+
+/* ------------------------------ POST ------------------------------- */
+/* Login ({identifier, password, role}) or logout ({action:'logout'}) */
 
 export async function POST(request: NextRequest) {
-  const secure = isHttpsRequest(request);
+  const secure = process.env.NODE_ENV === 'production' || isHttps(request);
 
   try {
-    const contentLength = Number(
-      request.headers.get('content-length') || 0,
-    );
-
-    if (
-      contentLength > MAX_BODY_SIZE ||
-      !request.headers.get('content-type')?.includes('application/json')
-    ) {
-      return jsonResponse({ error: 'Invalid request.' }, 400);
+    if (!isSameOrigin(request)) return json({ error: 'Invalid request.' }, 403);
+    if (!request.headers.get('content-type')?.includes('application/json')) {
+      return json({ error: 'Invalid request.' }, 400);
     }
 
-    const body = await request.json();
+    const raw = await request.text();
+    if (raw.length > MAX_BODY_CHARS) return json({ error: 'Invalid request.' }, 413);
 
-    if (!body || typeof body !== 'object') {
-      return jsonResponse({ error: 'Invalid request data.' }, 400);
+    let body: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return json({ error: 'Invalid request.' }, 400);
     }
 
-    if ((body as { action?: unknown }).action === 'logout') {
-      return buildLogoutResponse(secure);
+    if (body.action === 'logout') return logoutResponse(secure);
+
+    // Fail closed if the server is not configured.
+    if (!getSessionSecret()) {
+      console.error('[security] SESSION_SECRET is missing or too weak (need 32+ random characters). Login disabled.');
+      return json({ error: 'Login is temporarily unavailable.' }, 503);
     }
 
-    const secret = getSessionSecret();
-    const rawBody = body as Record<string, unknown>;
-
-    const rawIdentifier =
-      rawBody.identifier ||
-      rawBody.username ||
-      rawBody.name ||
-      rawBody.waiterName ||
-      rawBody.loginId ||
-      '';
-
-    const rawPassword = rawBody.password || rawBody.pin || '';
-    const requestedRole = rawBody.role;
-
-    if (
-      typeof rawIdentifier !== 'string' ||
-      typeof rawPassword !== 'string' ||
-      typeof requestedRole !== 'string'
-    ) {
-      return jsonResponse({ error: 'Invalid login details.' }, 400);
+    const { identifier: rawId, password: rawPass, role: rawRole } = body;
+    if (typeof rawId !== 'string' || typeof rawPass !== 'string' || typeof rawRole !== 'string') {
+      return json({ error: 'Invalid login details.' }, 400);
     }
 
-    const identifier = rawIdentifier.trim().toLowerCase();
-    const password = rawPassword.trim();
-
+    const identifier = rawId.trim().toLowerCase();
+    const password = rawPass.trim();
     if (
       !identifier ||
       !password ||
-      identifier.length > 256 ||
-      password.length > 1024 ||
-      !['admin', 'waiter'].includes(requestedRole)
+      identifier.length > 128 ||
+      password.length > 128 ||
+      (rawRole !== 'admin' && rawRole !== 'waiter')
     ) {
-      return jsonResponse({ error: 'Invalid login details.' }, 400);
+      return json({ error: 'Invalid login details.' }, 400);
+    }
+    const role = rawRole as UserRole;
+
+    // Brute-force protection (per account+IP, and per IP overall).
+    const ip = clientIp(request);
+    const accountKey = `acct:${ip}:${role}:${identifier}`;
+    const ipKey = `ip:${ip}`;
+    const wait = Math.max(
+      blockedFor(accountKey, MAX_FAILS_PER_ACCOUNT),
+      blockedFor(ipKey, MAX_FAILS_PER_IP),
+    );
+    if (wait > 0) {
+      return json(
+        { error: `Too many failed attempts. Try again in ${Math.ceil(wait / 60)} minute(s).` },
+        429,
+        { 'Retry-After': String(wait) },
+      );
     }
 
-    const targetRole = requestedRole as UserRole;
-
-    const { data: users, error } = await supabase
+    const { db, privileged } = getServerDb();
+    const { data: users, error } = await db
       .from('staff_accounts')
-      .select('role, identifier, password_hash, name, is_active')
-      .eq('role', targetRole)
-      .neq('is_active', false);
+      .select('id, role, identifier, password_hash, name, is_active')
+      .eq('role', role);
 
     if (error || !users) {
-      return jsonResponse(
-        { error: 'Authentication service unavailable.' },
-        503,
-      );
+      console.error('[security] staff_accounts lookup failed:', error?.message);
+      return json({ error: 'Authentication service unavailable.' }, 503);
     }
 
-    const user = users.find((account) => {
-      const accountIdentifier = String(account.identifier || '')
-        .trim()
-        .toLowerCase();
-      const accountName = String(account.name || '')
-        .trim()
-        .toLowerCase();
-
-      return accountIdentifier === identifier || accountName === identifier;
+    // Active accounts whose login ID or display name matches what was typed.
+    const candidates = users.filter((u) => {
+      if (u.is_active === false) return false;
+      const id = String(u.identifier || '').trim().toLowerCase();
+      const nm = String(u.name || '').trim().toLowerCase();
+      return id === identifier || nm === identifier;
     });
 
-    if (
-      !user ||
-      typeof user.password_hash !== 'string' ||
-      user.password_hash !== password
-    ) {
-      return jsonResponse(
-        { error: 'Invalid credentials. Please verify your details.' },
-        401,
-      );
+    let matched: (typeof users)[number] | null = null;
+    let matchedLegacy = false;
+
+    if (candidates.length === 0) {
+      await bcrypt.compare(password, DUMMY_HASH); // equalise timing
+    } else {
+      for (const candidate of candidates) {
+        const result = await checkPassword(candidate.password_hash, password);
+        if (result.ok) {
+          matched = candidate;
+          matchedLegacy = result.legacy;
+          break;
+        }
+      }
     }
 
-    const sessionIdentifier = String(user.identifier || identifier)
-      .trim()
-      .toLowerCase();
+    if (!matched) {
+      recordFailure(accountKey, WINDOW_MS);
+      recordFailure(ipKey, WINDOW_MS);
+      return json({ error: 'Invalid credentials. Please verify your details.' }, 401);
+    }
 
-    const token = createSessionToken(sessionIdentifier, targetRole, secret);
+    clearFailures(accountKey);
 
-    const staffName =
-      user.name ||
-      (targetRole === 'admin' ? 'Master Admin' : 'Floor Steward');
+    // Silent upgrade: plain-text password -> bcrypt (needs the service-role key).
+    if (matchedLegacy) {
+      if (privileged) {
+        const newHash = await bcrypt.hash(password, BCRYPT_COST);
+        const { error: upErr } = await db
+          .from('staff_accounts')
+          .update({ password_hash: newHash, updated_at: new Date().toISOString() })
+          .eq('id', matched.id);
+        if (upErr) console.error('[security] password upgrade failed:', upErr.message);
+      } else {
+        console.warn('[security] plain-text password still stored for', matched.identifier, '- set SUPABASE_SERVICE_ROLE_KEY to auto-upgrade.');
+      }
+    }
 
-    const response = jsonResponse({
-      success: true,
-      authenticated: true,
-      role: targetRole,
-      name: staffName,
-      token,
-    });
+    const sessionId = String(matched.identifier || identifier).trim().toLowerCase();
+    const staffName = String(matched.name || (role === 'admin' ? 'Master Admin' : 'Floor Steward'));
+    const token = await createSessionToken(sessionId, role, staffName);
 
-    setSessionCookies(response, token, targetRole, secure);
-    return response;
-  } catch {
-    return jsonResponse(
-      { error: 'Unable to complete authentication.' },
-      500,
-    );
+    const res = json({ success: true, authenticated: true, role, name: staffName });
+    setSessionCookie(res, token, secure);
+    return res;
+  } catch (err) {
+    console.error('[security] login error:', err instanceof Error ? err.message : err);
+    return json({ error: 'Unable to complete authentication.' }, 500);
   }
 }
+
+/* ------------------------------- GET ------------------------------- */
+/* "Who am I?" — the pages call this instead of trusting localStorage. */
 
 export async function GET(request: NextRequest) {
-  const secure = isHttpsRequest(request);
+  const secure = process.env.NODE_ENV === 'production' || isHttps(request);
+  const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
-  try {
-    const secret = getSessionSecret();
-    const token = request.cookies.get(SESSION_COOKIE)?.value;
-    const session = verifySessionToken(token, secret);
-
-    if (!session) {
-      const response = jsonResponse({ authenticated: false }, 401);
-      clearSessionCookies(response, secure);
-      return response;
-    }
-
-    return jsonResponse({
-      authenticated: true,
-      role: session.role,
-      identifier: session.sub,
-      expiresAt: session.exp,
-    });
-  } catch {
-    return jsonResponse({ authenticated: false }, 500);
+  if (!session) {
+    const res = json({ authenticated: false }, 401);
+    clearSessionCookies(res, secure);
+    return res;
   }
+
+  return json({
+    authenticated: true,
+    role: session.role,
+    name: session.name,
+    identifier: session.sub,
+    expiresAt: session.exp,
+  });
 }
+
+/* ------------------------------ DELETE ----------------------------- */
+/* Real logout: clears the httpOnly cookie that JavaScript cannot remove. */
 
 export async function DELETE(request: NextRequest) {
-  return buildLogoutResponse(isHttpsRequest(request));
+  const secure = process.env.NODE_ENV === 'production' || isHttps(request);
+  if (!isSameOrigin(request)) return json({ error: 'Invalid request.' }, 403);
+  return logoutResponse(secure);
 }
-```[cite: 16]
-
----
-
-### 2. `src/middleware.ts`
-```ts
-import { NextRequest, NextResponse } from 'next/server';
-
-const SESSION_COOKIE = 'session_token';
-const ROLE_COOKIE = 'staff_role';
-
-const FALLBACK_SESSION_SECRET =
-  'vamc-vujwala-simha-session-secret-key-2026-secure-hmac-sha256';
-
-const SESSION_SECRET =
-  process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32
-    ? process.env.SESSION_SECRET
-    : FALLBACK_SESSION_SECRET;
-
-const SESSION_ISSUER = 'vamc';
-const SESSION_AUDIENCE = 'vamc-web';
-const SESSION_VERSION = 1;
-
-const MAX_TOKEN_LENGTH = 4096;
-const MAX_SESSION_AGE = 24 * 60 * 60;
-const CLOCK_TOLERANCE = 60;
-
-type UserRole = 'admin' | 'waiter';
-
-interface SessionPayload {
-  sub: string;
-  role: UserRole;
-  iat: number;
-  exp: number;
-  iss: string;
-  aud: string;
-  v: number;
-}
-
-function isHttpsRequest(request: NextRequest): boolean {
-  const forwardedProto = request.headers.get('x-forwarded-proto');
-  if (forwardedProto) {
-    return forwardedProto.split(',')[0].trim() === 'https';
-  }
-  return request.nextUrl.protocol === 'https:';
-}
-
-function decodeBase64Url(value: string): Uint8Array {
-  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
-    throw new Error('Invalid base64url');
-  }
-
-  const base64 = value
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const padded = base64.padEnd(
-    Math.ceil(base64.length / 4) * 4,
-    '=',
-  );
-
-  const binary = atob(padded);
-
-  return Uint8Array.from(
-    binary,
-    (character) => character.charCodeAt(0),
-  );
-}
-
-async function verifySession(
-  token?: string,
-): Promise<SessionPayload | null> {
-  try {
-    if (
-      !token ||
-      token.length > MAX_TOKEN_LENGTH ||
-      !SESSION_SECRET ||
-      SESSION_SECRET.length < 32
-    ) {
-      return null;
-    }
-
-    const parts = token.split('.');
-    if (parts.length !== 2) {
-      return null;
-    }
-
-    const [encodedPayload, encodedSignature] = parts;
-    if (!encodedPayload || !encodedSignature) {
-      return null;
-    }
-
-    const payloadBytes = decodeBase64Url(encodedPayload);
-    const signatureBytes = decodeBase64Url(encodedSignature);
-
-    const payload = JSON.parse(
-      new TextDecoder().decode(payloadBytes),
-    ) as SessionPayload;
-
-    if (
-      !payload ||
-      typeof payload.sub !== 'string' ||
-      payload.sub.length === 0 ||
-      payload.sub.length > 256 ||
-      !['admin', 'waiter'].includes(payload.role) ||
-      !Number.isSafeInteger(payload.iat) ||
-      !Number.isSafeInteger(payload.exp) ||
-      payload.iss !== SESSION_ISSUER ||
-      payload.aud !== SESSION_AUDIENCE ||
-      payload.v !== SESSION_VERSION
-    ) {
-      return null;
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-
-    if (
-      payload.iat > now + CLOCK_TOLERANCE ||
-      payload.exp <= now ||
-      payload.exp <= payload.iat ||
-      payload.exp - payload.iat > MAX_SESSION_AGE
-    ) {
-      return null;
-    }
-
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(SESSION_SECRET),
-      {
-        name: 'HMAC',
-        hash: 'SHA-256',
-      },
-      false,
-      ['verify'],
-    );
-
-    const valid = await crypto.subtle.verify(
-      'HMAC',
-      key,
-      signatureBytes,
-      new TextEncoder().encode(encodedPayload),
-    );
-
-    return valid ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-function securityHeaders(
-  response: NextResponse,
-  secure: boolean,
-): NextResponse {
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-  response.headers.set(
-    'Referrer-Policy',
-    'strict-origin-when-cross-origin',
-  );
-  response.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=()',
-  );
-  response.headers.set(
-    'Cache-Control',
-    'private, no-store, no-cache, must-revalidate',
-  );
-
-  if (secure) {
-    response.headers.set(
-      'Strict-Transport-Security',
-      'max-age=31536000; includeSubDomains',
-    );
-  }
-
-  return response;
-}
-
-function clearAuthCookies(
-  response: NextResponse,
-  secure: boolean,
-) {
-  response.cookies.set(SESSION_COOKIE, '', {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-    expires: new Date(0),
-  });
-
-  response.cookies.set(ROLE_COOKIE, '', {
-    httpOnly: false,
-    secure,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-    expires: new Date(0),
-  });
-}
-
-function loginRedirect(
-  request: NextRequest,
-  role: UserRole,
-  secure: boolean,
-): NextResponse {
-  const url = new URL('/login', request.url);
-  url.searchParams.set('role', role);
-
-  const response = NextResponse.redirect(url);
-  clearAuthCookies(response, secure);
-
-  return securityHeaders(response, secure);
-}
-
-export async function middleware(request: NextRequest) {
-  const secure = isHttpsRequest(request);
-  const { pathname, searchParams } = request.nextUrl;
-
-  const isAdminRoute =
-    pathname === '/admin' || pathname.startsWith('/admin/');
-  const isWaiterRoute =
-    pathname === '/waiter' || pathname.startsWith('/waiter/');
-  const isLoginRoute = pathname === '/login';
-
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySession(token);
-
-  const isAdmin = session?.role === 'admin';
-  const isWaiter = session?.role === 'waiter';
-
-  if (isAdminRoute && !isAdmin) {
-    return loginRedirect(request, 'admin', secure);
-  }
-
-  if (isWaiterRoute && !isWaiter && !isAdmin) {
-    return loginRedirect(request, 'waiter', secure);
-  }
-
-  if (isLoginRoute) {
-    const requestedRole = searchParams.get('role');
-
-    if (
-      requestedRole !== 'admin' &&
-      requestedRole !== 'waiter'
-    ) {
-      if (isAdmin) {
-        return securityHeaders(
-          NextResponse.redirect(new URL('/admin', request.url)),
-          secure,
-        );
-      }
-
-      if (isWaiter) {
-        return securityHeaders(
-          NextResponse.redirect(new URL('/waiter', request.url)),
-          secure,
-        );
-      }
-    }
-  }
-
-  return securityHeaders(NextResponse.next(), secure);
-}
-
-export const config = {
-  matcher: [
-    '/admin',
-    '/admin/:path*',
-    '/waiter',
-    '/waiter/:path*',
-    '/login',
-  ],
-};
