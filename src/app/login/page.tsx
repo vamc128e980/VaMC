@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -70,7 +69,7 @@ function LoginContent() {
         credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
         cache: 'no-store',
         body: JSON.stringify({
@@ -80,11 +79,15 @@ function LoginContent() {
         }),
       });
 
-      const result = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const result = contentType.includes('application/json')
+        ? await response.json()
+        : null;
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || !result?.success) {
         throw new Error(
-          result.error || 'Login failed. Please try again.',
+          result?.error ||
+            `Login failed (${response.status}). Please verify the API route and try again.`,
         );
       }
 
@@ -92,15 +95,12 @@ function LoginContent() {
         throw new Error('Invalid authentication response.');
       }
 
-      // The server has already set the HttpOnly session cookie.
-      // Never create authentication cookies in browser JavaScript.
-
+      // Server sets the HttpOnly session cookie; redirect to the role dashboard.
       if (targetRole === 'admin') {
         window.location.replace('/admin');
       } else {
         window.location.replace('/waiter');
       }
-
     } catch (error) {
       setErrorMsg(
         error instanceof Error
@@ -118,18 +118,14 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] flex items-center justify-center p-4 antialiased selection:bg-[#D4AF37] selection:text-black">
-
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3 }}
         className="w-full max-w-sm rounded-[32px] bg-gradient-to-b from-[#111115] via-[#0b0b0e] to-[#070709] border border-[#D4AF37]/40 p-6 sm:p-8 shadow-[0_12px_45px_rgba(0,0,0,0.85)] space-y-5"
       >
-
         {/* HEADER */}
-
         <div className="text-center space-y-1.5">
-
           <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/50 flex items-center justify-center mx-auto shadow-lg text-[#D4AF37]">
             <Store className="w-6 h-6" />
           </div>
@@ -141,13 +137,10 @@ function LoginContent() {
           <p className="text-[11px] font-mono text-neutral-400">
             Vujwala Simha Restaurant & Dine
           </p>
-
         </div>
 
         {/* ROLE SELECTOR */}
-
         <div className="grid grid-cols-2 p-1 rounded-2xl bg-white/[0.03] border border-white/10 font-mono text-xs">
-
           <button
             type="button"
             disabled={loading}
@@ -181,11 +174,9 @@ function LoginContent() {
             <ShieldCheck className="w-4 h-4" />
             Admin Login
           </button>
-
         </div>
 
         {/* ERROR MESSAGE */}
-
         {errorMsg && (
           <div
             role="alert"
@@ -197,9 +188,7 @@ function LoginContent() {
         )}
 
         {/* WAITER LOGIN */}
-
         {role === 'waiter' ? (
-
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -212,15 +201,12 @@ function LoginContent() {
             }}
             className="space-y-3 font-mono"
           >
-
             <div>
-
               <label className="text-[11px] text-neutral-400 block mb-1">
                 Staff / Waiter Name or ID
               </label>
 
               <div className="relative">
-
                 <User className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
@@ -233,19 +219,15 @@ function LoginContent() {
                   onChange={(e) => setWaiterInput(e.target.value)}
                   className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
                 />
-
               </div>
-
             </div>
 
             <div>
-
               <label className="text-[11px] text-neutral-400 block mb-1">
                 Waiter Password
               </label>
 
               <div className="relative">
-
                 <Lock className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
@@ -258,9 +240,7 @@ function LoginContent() {
                   onChange={(e) => setWaiterPassword(e.target.value)}
                   className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
                 />
-
               </div>
-
             </div>
 
             <motion.button
@@ -269,7 +249,6 @@ function LoginContent() {
               type="submit"
               className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-
               <span>
                 {loading
                   ? 'Verifying Staff...'
@@ -279,15 +258,10 @@ function LoginContent() {
               {!loading && (
                 <ArrowRight className="w-4 h-4" />
               )}
-
             </motion.button>
-
           </form>
-
         ) : (
-
           /* ADMIN LOGIN */
-
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -300,15 +274,12 @@ function LoginContent() {
             }}
             className="space-y-3 font-mono"
           >
-
             <div>
-
               <label className="text-[11px] text-neutral-400 block mb-1">
                 Admin Email Address
               </label>
 
               <div className="relative">
-
                 <Mail className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
@@ -321,19 +292,15 @@ function LoginContent() {
                   onChange={(e) => setAdminEmail(e.target.value)}
                   className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
                 />
-
               </div>
-
             </div>
 
             <div>
-
               <label className="text-[11px] text-neutral-400 block mb-1">
                 Admin Password
               </label>
 
               <div className="relative">
-
                 <Lock className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
 
                 <input
@@ -346,9 +313,7 @@ function LoginContent() {
                   onChange={(e) => setAdminPassword(e.target.value)}
                   className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
                 />
-
               </div>
-
             </div>
 
             <motion.button
@@ -357,7 +322,6 @@ function LoginContent() {
               type="submit"
               className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-
               <span>
                 {loading
                   ? 'Verifying Admin...'
@@ -367,15 +331,10 @@ function LoginContent() {
               {!loading && (
                 <ArrowRight className="w-4 h-4" />
               )}
-
             </motion.button>
-
           </form>
-
         )}
-
       </motion.div>
-
     </div>
   );
 }
