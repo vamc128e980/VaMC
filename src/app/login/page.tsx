@@ -30,6 +30,7 @@ function LoginContent() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
 
   useEffect(() => {
     router.prefetch('/admin');
@@ -43,14 +44,23 @@ function LoginContent() {
       setRole('waiter');
     }
     setErrorMsg('');
+    setLockoutSeconds(0);
   }, [queryRole]);
+
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = window.setInterval(() => {
+      setLockoutSeconds((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockoutSeconds]);
 
   const handleLogin = async (
     identifier: string,
     password: string,
     targetRole: UserRole,
   ) => {
-    if (loading) return;
+    if (loading || lockoutSeconds > 0) return;
 
     setErrorMsg('');
     const cleanIdentifier = identifier.trim();
@@ -66,7 +76,7 @@ function LoginContent() {
     try {
       const response = await fetch('/api/auth/login/verify', {
         method: 'POST',
-        credentials: 'include',
+        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
@@ -84,6 +94,14 @@ function LoginContent() {
         ? await response.json()
         : null;
 
+      if (response.status === 423 || response.status === 429) {
+        const retrySecs = Number(result?.retryAfterSeconds ?? 60);
+        setLockoutSeconds(retrySecs > 0 ? retrySecs : 60);
+        throw new Error(
+          result?.error || 'Account temporarily locked. Please wait before retrying.',
+        );
+      }
+
       if (!response.ok || !result?.success) {
         throw new Error(
           result?.error ||
@@ -95,25 +113,10 @@ function LoginContent() {
         throw new Error('Invalid authentication response.');
       }
 
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('staff_role', targetRole);
-        localStorage.setItem(
-          'staff_name',
-          result.name ||
-            (targetRole === 'admin' ? 'Master Admin' : 'Floor Steward'),
-        );
-        localStorage.setItem(
-          'session_token',
-          result.token || 'verified_session',
-        );
-      }
-
       const nextPath = targetRole === 'admin' ? '/admin' : '/waiter';
-      window.location.assign(nextPath);
+      router.push(nextPath);
+      router.refresh();
     } catch (error) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('session_token');
-      }
       setErrorMsg(
         error instanceof Error
           ? error.message
@@ -140,7 +143,7 @@ function LoginContent() {
             STAFF COMMAND ACCESS
           </h1>
 
-          <p className="text-[11px] font-mono text-neutral-400">
+          <p className="text-xs font-mono text-neutral-400">
             Vujwala Simha Restaurant & Dine
           </p>
         </div>
@@ -152,8 +155,9 @@ function LoginContent() {
             onClick={() => {
               setRole('waiter');
               setErrorMsg('');
+              setLockoutSeconds(0);
             }}
-            className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
+            className={`min-h-[44px] py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
               role === 'waiter'
                 ? 'bg-[#D4AF37] text-black font-black shadow-md'
                 : 'text-neutral-400 hover:text-white'
@@ -169,8 +173,9 @@ function LoginContent() {
             onClick={() => {
               setRole('admin');
               setErrorMsg('');
+              setLockoutSeconds(0);
             }}
-            className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
+            className={`min-h-[44px] py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
               role === 'admin'
                 ? 'bg-[#D4AF37] text-black font-black shadow-md'
                 : 'text-neutral-400 hover:text-white'
@@ -185,9 +190,15 @@ function LoginContent() {
           <div
             role="alert"
             aria-live="polite"
-            className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono text-center"
+            className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono text-center space-y-1"
           >
-            {errorMsg}
+            <p>{errorMsg}</p>
+            {lockoutSeconds > 0 && (
+              <p className="text-amber-300 font-bold">
+                Retry available in {Math.floor(lockoutSeconds / 60)}:
+                {String(lockoutSeconds % 60).padStart(2, '0')}
+              </p>
+            )}
           </div>
         )}
 
@@ -195,14 +206,14 @@ function LoginContent() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleLogin(waiterInput, waiterPassword, 'waiter');
+              void handleLogin(waiterInput, waiterPassword, 'waiter');
             }}
             className="space-y-3 font-mono"
           >
             <div>
               <label
                 htmlFor="waiter-identifier"
-                className="text-[11px] text-neutral-400 block mb-1"
+                className="text-xs text-neutral-400 block mb-1"
               >
                 Staff / Waiter Name or ID
               </label>
@@ -216,11 +227,11 @@ function LoginContent() {
                   type="text"
                   required
                   autoComplete="username"
-                  disabled={loading}
-                  placeholder="e.g. Surya or 9392149329"
+                  disabled={loading || lockoutSeconds > 0}
+                  placeholder="Enter waiter name or ID"
                   value={waiterInput}
                   onChange={(e) => setWaiterInput(e.target.value)}
-                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
+                  className="w-full min-h-[44px] bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-base outline-none disabled:opacity-50"
                 />
               </div>
             </div>
@@ -228,9 +239,9 @@ function LoginContent() {
             <div>
               <label
                 htmlFor="waiter-password"
-                className="text-[11px] text-neutral-400 block mb-1"
+                className="text-xs text-neutral-400 block mb-1"
               >
-                Waiter Password
+                Waiter PIN / Password
               </label>
 
               <div className="relative">
@@ -242,40 +253,46 @@ function LoginContent() {
                   type="password"
                   required
                   autoComplete="current-password"
-                  disabled={loading}
+                  disabled={loading || lockoutSeconds > 0}
                   placeholder="••••••••"
                   value={waiterPassword}
                   onChange={(e) => setWaiterPassword(e.target.value)}
-                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
+                  className="w-full min-h-[44px] bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-base outline-none disabled:opacity-50"
                 />
               </div>
             </div>
 
             <motion.button
               whileTap={{ scale: 0.97 }}
-              disabled={loading}
+              disabled={loading || lockoutSeconds > 0}
               type="submit"
-              className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="w-full min-h-[44px] mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <span>
-                {loading ? 'Verifying Staff...' : 'Access Waiter Floor'}
+                {loading
+                  ? 'Verifying Staff...'
+                  : lockoutSeconds > 0
+                    ? 'Temporarily Locked'
+                    : 'Access Waiter Floor'}
               </span>
 
-              {!loading && <ArrowRight className="w-4 h-4" />}
+              {!loading && lockoutSeconds === 0 && (
+                <ArrowRight className="w-4 h-4" />
+              )}
             </motion.button>
           </form>
         ) : (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleLogin(adminEmail, adminPassword, 'admin');
+              void handleLogin(adminEmail, adminPassword, 'admin');
             }}
             className="space-y-3 font-mono"
           >
             <div>
               <label
                 htmlFor="admin-email"
-                className="text-[11px] text-neutral-400 block mb-1"
+                className="text-xs text-neutral-400 block mb-1"
               >
                 Admin Email Address
               </label>
@@ -289,11 +306,11 @@ function LoginContent() {
                   type="email"
                   required
                   autoComplete="username"
-                  disabled={loading}
+                  disabled={loading || lockoutSeconds > 0}
                   placeholder="admin@vujwalasimha.com"
                   value={adminEmail}
                   onChange={(e) => setAdminEmail(e.target.value)}
-                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
+                  className="w-full min-h-[44px] bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-base outline-none disabled:opacity-50"
                 />
               </div>
             </div>
@@ -301,7 +318,7 @@ function LoginContent() {
             <div>
               <label
                 htmlFor="admin-password"
-                className="text-[11px] text-neutral-400 block mb-1"
+                className="text-xs text-neutral-400 block mb-1"
               >
                 Admin Password
               </label>
@@ -315,26 +332,32 @@ function LoginContent() {
                   type="password"
                   required
                   autoComplete="current-password"
-                  disabled={loading}
+                  disabled={loading || lockoutSeconds > 0}
                   placeholder="••••••••"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  className="w-full bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-xs outline-none disabled:opacity-50"
+                  className="w-full min-h-[44px] bg-[#161619] border border-white/10 focus:border-[#D4AF37] rounded-2xl pl-10 pr-3 py-2.5 text-white text-base outline-none disabled:opacity-50"
                 />
               </div>
             </div>
 
             <motion.button
               whileTap={{ scale: 0.97 }}
-              disabled={loading}
+              disabled={loading || lockoutSeconds > 0}
               type="submit"
-              className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="w-full min-h-[44px] mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black text-xs uppercase shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <span>
-                {loading ? 'Verifying Admin...' : 'Access Admin Dashboard'}
+                {loading
+                  ? 'Verifying Admin...'
+                  : lockoutSeconds > 0
+                    ? 'Temporarily Locked'
+                    : 'Access Admin Dashboard'}
               </span>
 
-              {!loading && <ArrowRight className="w-4 h-4" />}
+              {!loading && lockoutSeconds === 0 && (
+                <ArrowRight className="w-4 h-4" />
+              )}
             </motion.button>
           </form>
         )}
