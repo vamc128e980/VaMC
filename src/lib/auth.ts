@@ -82,25 +82,25 @@ export function verifyPasswordScrypt(
   }
 
   const parts = trimmedStored.split(':');
-  if (parts.length === 3 && parts[0] === 'scrypt') {
-    const [, salt, expectedHex] = parts;
-    if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
-      return false;
-    }
-
-    const expectedKey = Buffer.from(expectedHex, 'hex');
-    if (expectedKey.length === 0) {
-      return false;
-    }
-
-    const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
-    return (
-      derivedKey.length === expectedKey.length &&
-      timingSafeEqual(derivedKey, expectedKey)
-    );
+  if (parts.length !== 3 || parts[0] !== 'scrypt') {
+    return false;
   }
 
-  return false;
+  const [, salt, expectedHex] = parts;
+  if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
+    return false;
+  }
+
+  const expectedKey = Buffer.from(expectedHex, 'hex');
+  if (expectedKey.length === 0) {
+    return false;
+  }
+
+  const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
+  return (
+    derivedKey.length === expectedKey.length &&
+    timingSafeEqual(derivedKey, expectedKey)
+  );
 }
 
 export function createSessionToken(
@@ -114,7 +114,10 @@ export function createSessionToken(
   const payload: SessionPayload = {
     sub: identifier,
     role,
-    sv: Number.isInteger(sessionVersion) && sessionVersion > 0 ? sessionVersion : 1,
+    sv:
+      Number.isInteger(sessionVersion) && sessionVersion > 0
+        ? sessionVersion
+        : 1,
     iat: now,
     exp: now + SESSION_DURATION,
     iss: SESSION_ISSUER,
@@ -122,7 +125,9 @@ export function createSessionToken(
     v: SESSION_SCHEMA_VERSION,
   };
 
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
+    'base64url',
+  );
   const signature = createHmac('sha256', secret)
     .update(encodedPayload)
     .digest('base64url');
@@ -216,7 +221,9 @@ export async function getVerifiedSession(
   const supabaseAdmin = getSupabaseAdmin();
   const { data: account, error } = await supabaseAdmin
     .from('staff_accounts')
-    .select('id, identifier, name, role, is_active, session_version, locked_until')
+    .select(
+      'id, identifier, name, role, is_active, session_version, locked_until',
+    )
     .eq('identifier', payload.sub)
     .eq('role', payload.role)
     .maybeSingle();
@@ -230,14 +237,19 @@ export async function getVerifiedSession(
     return null;
   }
 
-  if (account.locked_until && new Date(account.locked_until).getTime() > Date.now()) {
+  if (
+    account.locked_until &&
+    new Date(account.locked_until).getTime() > Date.now()
+  ) {
     return null;
   }
 
   return {
     id: account.id,
     identifier: account.identifier,
-    name: account.name || (payload.role === 'admin' ? 'Master Admin' : 'Floor Steward'),
+    name:
+      account.name ||
+      (payload.role === 'admin' ? 'Master Admin' : 'Floor Steward'),
     role: payload.role,
     sessionVersion: dbVersion,
     expiresAt: payload.exp,
