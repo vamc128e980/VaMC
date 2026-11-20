@@ -1,4 +1,4 @@
-import { Language } from '@/types/restaurant';
+export type Language = 'en' | 'te' | 'hi';
 
 export const UI_TEXT = {
   en: {
@@ -86,3 +86,6 @@ export function getLocalizedName(
   if (lang === 'hi' && item.name_hi) return item.name_hi;
   return item.name_en;
 }
+```[cite: 10]
+
+Push this and share the next build screenshot if another error pops up!
