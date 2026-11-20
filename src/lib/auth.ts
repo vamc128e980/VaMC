@@ -412,6 +412,3 @@ export async function resetRateLimit(rateKey: string): Promise<void> {
   const supabaseAdmin = getSupabaseAdmin();
   await supabaseAdmin.from('rate_limits').delete().eq('rate_key', rateKey);
 }
-```[cite: 4, 8]
-
-Commit chesi login work ayyinda leda cheppu bro.
