@@ -205,7 +205,7 @@ export interface VerifiedStaffSession {
 
 export async function getVerifiedSession(
   request: NextRequest,
-): Promise<VerifiedStaffSession null |> {
+): Promise<VerifiedStaffSession | null> {
   const secret = getSessionSecret();
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const payload = verifySessionTokenStructure(token, secret);
