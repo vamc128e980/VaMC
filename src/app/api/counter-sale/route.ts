@@ -3,25 +3,41 @@ import { getSupabaseAdmin } from '@/lib/supabase-server';
 import { requireRole } from '@/lib/auth';
 import { counterSaleSchema } from '@/lib/validation';
 
-async function createCounterSale(input: {
+interface CounterSaleItemInput {
+  name?: string;
+  quantity?: number;
+  unit_price?: number;
+  cooking_notes?: string | null;
+  source_table?: 'vamc_menu_items' | 'ice_cream_menu_items' | 'df_menu_items';
+  source_item_id?: string | number;
+}
+
+interface CounterSaleInput {
   payment_mode?: 'cash' | 'upi' | 'card';
   customer_name?: string | null;
   customer_phone?: string | null;
-  items: Array<{
-    name: string;
-    quantity: number;
-    unit_price: number;
-    cooking_notes?: string | null;
-    source_table?: 'vamc_menu_items' | 'ice_cream_menu_items' | 'df_menu_items';
-    source_item_id?: string | number;
-  }>;
-}) {
+  items: CounterSaleItemInput[];
+}
+
+async function createCounterSale(input: CounterSaleInput) {
   const supabaseAdmin = getSupabaseAdmin();
   const paymentMode = input.payment_mode ?? 'cash';
 
+  const normalizedItems = input.items.map((item) => {
+    const cleanName = item.name?.trim() || 'Counter Item';
+    const qty = Math.max(1, Number(item.quantity ?? 1));
+    const unitPrice = Math.max(0, Number(item.unit_price ?? 0));
+    return {
+      ...item,
+      name: cleanName,
+      quantity: qty,
+      unit_price: unitPrice,
+    };
+  });
+
   const totalAmount = Number(
-    input.items
-      .reduce((acc, item) => acc + Number(item.unit_price) * Number(item.quantity), 0)
+    normalizedItems
+      .reduce((acc, item) => acc + item.unit_price * item.quantity, 0)
       .toFixed(2),
   );
 
@@ -43,7 +59,7 @@ async function createCounterSale(input: {
     throw new Error(sessionErr?.message || 'Failed to create counter session');
   }
 
-  const orderItemsPayload = input.items.map((item) => ({
+  const orderItemsPayload = normalizedItems.map((item) => ({
     session_id: sessionRow.id,
     menu_item_id: null,
     item_name: item.name,
@@ -95,7 +111,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await createCounterSale(parsed.data);
+    const result = await createCounterSale(parsed.data as CounterSaleInput);
     return NextResponse.json({ success: true, ...result }, { status: 201 });
   } catch (err) {
     return NextResponse.json(
