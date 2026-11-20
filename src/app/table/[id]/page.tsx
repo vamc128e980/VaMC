@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import { subscribeCoalescedChannel } from '@/lib/realtime';
 import { escapeIlikePattern } from '@/lib/validation';
 import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import {
@@ -125,10 +126,12 @@ export default function LuxuryCustomerTablePage() {
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg((prev) => (prev === msg ? null : prev)), 3800);
+    setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? null : prev));
+    }, 3800);
   }, []);
 
-  // Resolve table strictly by Admin-configured table_name (never raw numeric URL guessing)
+  // Resolve table strictly by Admin-configured table_name
   const resolveTableIdentity = useCallback(async () => {
     const cleanParam = rawTableParam.trim();
     if (!cleanParam) {
@@ -277,7 +280,7 @@ export default function LuxuryCustomerTablePage() {
       supabase.from('menu_items').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('menu_addons').select('*').eq('is_available', true).order('id', { ascending: true }),
       supabase.from('promo_banners').select('*').eq('is_active', true).order('id', { ascending: false }),
-      supabase.from('df_menu_items').select('id, name, selling_price, image_url, weight_variants').order('name', { ascending: true }),
+      supabase.from('df_menu_items').select('id, name, selling_price, stock_quantity').order('name', { ascending: true }),
     ]);
 
     if (cats && cats.length > 0) {
@@ -299,49 +302,40 @@ export default function LuxuryCustomerTablePage() {
     void syncSessionData();
     void fetchMenuData();
 
-    const channel = supabase
-      .channel(`table-${realTableNumber}-rt`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'table_sessions',
-          filter: `table_number=eq.${realTableNumber}`,
-        },
-        () => {
+    return subscribeCoalescedChannel(`table-${realTableNumber}-rt`, [
+      {
+        table: 'table_sessions',
+        filter: `table_number=eq.${realTableNumber}`,
+        onEvent: () => {
           void syncSessionData();
         },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'order_batches',
-          filter: `table_number=eq.${realTableNumber}`,
-        },
-        () => {
+      },
+      {
+        table: 'order_batches',
+        filter: `table_number=eq.${realTableNumber}`,
+        onEvent: () => {
           if (activeSessionIdRef.current) {
             void loadSessionFromServer(activeSessionIdRef.current);
           } else {
             void syncSessionData();
           }
         },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'promo_banners' },
-        () => {
+      },
+      {
+        table: 'promo_banners',
+        onEvent: () => {
           void fetchBannersOnly();
         },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [realTableNumber, tableResolved, syncSessionData, fetchMenuData, loadSessionFromServer, fetchBannersOnly]);
+      },
+    ]);
+  }, [
+    realTableNumber,
+    tableResolved,
+    syncSessionData,
+    fetchMenuData,
+    loadSessionFromServer,
+    fetchBannersOnly,
+  ]);
 
   useEffect(() => {
     if (banners.length <= 1) return;
@@ -579,7 +573,6 @@ export default function LuxuryCustomerTablePage() {
         resolvedPin = orderData.order?.order_pin ?? resolvedPin;
       }
 
-      // Preserve retail DF impulse items & stock deduction behavior
       if (dfCartItems.length > 0) {
         let sessionForDf = resolvedSessionId;
         if (!sessionForDf) {
@@ -943,7 +936,7 @@ export default function LuxuryCustomerTablePage() {
             type="button"
             whileTap={{ scale: 0.96 }}
             transition={butterSpring}
-            onClick={() => handleCallWaiter('water')}
+            onClick={() => void handleCallWaiter('water')}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono font-bold text-neutral-300 cursor-pointer transition-colors"
           >
             <BellRing className="w-4 h-4 text-[#D4AF37]" />
@@ -1254,7 +1247,7 @@ export default function LuxuryCustomerTablePage() {
                 type="button"
                 whileTap={{ scale: 0.98 }}
                 disabled={loading || phoneError.length > 0 || cart.length === 0}
-                onClick={handlePlaceOrder}
+                onClick={() => void handlePlaceOrder()}
                 className="w-full py-4 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-lg cursor-pointer mt-2 hover:bg-[#c59b27] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Submitting Order...' : 'Submit Order & Get Token'}
