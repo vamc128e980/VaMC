@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { subscribeCoalescedChannel } from '@/lib/realtime';
 import { escapeIlikePattern } from '@/lib/validation';
-import { Category, MenuItem, CartItem, MenuAddon } from '@/types/restaurant';
 import {
   Plus,
   Minus,
@@ -39,12 +38,58 @@ const triggerHaptic = (ms = 12) => {
   }
 };
 
+interface MenuCategory {
+  id: string | number;
+  name?: string | null;
+  name_en?: string | null;
+  sort_order?: number | null;
+}
+
+interface MenuAddonItem {
+  id: string | number;
+  name: string;
+  price: number;
+  is_available?: boolean;
+}
+
+interface WeightVariant {
+  size: string;
+  price: number;
+}
+
+interface MenuDishItem {
+  id: string | number;
+  name?: string | null;
+  name_en?: string | null;
+  price: number;
+  image_url?: string | null;
+  food_type?: string | null;
+  category_id?: string | number | null;
+  is_available?: boolean;
+  has_addons?: boolean;
+  addon_ids?: Array<string | number> | null;
+  is_retail_item?: boolean;
+  weight_variants?: WeightVariant[] | null;
+}
+
+interface TableCartItem {
+  menuItemId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  itemType?: string;
+  isCombo?: boolean;
+  selectedAddons?: MenuAddonItem[];
+  selectedWeightVariant?: WeightVariant | null;
+  isComplimentary?: boolean;
+}
+
 interface RetailDfItem {
   id: string | number;
   name: string;
   selling_price: number;
   image_url?: string | null;
-  weight_variants?: Array<{ size: string; price: number }> | null;
+  weight_variants?: WeightVariant[] | null;
 }
 
 interface PromoBanner {
@@ -76,9 +121,9 @@ export default function LuxuryCustomerTablePage() {
   const [tableResolved, setTableResolved] = useState<boolean>(false);
   const [tableNotFound, setTableNotFound] = useState<boolean>(false);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [addons, setAddons] = useState<MenuAddon[]>([]);
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuDishItem[]>([]);
+  const [addons, setAddons] = useState<MenuAddonItem[]>([]);
 
   // Retail Dry Fruits for Cart Impulse Slider
   const [dfItems, setDfItems] = useState<RetailDfItem[]>([]);
@@ -90,14 +135,13 @@ export default function LuxuryCustomerTablePage() {
   const [selectedCategory, setSelectedCategory] = useState<string | number | null>(null);
 
   // Customization Bottom Sheet States (Only for Item Add-ons & Retail Pack Sizes)
-  const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
+  const [customizingItem, setCustomizingItem] = useState<MenuDishItem | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
-  const [selectedWeightVariant, setSelectedWeightVariant] = useState<{
-    size: string;
-    price: number;
-  } | null>(null);
+  const [selectedWeightVariant, setSelectedWeightVariant] = useState<WeightVariant | null>(
+    null,
+  );
 
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<TableCartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Customer & Loyalty States
@@ -284,11 +328,11 @@ export default function LuxuryCustomerTablePage() {
     ]);
 
     if (cats && cats.length > 0) {
-      setCategories(cats as Category[]);
+      setCategories(cats as MenuCategory[]);
       setSelectedCategory((prev) => prev ?? cats[0].id);
     }
-    if (items) setMenuItems(items as MenuItem[]);
-    if (adns) setAddons(adns as MenuAddon[]);
+    if (items) setMenuItems(items as MenuDishItem[]);
+    if (adns) setAddons(adns as MenuAddonItem[]);
     if (dfs) setDfItems(dfs as RetailDfItem[]);
 
     if (bnrs) {
@@ -346,20 +390,20 @@ export default function LuxuryCustomerTablePage() {
   }, [banners.length]);
 
   const addToCartDirect = (
-    item: MenuItem | RetailDfItem,
+    item: MenuDishItem | RetailDfItem,
     isCombo = false,
-    chosenAddons: MenuAddon[] = [],
-    chosenVariant: { size: string; price: number } | null = null,
+    chosenAddons: MenuAddonItem[] = [],
+    chosenVariant: WeightVariant | null = null,
     isFree = false,
     itemType = 'main',
   ) => {
     triggerHaptic(15);
     const rawPrice =
       itemType === 'main'
-        ? Number((item as MenuItem).price ?? 0)
+        ? Number((item as MenuDishItem).price ?? 0)
         : Number((item as RetailDfItem).selling_price ?? 0);
     const effectivePrice = isFree ? 0 : chosenVariant ? Number(chosenVariant.price) : rawPrice;
-    const displayName = (item as MenuItem).name_en || item.name;
+    const displayName = (item as MenuDishItem).name_en || item.name || 'Item';
 
     setCart((prev) => {
       const existing = prev.find(
@@ -393,7 +437,7 @@ export default function LuxuryCustomerTablePage() {
     });
   };
 
-  const handleItemAddClick = (item: MenuItem) => {
+  const handleItemAddClick = (item: MenuDishItem) => {
     triggerHaptic(15);
     const itemAddons = item.has_addons
       ? addons.filter((a) =>
@@ -461,12 +505,12 @@ export default function LuxuryCustomerTablePage() {
       .filter(
         (m) =>
           Number(m.price) <= 70 &&
-          (m.name_en || m.name).toLowerCase().includes('juice'),
+          (m.name_en || m.name || '').toLowerCase().includes('juice'),
       )
       .slice(0, 5);
   }, [menuItems]);
 
-  const handleClaimFreeReward = async (drink: MenuItem) => {
+  const handleClaimFreeReward = async (drink: MenuDishItem) => {
     triggerHaptic(25);
     try {
       if (isValidPhone(customerPhone)) {
@@ -485,10 +529,11 @@ export default function LuxuryCustomerTablePage() {
         }
       }
 
+      const drinkLabel = drink.name_en || drink.name || 'Free Juice';
       addToCartDirect(drink, false, [], null, true, 'main');
       setIsRewardClaimedThisSession(true);
       setShowRewardModal(false);
-      showToast(`🎁 ${drink.name_en || drink.name} added FREE!`);
+      showToast(`🎁 ${drinkLabel} added FREE!`);
     } catch {
       showToast('Unable to claim reward right now.');
     }
@@ -835,7 +880,7 @@ export default function LuxuryCustomerTablePage() {
                 String(ci.menuItemId) === String(item.id) &&
                 (ci.itemType ?? 'main') === 'main',
             );
-            const dishTitle = item.name_en || item.name;
+            const dishTitle = item.name_en || item.name || 'Dish';
 
             return (
               <motion.div
@@ -1293,7 +1338,7 @@ export default function LuxuryCustomerTablePage() {
                       className="p-3 rounded-xl bg-transparent hover:bg-white/5 border border-white/10 hover:border-[#D4AF37] flex justify-between items-center cursor-pointer transition-colors"
                     >
                       <span className="text-white font-bold text-xs">
-                        {drink.name_en || drink.name}
+                        {drink.name_en || drink.name || 'Free Juice'}
                       </span>
                       <span className="text-[#D4AF37] font-black text-[10px] uppercase">
                         Free
@@ -1327,7 +1372,7 @@ export default function LuxuryCustomerTablePage() {
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <h3 className="font-black text-white text-base">
-                  {customizingItem.name_en || customizingItem.name}
+                  {customizingItem.name_en || customizingItem.name || 'Customize Item'}
                 </h3>
                 <button
                   type="button"
