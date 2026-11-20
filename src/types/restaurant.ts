@@ -1,118 +1,96 @@
-export type Language = 'en' | 'te' | 'hi';
-export type FoodType = 'veg' | 'non_veg' | 'neutral';
+export type PaymentMode = 'cash' | 'upi' | 'card';
+export type SessionStatus = 'active' | 'completed' | 'cancelled' | 'closed';
+export type BatchStatus = 'pending' | 'sent_to_kitchen' | 'preparing' | 'served' | 'cancelled';
 
-export interface Category {
-  id: number;
-  name_en: string;
-  name_te: string | null;
-  name_hi: string | null;
-  station_id: string;
-  has_veg_toggle: boolean;
-  sort_order: number;
-  category_type?: 'dine_in' | 'retail';
+export interface WeightVariant {
+  size: string;
+  price: number;
+  label?: string;
 }
 
 export interface MenuAddon {
-  id: number;
+  id: string | number;
   name: string;
   price: number;
-  category?: 'ice_cream' | 'nuts' | 'dips' | 'toppings' | 'general';
-  is_available: boolean;
-  created_at?: string;
-}
-
-export interface WeightVariant {
-  size: string; // e.g. "100g", "250g", "500g", "1kg"
-  price: number;
+  is_available?: boolean;
 }
 
 export interface MenuItem {
-  id: number;
-  category_id: number;
-  name_en: string;
-  name_te: string | null;
-  name_hi: string | null;
-  description_en: string | null;
-  description_te: string | null;
-  description_hi: string | null;
+  id: string;
+  name: string;
+  description?: string | null;
   price: number;
-  food_type: FoodType;
-  is_available: boolean;
-  image_url: string | null;
-  is_upsell: boolean;
-  is_special?: boolean;
-  // Phase 1 Additions:
-  has_addons?: boolean;
-  addon_ids?: number[];
-  suggested_item_ids?: number[];
-  is_retail_item?: boolean;
-  weight_variants?: WeightVariant[];
+  category_id?: string | null;
+  category?: string | null;
+  image_url?: string | null;
+  is_available?: boolean;
+  is_veg?: boolean;
+  weight_variants?: WeightVariant[] | null;
+  addons?: MenuAddon[] | null;
 }
 
 export interface CartItem {
-  menuItem: MenuItem;
+  menuItemId: string;
+  name: string;
+  unitPrice: number;
   quantity: number;
-  isCombo?: boolean;
-  // Item customization & retail properties
+  itemType?: 'menu' | 'combo' | 'addon' | string;
+  isComplimentary?: boolean;
+  cookingNotes?: string;
+  selectedWeightVariant?: WeightVariant | null;
   selectedAddons?: MenuAddon[];
-  selectedWeightVariant?: WeightVariant;
-  isComplimentary?: boolean; // For 10th visit free reward item
-}
-
-export interface CustomerLoyalty {
-  phone: string;
-  customer_name: string | null;
-  total_visits: number;
-  rewards_claimed: number;
-  last_visited_at: string;
-  created_at: string;
-}
-
-export interface PromoBanner {
-  id: number;
-  title: string | null;
-  image_url: string;
-  is_active: boolean;
-  sort_order: number;
-  target_item_id?: number | null;
-  target_category_id?: number | null;
-}
-
-export interface RetailProduct {
-  id: number;
-  name_en: string;
-  name_te: string | null;
-  name_hi: string | null;
-  description: string | null;
-  price_info: string | null;
-  image_url: string | null;
-  is_active: boolean;
-}
-
-export interface MenuCombo {
-  id: number;
-  name_en: string;
-  name_te: string | null;
-  description_en: string | null;
-  original_price: number;
-  combo_price: number;
-  image_url: string | null;
-  is_available: boolean;
-  items_included: string[];
 }
 
 export interface TableSession {
   id: string;
   table_number: number;
-  customer_name: string;
-  customer_phone: string;
-  subtotal: number;
-  cgst_amount: number;
-  sgst_amount: number;
-  gst_rate: number;
-  total_amount: number;
-  payment_status: 'unpaid' | 'paid';
-  status: 'active' | 'completed' | 'cancelled';
-  created_at: string;
+  status: SessionStatus | string;
+  payment_status?: string | null;
+  payment_mode?: PaymentMode | string | null;
+  order_pin?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  total_amount?: number | null;
+  created_at?: string;
+  settled_at?: string | null;
   closed_at?: string | null;
+}
+
+export interface OrderBatch {
+  id: string;
+  session_id: string;
+  table_number: number;
+  status: BatchStatus | string;
+  source?: string | null;
+  created_at?: string;
+}
+
+export interface OrderItem {
+  id: string;
+  session_id: string;
+  batch_id?: string | null;
+  menu_item_id?: string | null;
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  is_complimentary?: boolean;
+  cooking_notes?: string | null;
+  created_at?: string;
+}
+
+export interface WaiterCall {
+  id: string;
+  table_id?: string | null;
+  table_number: number | null;
+  call_type?: string | null;
+  status?: string | null;
+  created_at?: string;
+}
+
+export interface CustomerLoyalty {
+  id?: string | number;
+  phone: string;
+  successful_visits: number;
+  last_visit_date: string | null;
+  rewards_claimed: number;
 }
