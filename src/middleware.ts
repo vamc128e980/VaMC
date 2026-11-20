@@ -69,7 +69,7 @@ function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
 
 async function verifySessionCrypto(
   token?: string,
-): Promise<SessionPayload null |> {
+): Promise<SessionPayload | null> {
   try {
     const secret = getSessionSecret();
     if (!secret || !token || token.length > MAX_TOKEN_LENGTH) {
