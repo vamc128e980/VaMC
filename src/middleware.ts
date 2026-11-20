@@ -69,7 +69,7 @@ function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
 
 async function verifySessionCrypto(
   token?: string,
-): Promise<SessionPayload | null> {
+): Promise<SessionPayload null |> {
   try {
     const secret = getSessionSecret();
     if (!secret || !token || token.length > MAX_TOKEN_LENGTH) {
@@ -371,6 +371,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2)$).*)',
   ],
 };
-```[cite: 7]
-
-GitHub lo idi commit chesi deploy chesinaka login speed ela undo choodu — inka emaina slowness unte exact ga ekkada lag avuthundo (login button click to `/admin` render varaku) cheppu!
