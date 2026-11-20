@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -8,26 +7,26 @@ import AdminSecurityModal from '@/components/AdminSecurityModal';
 import WaiterSecurityModal from '@/components/WaiterSecurityModal';
 import { useRouter } from 'next/navigation';
 
-import { 
-  ShieldCheck, 
-  Trash2, 
-  Plus, 
+import {
+  ShieldCheck,
+  Trash2,
+  Plus,
   Minus,
-  RefreshCw, 
-  LayoutGrid, 
-  Receipt, 
-  UtensilsCrossed, 
-  Check, 
-  X, 
-  Edit3, 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight, 
-  LogOut, 
-  RotateCcw, 
-  Store, 
-  UserCheck, 
-  ImageIcon, 
+  RefreshCw,
+  LayoutGrid,
+  Receipt,
+  UtensilsCrossed,
+  Check,
+  X,
+  Edit3,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  RotateCcw,
+  Store,
+  UserCheck,
+  ImageIcon,
   SlidersHorizontal,
   FileSpreadsheet,
   UploadCloud,
@@ -46,14 +45,14 @@ import {
   Scale,
   Search,
   Settings,
-  Hash
+  Hash,
 } from 'lucide-react';
 
 const fluidSpring = {
-  type: 'spring',
-  stiffness: 440,
+  type: 'spring' as const,
+  stiffness: 460,
   damping: 34,
-  mass: 0.5
+  mass: 0.45,
 };
 
 const toLocalDateStr = (dateInput: string | Date): string => {
@@ -75,17 +74,25 @@ export default function LuxuryGoldAdminPanel() {
   const [authChecking, setAuthChecking] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(prev => (prev === msg ? null : prev)), 3200);
-  };
-  
+    setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? null : prev));
+    }, 3200);
+  }, []);
+
   // Floating Top Tabs
-  const [activeFloatingTab, setActiveFloatingTab] = useState<'none' | 'history' | 'security' | 'waiter' | 'tables'>('none');
-  
+  const [activeFloatingTab, setActiveFloatingTab] = useState<
+    'none' | 'history' | 'security' | 'waiter' | 'tables'
+  >('none');
+
   // Main Workspace
-  const [activeWorkspace, setActiveWorkspace] = useState<'live_orders' | 'menu_hub'>('live_orders');
-  const [menuHubTab, setMenuHubTab] = useState<'items' | 'combos' | 'addons' | 'promos'>('items');
+  const [activeWorkspace, setActiveWorkspace] = useState<'live_orders' | 'menu_hub'>(
+    'live_orders',
+  );
+  const [menuHubTab, setMenuHubTab] = useState<'items' | 'combos' | 'addons' | 'promos'>(
+    'items',
+  );
 
   // Brand Info
   const [shopName, setShopName] = useState('VUJWALA SIMHA DRY FRUITS & NUTS');
@@ -122,7 +129,15 @@ export default function LuxuryGoldAdminPanel() {
   const [vamcSearch, setVamcSearch] = useState('');
   const vamcTabCounter = useRef(1);
   const [vamcTabs, setVamcTabs] = useState<any[]>([
-    { id: 'C1', name: 'Customer C1', cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }
+    {
+      id: 'C1',
+      name: 'Customer C1',
+      cart: [],
+      customerName: '',
+      customerPhone: '',
+      paymentMode: 'cash',
+      customerHanded: '',
+    },
   ]);
   const [activeVamcTabId, setActiveVamcTabId] = useState('C1');
 
@@ -131,7 +146,7 @@ export default function LuxuryGoldAdminPanel() {
   const [crudCategory, setCrudCategory] = useState<'main' | 'ice_cream' | 'df'>('main');
   const [vamcCrudSearch, setVamcCrudSearch] = useState('');
   const [editingCrudItem, setEditingCrudItem] = useState<any | null>(null);
-  
+
   // Form States for CRUD
   const [crudItemName, setCrudItemName] = useState('');
   const [crudItemPrice, setCrudItemPrice] = useState('');
@@ -149,7 +164,9 @@ export default function LuxuryGoldAdminPanel() {
   // Live Orders State
   const [selectedRunningTableNum, setSelectedRunningTableNum] = useState<number | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<Record<string, 'cash' | 'upi'>>({});
-  const [customerHandedAmounts, setCustomerHandedAmounts] = useState<Record<string, string>>({});
+  const [customerHandedAmounts, setCustomerHandedAmounts] = useState<Record<string, string>>(
+    {},
+  );
 
   // Tables CRUD
   const [showAddTableModal, setShowAddTableModal] = useState(false);
@@ -165,14 +182,16 @@ export default function LuxuryGoldAdminPanel() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryType, setCategoryType] = useState<'dine_in' | 'retail'>('dine_in');
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
-  const [selectedCatId, setSelectedCatId] = useState<number | 'all'>('all');
+  const [selectedCatId, setSelectedCatId] = useState<number | string | 'all'>('all');
 
   // Add-ons Master CRUD
   const [showAddonModal, setShowAddonModal] = useState(false);
   const [editingAddon, setEditingAddon] = useState<any | null>(null);
   const [addonName, setAddonName] = useState('');
   const [addonPrice, setAddonPrice] = useState('');
-  const [addonCategory, setAddonCategory] = useState<'ice_cream' | 'nuts' | 'dips' | 'toppings' | 'general'>('ice_cream');
+  const [addonCategory, setAddonCategory] = useState<
+    'ice_cream' | 'nuts' | 'dips' | 'toppings' | 'general'
+  >('ice_cream');
 
   // Menu Items CRUD
   const [showItemModal, setShowItemModal] = useState(false);
@@ -180,17 +199,19 @@ export default function LuxuryGoldAdminPanel() {
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [itemDescription, setItemDescription] = useState('');
-  const [itemCategoryId, setItemCategoryId] = useState<number | null>(null);
+  const [itemCategoryId, setItemCategoryId] = useState<number | string | null>(null);
   const [itemFoodType, setItemFoodType] = useState<'veg' | 'non_veg'>('veg');
   const [itemImageUrl, setItemImageUrl] = useState('');
   const [itemHasAddons, setItemHasAddons] = useState(false);
   const [itemAddonIds, setItemAddonIds] = useState<number[]>([]);
-  const [itemSuggestedIds, setItemSuggestedIds] = useState<number[]>([]);
+  const [itemSuggestedIds, setItemSuggestedIds] = useState<Array<number | string>>([]);
   const [itemIsRetail, setItemIsRetail] = useState(false);
-  const [itemWeightVariants, setItemWeightVariants] = useState<{ size: string; price: number }[]>([
+  const [itemWeightVariants, setItemWeightVariants] = useState<
+    { size: string; price: number }[]
+  >([
     { size: '250g', price: 0 },
     { size: '500g', price: 0 },
-    { size: '1kg', price: 0 }
+    { size: '1kg', price: 0 },
   ]);
   const itemFileRef = useRef<HTMLInputElement>(null);
 
@@ -198,7 +219,7 @@ export default function LuxuryGoldAdminPanel() {
   const [showComboModal, setShowComboModal] = useState(false);
   const [editingCombo, setEditingCombo] = useState<any | null>(null);
   const [comboName, setComboName] = useState('');
-  const [selectedComboItemIds, setSelectedComboItemIds] = useState<number[]>([]);
+  const [selectedComboItemIds, setSelectedComboItemIds] = useState<Array<number | string>>([]);
   const [comboOfferPrice, setComboOfferPrice] = useState('');
   const [comboDescription, setComboDescription] = useState('');
   const [comboFoodType, setComboFoodType] = useState<'veg' | 'non_veg'>('veg');
@@ -247,8 +268,8 @@ export default function LuxuryGoldAdminPanel() {
       }
 
       const rawCookies = document.cookie || '';
-      const cookies = rawCookies.split(';').map(c => c.trim());
-      const roleCookie = cookies.find(c => c.startsWith('staff_role='));
+      const cookies = rawCookies.split(';').map((c) => c.trim());
+      const roleCookie = cookies.find((c) => c.startsWith('staff_role='));
       const cookieRole = roleCookie ? roleCookie.split('=')[1]?.toLowerCase() : null;
 
       if (!active) return;
@@ -262,7 +283,7 @@ export default function LuxuryGoldAdminPanel() {
       }
     };
 
-    verifyAdminSession();
+    void verifyAdminSession();
     return () => {
       active = false;
     };
@@ -270,7 +291,11 @@ export default function LuxuryGoldAdminPanel() {
 
   const loadBrandSettings = useCallback(async () => {
     try {
-      const { data } = await supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle();
+      const { data } = await supabase
+        .from('restaurant_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
       if (data) {
         if (data.restaurant_name) setShopName(data.restaurant_name);
         if (data.tagline) setTagline(data.tagline);
@@ -282,14 +307,10 @@ export default function LuxuryGoldAdminPanel() {
 
   const loadCounterAndInventoryData = useCallback(async () => {
     try {
-      const [
-        { data: vItems },
-        { data: iItems },
-        { data: dItems }
-      ] = await Promise.all([
+      const [{ data: vItems }, { data: iItems }, { data: dItems }] = await Promise.all([
         supabase.from('vamc_menu_items').select('*').order('name'),
         supabase.from('ice_cream_menu_items').select('*').order('name'),
-        supabase.from('df_menu_items').select('*').order('name')
+        supabase.from('df_menu_items').select('*').order('name'),
       ]);
 
       if (vItems) setVamcCounterItems(vItems);
@@ -301,57 +322,57 @@ export default function LuxuryGoldAdminPanel() {
   }, []);
 
   // Decoupled Live Orders, Batches & Selected Date Sessions Loader
-  const loadLiveOrdersAndSessions = useCallback(async (targetDate = selectedDateRef.current) => {
-    try {
-      const startOfDay = new Date(`${targetDate}T00:00:00`).toISOString();
-      const endOfDay = new Date(`${targetDate}T23:59:59.999`).toISOString();
+  const loadLiveOrdersAndSessions = useCallback(
+    async (targetDate = selectedDateRef.current) => {
+      try {
+        const startOfDay = new Date(`${targetDate}T00:00:00`).toISOString();
+        const endOfDay = new Date(`${targetDate}T23:59:59.999`).toISOString();
 
-      const [
-        { data: tbls },
-        { data: sess },
-        { data: calls }
-      ] = await Promise.all([
-        supabase.from('restaurant_tables').select('*').order('table_number'),
-        supabase
-          .from('table_sessions')
-          .select('*')
-          .or(`status.eq.active,and(created_at.gte.${startOfDay},created_at.lte.${endOfDay})`)
-          .order('created_at', { ascending: false }),
-        supabase.from('waiter_calls').select('*').eq('status', 'pending').order('created_at', { ascending: false })
-      ]);
+        const [{ data: tbls }, { data: sess }, { data: calls }] = await Promise.all([
+          supabase.from('restaurant_tables').select('*').order('table_number'),
+          supabase
+            .from('table_sessions')
+            .select('*')
+            .or(`status.eq.active,and(created_at.gte.${startOfDay},created_at.lte.${endOfDay})`)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('waiter_calls')
+            .select('*')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false }),
+        ]);
 
-      if (tbls) setTables(tbls);
-      if (calls) setWaiterCalls(calls);
+        if (tbls) setTables(tbls);
+        if (calls) setWaiterCalls(calls);
 
-      if (sess) {
-        setSessions(sess);
-        const sessionIds = sess.map((s: any) => s.id);
-        if (sessionIds.length > 0) {
-          const [
-            { data: oitms },
-            { data: bths }
-          ] = await Promise.all([
-            supabase
-              .from('order_items')
-              .select('*, menu_items(name_en, name, price, category_id, image_url)')
-              .in('session_id', sessionIds),
-            supabase
-              .from('order_batches')
-              .select('*')
-              .in('session_id', sessionIds)
-              .order('created_at', { ascending: false })
-          ]);
-          setOrderItems(oitms || []);
-          setBatches(bths || []);
-        } else {
-          setOrderItems([]);
-          setBatches([]);
+        if (sess) {
+          setSessions(sess);
+          const sessionIds = sess.map((s: any) => s.id);
+          if (sessionIds.length > 0) {
+            const [{ data: oitms }, { data: bths }] = await Promise.all([
+              supabase
+                .from('order_items')
+                .select('*, menu_items(name_en, name, price, category_id, image_url)')
+                .in('session_id', sessionIds),
+              supabase
+                .from('order_batches')
+                .select('*')
+                .in('session_id', sessionIds)
+                .order('created_at', { ascending: false }),
+            ]);
+            setOrderItems(oitms || []);
+            setBatches(bths || []);
+          } else {
+            setOrderItems([]);
+            setBatches([]);
+          }
         }
+      } catch (err) {
+        console.error('Live Orders Load Error:', err);
       }
-    } catch (err) {
-      console.error('Live Orders Load Error:', err);
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Decoupled Menu & Catalog Loader
   const loadMenuCatalog = useCallback(async () => {
@@ -362,14 +383,14 @@ export default function LuxuryGoldAdminPanel() {
         { data: adns },
         { data: bnrs },
         { data: cmbs },
-        { data: loyalties }
+        { data: loyalties },
       ] = await Promise.all([
         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
         supabase.from('menu_items').select('*').order('id', { ascending: true }),
         supabase.from('menu_addons').select('*').order('id', { ascending: true }),
         supabase.from('promo_banners').select('*'),
         supabase.from('combos').select('*').order('id', { ascending: true }),
-        supabase.from('customer_loyalty').select('*')
+        supabase.from('customer_loyalty').select('*'),
       ]);
 
       if (cats) setCategories(cats);
@@ -379,7 +400,9 @@ export default function LuxuryGoldAdminPanel() {
       if (bnrs) setBanners(bnrs);
       if (loyalties) {
         const map: Record<string, any> = {};
-        loyalties.forEach((l: any) => { map[l.phone] = l; });
+        loyalties.forEach((l: any) => {
+          map[l.phone] = l;
+        });
         setLoyaltyData(map);
       }
     } catch (err) {
@@ -393,7 +416,7 @@ export default function LuxuryGoldAdminPanel() {
       await Promise.all([
         loadLiveOrdersAndSessions(selectedDateRef.current),
         loadMenuCatalog(),
-        loadCounterAndInventoryData()
+        loadCounterAndInventoryData(),
       ]);
     } finally {
       setLoading(false);
@@ -402,13 +425,13 @@ export default function LuxuryGoldAdminPanel() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    loadBrandSettings();
-    loadAdminData();
+    void loadBrandSettings();
+    void loadAdminData();
   }, [isAuthenticated, loadBrandSettings, loadAdminData]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    loadLiveOrdersAndSessions(selectedDate);
+    void loadLiveOrdersAndSessions(selectedDate);
   }, [selectedDate, isAuthenticated, loadLiveOrdersAndSessions]);
 
   useEffect(() => {
@@ -416,25 +439,84 @@ export default function LuxuryGoldAdminPanel() {
 
     const channel = supabase
       .channel('admin-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => loadLiveOrdersAndSessions(selectedDateRef.current))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => loadMenuCatalog())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => loadMenuCatalog())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => loadMenuCatalog())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => loadMenuCatalog())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => loadMenuCatalog())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vamc_menu_items' }, () => loadCounterAndInventoryData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ice_cream_menu_items' }, () => loadCounterAndInventoryData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => loadCounterAndInventoryData())
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'table_sessions' },
+        () => {
+          void loadLiveOrdersAndSessions(selectedDateRef.current);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'order_batches' },
+        () => {
+          void loadLiveOrdersAndSessions(selectedDateRef.current);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'order_items' },
+        () => {
+          void loadLiveOrdersAndSessions(selectedDateRef.current);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'restaurant_tables' },
+        () => {
+          void loadLiveOrdersAndSessions(selectedDateRef.current);
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'waiter_calls' },
+        () => {
+          void loadLiveOrdersAndSessions(selectedDateRef.current);
+        },
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => {
+        void loadMenuCatalog();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => {
+        void loadMenuCatalog();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
+        void loadMenuCatalog();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => {
+        void loadMenuCatalog();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => {
+        void loadMenuCatalog();
+      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vamc_menu_items' },
+        () => {
+          void loadCounterAndInventoryData();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ice_cream_menu_items' },
+        () => {
+          void loadCounterAndInventoryData();
+        },
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => {
+        void loadCounterAndInventoryData();
+      })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [isAuthenticated, loadLiveOrdersAndSessions, loadMenuCatalog, loadCounterAndInventoryData]);
+  }, [
+    isAuthenticated,
+    loadLiveOrdersAndSessions,
+    loadMenuCatalog,
+    loadCounterAndInventoryData,
+  ]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -491,22 +573,28 @@ export default function LuxuryGoldAdminPanel() {
 
       const newGross = (liveItems || []).reduce((sum, it) => {
         if (it.is_complimentary) return sum;
-        const basePr = Number(it.unit_price || it.menu_items?.price || 0);
+        const basePr = Number(it.unit_price ?? it.menu_items?.price ?? 0);
         let addOnsSum = 0;
         if (Array.isArray(it.selected_addons)) {
-          addOnsSum = it.selected_addons.reduce((aSum: number, a: any) => aSum + Number(a.price || 0), 0);
+          addOnsSum = it.selected_addons.reduce(
+            (aSum: number, a: any) => aSum + Number(a.price ?? 0),
+            0,
+          );
         }
-        return sum + (it.quantity * (basePr + addOnsSum));
+        return sum + Number(it.quantity ?? 1) * (basePr + addOnsSum);
       }, 0);
 
-      const { error: updErr } = await supabase.from('table_sessions').update({
-        subtotal: newGross,
-        cgst_amount: 0,
-        sgst_amount: 0,
-        total_amount: newGross,
-        discount_amount: 0,
-        final_payable: newGross
-      }).eq('id', sessionId);
+      const { error: updErr } = await supabase
+        .from('table_sessions')
+        .update({
+          subtotal: newGross,
+          cgst_amount: 0,
+          sgst_amount: 0,
+          total_amount: newGross,
+          discount_amount: 0,
+          final_payable: newGross,
+        })
+        .eq('id', sessionId);
       if (updErr) throw updErr;
 
       await loadLiveOrdersAndSessions(selectedDateRef.current);
@@ -515,11 +603,18 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleCancelOrderItem = async (orderItemId: number, sessionId: string, dishName: string) => {
+  const handleCancelOrderItem = async (
+    orderItemId: number | string,
+    sessionId: string,
+    dishName: string,
+  ) => {
     if (!confirm(`"${dishName}" dish ni CANCEL cheyala?`)) return;
     try {
       setLoading(true);
-      const { error } = await supabase.from('order_items').update({ item_status: 'cancelled' }).eq('id', orderItemId);
+      const { error } = await supabase
+        .from('order_items')
+        .update({ item_status: 'cancelled' })
+        .eq('id', orderItemId);
       if (error) throw error;
       await recalculateSessionBill(sessionId);
     } catch (err: any) {
@@ -529,12 +624,21 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleUpdateItemQuantity = async (orderItemId: number, currentQty: number, delta: number, sessionId: string) => {
+  const handleUpdateItemQuantity = async (
+    orderItemId: number | string,
+    currentQty: number,
+    delta: number,
+    sessionId: string,
+  ) => {
     const nextQty = currentQty + delta;
-    if (nextQty <= 0) return alert('Quantity 0 cheyalante "Cancel Dish" press cheyandi.');
+    if (nextQty <= 0)
+      return alert('Quantity 0 cheyalante "Cancel Dish" press cheyandi.');
     try {
       setLoading(true);
-      const { error } = await supabase.from('order_items').update({ quantity: nextQty }).eq('id', orderItemId);
+      const { error } = await supabase
+        .from('order_items')
+        .update({ quantity: nextQty })
+        .eq('id', orderItemId);
       if (error) throw error;
       await recalculateSessionBill(sessionId);
     } catch (err: any) {
@@ -544,55 +648,40 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleSettleOrder = async (sessionId: string, tableNum: number, mode: 'cash' | 'upi') => {
+  const handleSettleOrder = async (
+    sessionId: string,
+    tableNum: number,
+    mode: 'cash' | 'upi',
+  ) => {
     if (loading) return;
     try {
       setLoading(true);
-      const activeSess = sessions.find(s => s.id === sessionId);
-      const finalAmt = Number(activeSess?.total_amount || 0);
+      const activeSess = sessions.find((s) => s.id === sessionId);
 
-      if (activeSess && activeSess.customer_phone && activeSess.customer_phone.length === 10) {
-        try {
-          const { data: existingLoyal } = await supabase
-            .from('customer_loyalty')
-            .select('*')
-            .eq('phone', activeSess.customer_phone)
-            .maybeSingle();
-
-          const isQualifyingVisit = finalAmt >= 180;
-          const prevVisits = existingLoyal?.total_visits || 0;
-          const newVisitCount = isQualifyingVisit ? prevVisits + 1 : prevVisits;
-
-          if (existingLoyal) {
-            await supabase.from('customer_loyalty').update({
-              total_visits: newVisitCount,
-              customer_name: activeSess.customer_name || existingLoyal.customer_name,
-              last_visited_at: new Date().toISOString()
-            }).eq('phone', activeSess.customer_phone);
-          } else {
-            await supabase.from('customer_loyalty').insert({
-              phone: activeSess.customer_phone,
-              customer_name: activeSess.customer_name || 'Guest',
-              total_visits: isQualifyingVisit ? 1 : 0,
-              rewards_claimed: 0
-            });
-          }
-        } catch (e) {
-          console.error('Loyalty log err:', e);
-        }
+      const res = await fetch('/api/settle', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          payment_mode: mode,
+          customer_name: activeSess?.customer_name ?? null,
+          customer_phone: activeSess?.customer_phone ?? null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Settlement failed.');
       }
 
-      const { error: sessErr } = await supabase.from('table_sessions').update({ 
-        status: 'completed', 
-        payment_status: 'paid',
-        payment_mode: mode 
-      }).eq('id', sessionId);
-      if (sessErr) throw sessErr;
-
-      const { error: tblErr } = await supabase.from('restaurant_tables').update({ status: 'available' }).eq('table_number', tableNum);
+      const { error: tblErr } = await supabase
+        .from('restaurant_tables')
+        .update({ status: 'available' })
+        .eq('table_number', tableNum);
       if (tblErr) throw tblErr;
 
       await loadLiveOrdersAndSessions(selectedDateRef.current);
+      await loadMenuCatalog();
       showToast(`Table #${tableNum} Bill settled via ${mode.toUpperCase()}!`);
     } catch (err: any) {
       alert('Settle error: ' + err.message);
@@ -605,10 +694,25 @@ export default function LuxuryGoldAdminPanel() {
     if (!confirm('Floor loni running tables annitini VACANT ga reset cheyala?')) return;
     setLoading(true);
     try {
-      const { error: sErr } = await supabase.from('table_sessions').update({ status: 'completed', payment_status: 'paid' }).eq('status', 'active');
-      if (sErr) throw sErr;
-      const { error: tErr } = await supabase.from('restaurant_tables').update({ status: 'available' }).gte('table_number', 0);
+      for (const s of activeSessions) {
+        const res = await fetch('/api/floor/reset', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: s.id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || `Failed to reset session ${s.id}`);
+        }
+      }
+
+      const { error: tErr } = await supabase
+        .from('restaurant_tables')
+        .update({ status: 'available' })
+        .gte('table_number', 0);
       if (tErr) throw tErr;
+
       await loadLiveOrdersAndSessions(selectedDateRef.current);
       showToast('Floor reset aindi! All tables vacant.');
     } catch (err: any) {
@@ -629,28 +733,31 @@ export default function LuxuryGoldAdminPanel() {
     } catch {
       // Fallback to client cookie/storage cleanup
     }
-    document.cookie = 'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
-    document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+    document.cookie =
+      'staff_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
+    document.cookie =
+      'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0;';
     if (typeof window !== 'undefined') localStorage.clear();
     window.location.replace('/login?role=admin');
   };
 
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
-    const tNum = parseInt(newTableNumber);
-    const tCap = parseInt(newTableCapacity) || 4;
+    const tNum = parseInt(newTableNumber, 10);
+    const tCap = parseInt(newTableCapacity, 10) || 4;
     const tName = newTableName.trim() || `Table-${tNum}`;
 
     if (!tNum || tNum <= 0) return alert('Valid Table Number ivvandi.');
-    if (tables.some(t => t.table_number === tNum)) return alert(`Table #${tNum} already undi!`);
+    if (tables.some((t) => t.table_number === tNum))
+      return alert(`Table #${tNum} already undi!`);
 
     try {
       setLoading(true);
-      const { error } = await supabase.from('restaurant_tables').insert({ 
-        table_number: tNum, 
-        capacity: tCap, 
+      const { error } = await supabase.from('restaurant_tables').insert({
+        table_number: tNum,
+        capacity: tCap,
         status: 'available',
-        table_name: tName
+        table_name: tName,
       });
       if (error) throw error;
       setNewTableNumber('');
@@ -672,7 +779,8 @@ export default function LuxuryGoldAdminPanel() {
 
     try {
       setLoading(true);
-      const { error } = await supabase.from('restaurant_tables')
+      const { error } = await supabase
+        .from('restaurant_tables')
         .update({ table_name: cleanName })
         .eq('table_number', editingTableObj.table_number);
       if (error) throw error;
@@ -692,7 +800,10 @@ export default function LuxuryGoldAdminPanel() {
     if (!confirm(`Table #${tableNum} ni DELETE cheyala?`)) return;
     try {
       setLoading(true);
-      const { error } = await supabase.from('restaurant_tables').delete().eq('table_number', tableNum);
+      const { error } = await supabase
+        .from('restaurant_tables')
+        .delete()
+        .eq('table_number', tableNum);
       if (error) throw error;
       await loadLiveOrdersAndSessions(selectedDateRef.current);
     } catch (err: any) {
@@ -710,19 +821,25 @@ export default function LuxuryGoldAdminPanel() {
     setLoading(true);
     try {
       if (editingCategory) {
-        const { error } = await supabase.from('categories').update({ 
-          name: cleanName, 
-          name_en: cleanName,
-          category_type: categoryType
-        }).eq('id', editingCategory.id);
+        const { error } = await supabase
+          .from('categories')
+          .update({
+            name: cleanName,
+            name_en: cleanName,
+            category_type: categoryType,
+          })
+          .eq('id', editingCategory.id);
         if (error) throw error;
       } else {
-        const nextSort = (categories.length > 0 ? Math.max(...categories.map(c => Number(c.sort_order || 0))) : 0) + 1;
-        const { error } = await supabase.from('categories').insert({ 
-          name: cleanName, 
-          name_en: cleanName, 
+        const nextSort =
+          (categories.length > 0
+            ? Math.max(...categories.map((c) => Number(c.sort_order ?? 0)))
+            : 0) + 1;
+        const { error } = await supabase.from('categories').insert({
+          name: cleanName,
+          name_en: cleanName,
           sort_order: nextSort,
-          category_type: categoryType
+          category_type: categoryType,
         });
         if (error) throw error;
       }
@@ -738,7 +855,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleDeleteCategory = async (catId: number, catName: string) => {
+  const handleDeleteCategory = async (catId: number | string, catName: string) => {
     if (!confirm(`"${catName}" category ni DELETE cheyala?`)) return;
     try {
       setLoading(true);
@@ -757,7 +874,8 @@ export default function LuxuryGoldAdminPanel() {
     e.preventDefault();
     const cleanName = addonName.trim();
     const prNum = parseFloat(addonPrice);
-    if (!cleanName || isNaN(prNum) || prNum < 0) return alert('Add-on Name & valid Price enter cheyandi.');
+    if (!cleanName || isNaN(prNum) || prNum < 0)
+      return alert('Add-on Name & valid Price enter cheyandi.');
 
     setLoading(true);
     try {
@@ -765,11 +883,14 @@ export default function LuxuryGoldAdminPanel() {
         name: cleanName,
         price: prNum,
         category: addonCategory,
-        is_available: true
+        is_available: true,
       };
 
       if (editingAddon) {
-        const { error } = await supabase.from('menu_addons').update(payload).eq('id', editingAddon.id);
+        const { error } = await supabase
+          .from('menu_addons')
+          .update(payload)
+          .eq('id', editingAddon.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('menu_addons').insert(payload);
@@ -789,19 +910,24 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleToggleAddon = async (addonId: number, currentStatus: boolean) => {
+  const handleToggleAddon = async (addonId: number | string, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
-    setAddons(prev => prev.map(a => a.id === addonId ? { ...a, is_available: nextStatus } : a));
+    setAddons((prev) =>
+      prev.map((a) => (a.id === addonId ? { ...a, is_available: nextStatus } : a)),
+    );
     try {
-      const { error } = await supabase.from('menu_addons').update({ is_available: nextStatus }).eq('id', addonId);
+      const { error } = await supabase
+        .from('menu_addons')
+        .update({ is_available: nextStatus })
+        .eq('id', addonId);
       if (error) throw error;
     } catch (err) {
       console.error('Addon toggle err:', err);
-      loadMenuCatalog();
+      void loadMenuCatalog();
     }
   };
 
-  const handleDeleteAddon = async (addonId: number, name: string) => {
+  const handleDeleteAddon = async (addonId: number | string, name: string) => {
     if (!confirm(`"${name}" add-on ni DELETE cheyala?`)) return;
     try {
       setLoading(true);
@@ -815,15 +941,20 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleToggleStock = async (itemId: number, currentStatus: boolean) => {
+  const handleToggleStock = async (itemId: number | string, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
-    setMenuItems(prev => prev.map(m => m.id === itemId ? { ...m, is_available: nextStatus } : m));
+    setMenuItems((prev) =>
+      prev.map((m) => (m.id === itemId ? { ...m, is_available: nextStatus } : m)),
+    );
     try {
-      const { error } = await supabase.from('menu_items').update({ is_available: nextStatus }).eq('id', itemId);
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_available: nextStatus })
+        .eq('id', itemId);
       if (error) throw error;
     } catch (err) {
       console.error('Stock toggle err:', err);
-      loadMenuCatalog();
+      void loadMenuCatalog();
     }
   };
 
@@ -850,11 +981,16 @@ export default function LuxuryGoldAdminPanel() {
         addon_ids: itemAddonIds,
         suggested_item_ids: itemSuggestedIds,
         is_retail_item: itemIsRetail,
-        weight_variants: itemIsRetail ? itemWeightVariants.filter(v => v.price > 0) : []
+        weight_variants: itemIsRetail
+          ? itemWeightVariants.filter((v) => v.price > 0)
+          : [],
       };
 
       if (editingItem) {
-        const { error } = await supabase.from('menu_items').update(payload).eq('id', editingItem.id);
+        const { error } = await supabase
+          .from('menu_items')
+          .update(payload)
+          .eq('id', editingItem.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('menu_items').insert(payload);
@@ -871,7 +1007,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleDeleteItem = async (itemId: number, name: string) => {
+  const handleDeleteItem = async (itemId: number | string, name: string) => {
     if (!confirm(`"${name}" dish ni DELETE cheyala?`)) return;
     try {
       const { error } = await supabase.from('menu_items').delete().eq('id', itemId);
@@ -884,8 +1020,8 @@ export default function LuxuryGoldAdminPanel() {
 
   const comboSumActualPrice = useMemo(() => {
     return selectedComboItemIds.reduce((sum, id) => {
-      const dish = menuItems.find(m => m.id === id);
-      return sum + (dish ? Number(dish.price || 0) : 0);
+      const dish = menuItems.find((m) => m.id === id);
+      return sum + (dish ? Number(dish.price ?? 0) : 0);
     }, 0);
   }, [selectedComboItemIds, menuItems]);
 
@@ -898,8 +1034,12 @@ export default function LuxuryGoldAdminPanel() {
 
     setLoading(true);
     try {
-      const selectedDishObjects = menuItems.filter(m => selectedComboItemIds.includes(m.id));
-      const comboSummaryDesc = selectedDishObjects.map(d => d.name_en || d.name).join(', ');
+      const selectedDishObjects = menuItems.filter((m) =>
+        selectedComboItemIds.includes(m.id),
+      );
+      const comboSummaryDesc = selectedDishObjects
+        .map((d) => d.name_en || d.name)
+        .join(', ');
 
       const payload = {
         name: comboName.trim(),
@@ -909,11 +1049,14 @@ export default function LuxuryGoldAdminPanel() {
         description: comboDescription.trim() || `Includes: ${comboSummaryDesc}`,
         food_type: comboFoodType,
         image_url: comboImageUrl.trim(),
-        is_available: true
+        is_available: true,
       };
 
       if (editingCombo) {
-        const { error } = await supabase.from('combos').update(payload).eq('id', editingCombo.id);
+        const { error } = await supabase
+          .from('combos')
+          .update(payload)
+          .eq('id', editingCombo.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('combos').insert(payload);
@@ -931,7 +1074,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleDeleteCombo = async (comboId: number, name: string) => {
+  const handleDeleteCombo = async (comboId: number | string, name: string) => {
     if (!confirm(`"${name}" combo ni DELETE cheyala?`)) return;
     try {
       const { error } = await supabase.from('combos').delete().eq('id', comboId);
@@ -944,12 +1087,20 @@ export default function LuxuryGoldAdminPanel() {
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBannerTitle.trim() || !newBannerImageUrl.trim()) return alert('Banner Title & Image ivvandi.');
+    if (!newBannerTitle.trim() || !newBannerImageUrl.trim())
+      return alert('Banner Title & Image ivvandi.');
     setLoading(true);
     try {
-      const payload = { title: newBannerTitle.trim(), image_url: newBannerImageUrl.trim(), is_active: true };
+      const payload = {
+        title: newBannerTitle.trim(),
+        image_url: newBannerImageUrl.trim(),
+        is_active: true,
+      };
       if (editingBanner) {
-        const { error } = await supabase.from('promo_banners').update(payload).eq('id', editingBanner.id);
+        const { error } = await supabase
+          .from('promo_banners')
+          .update(payload)
+          .eq('id', editingBanner.id);
         if (error) throw error;
         setEditingBanner(null);
       } else {
@@ -966,7 +1117,7 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const handleDeleteBanner = async (bannerId: number) => {
+  const handleDeleteBanner = async (bannerId: number | string) => {
     if (!confirm('Banner ni DELETE cheyala?')) return;
     try {
       const { error } = await supabase.from('promo_banners').delete().eq('id', bannerId);
@@ -998,15 +1149,15 @@ export default function LuxuryGoldAdminPanel() {
 
   // Local IST Date Filter
   const filteredSessions = useMemo(() => {
-    return sessions.filter(s => toLocalDateStr(s.created_at) === selectedDate);
+    return sessions.filter((s) => toLocalDateStr(s.created_at) === selectedDate);
   }, [sessions, selectedDate]);
 
   const { totalCashRevenue, totalUpiRevenue, totalOverallRevenue } = useMemo(() => {
     let cash = 0;
     let upi = 0;
-    filteredSessions.forEach(s => {
+    filteredSessions.forEach((s) => {
       if (s.payment_status === 'paid' || s.status === 'completed') {
-        const amt = Number(s.total_amount || 0);
+        const amt = Number(s.total_amount ?? 0);
         if (s.payment_mode === 'cash') cash += amt;
         else upi += amt;
       }
@@ -1014,19 +1165,28 @@ export default function LuxuryGoldAdminPanel() {
     return {
       totalCashRevenue: cash,
       totalUpiRevenue: upi,
-      totalOverallRevenue: cash + upi
+      totalOverallRevenue: cash + upi,
     };
   }, [filteredSessions]);
 
-  const activeSessions = useMemo(() => sessions.filter(s => s.status === 'active'), [sessions]);
+  const activeSessions = useMemo(
+    () => sessions.filter((s) => s.status === 'active'),
+    [sessions],
+  );
 
   const getSessionOrderedItems = (sessionId: string) => {
     return (orderItemsBySession[sessionId] || [])
-      .filter(oi => oi.item_status !== 'cancelled')
-      .map(oi => {
+      .filter((oi) => oi.item_status !== 'cancelled')
+      .map((oi) => {
         let resolvedName = oi.menu_items?.name_en || oi.menu_items?.name;
-        if (!resolvedName && oi.cooking_notes && oi.cooking_notes.includes('VaMC Counter Item:')) {
-          resolvedName = oi.cooking_notes.replace(/VaMC Counter Item: (\[[A-Z]+\] )?/g, '').trim();
+        if (
+          !resolvedName &&
+          oi.cooking_notes &&
+          oi.cooking_notes.includes('VaMC Counter Item:')
+        ) {
+          resolvedName = oi.cooking_notes
+            .replace(/VaMC Counter Item: (\[[A-Z]+\] )?/g, '')
+            .trim();
         }
         if (!resolvedName) {
           resolvedName = 'Counter Item';
@@ -1035,12 +1195,12 @@ export default function LuxuryGoldAdminPanel() {
         return {
           id: oi.id,
           name: resolvedName,
-          quantity: oi.quantity || 1,
-          price: Number(oi.unit_price || oi.menu_items?.price || 0),
+          quantity: oi.quantity ?? 1,
+          price: Number(oi.unit_price ?? oi.menu_items?.price ?? 0),
           cooking_notes: oi.cooking_notes || null,
           selected_addons: oi.selected_addons || [],
           is_complimentary: oi.is_complimentary || false,
-          selected_weight_variant: oi.selected_weight_variant || null
+          selected_weight_variant: oi.selected_weight_variant || null,
         };
       });
   };
@@ -1052,7 +1212,7 @@ export default function LuxuryGoldAdminPanel() {
   // 1. PHYSICAL 80mm KOT WITH XSS PROTECTION
   const printKitchenOrderTicket = (session: any) => {
     const items = getSessionOrderedItems(session.id);
-    const matchingTable = tables.find(t => t.table_number === session.table_number);
+    const matchingTable = tables.find((t) => t.table_number === session.table_number);
     const tableName = matchingTable?.table_name || `Table #${session.table_number}`;
 
     const printWindow = window.open('', '_blank', 'width=320,height=500');
@@ -1097,7 +1257,9 @@ export default function LuxuryGoldAdminPanel() {
             <span class="item-qty">QTY</span>
           </div>
           <div class="divider"></div>
-          ${items.map(it => `
+          ${items
+            .map(
+              (it) => `
             <div style="margin-bottom: 6px;">
               <div class="item-row">
                 <span class="item-name">
@@ -1106,12 +1268,22 @@ export default function LuxuryGoldAdminPanel() {
                 </span>
                 <span class="item-qty">[ ${Number(it.quantity)} ]</span>
               </div>
-              ${Array.isArray(it.selected_addons) && it.selected_addons.length > 0 ? it.selected_addons.map((a: any) => `
+              ${
+                Array.isArray(it.selected_addons) && it.selected_addons.length > 0
+                  ? it.selected_addons
+                      .map(
+                        (a: any) => `
                 <div class="addon-line">+ Extra: ${escapeHtml(a.name)}</div>
-              `).join('') : ''}
+              `,
+                      )
+                      .join('')
+                  : ''
+              }
               ${it.cooking_notes && !it.cooking_notes.startsWith('VaMC Counter Item:') ? `<div class="note-box">>> NOTE: ${escapeHtml(it.cooking_notes)}</div>` : ''}
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
           <div class="divider"></div>
           <div class="text-center" style="font-size: 10px; margin-top: 8px;">PREPARE & DISPATCH DIRECTLY TO FLOOR</div>
           <script>
@@ -1132,8 +1304,8 @@ export default function LuxuryGoldAdminPanel() {
   // 2. 80mm ESC/POS CUSTOMER RECEIPT WITH XSS PROTECTION
   const printThermalSlip = (session: any) => {
     const items = getSessionOrderedItems(session.id);
-    const gross = Number(session.total_amount || 0);
-    const matchingTable = tables.find(t => t.table_number === session.table_number);
+    const gross = Number(session.total_amount ?? 0);
+    const matchingTable = tables.find((t) => t.table_number === session.table_number);
     const tableName = matchingTable?.table_name || `Table #${session.table_number}`;
     const pMode = (session.payment_mode || 'Cash/UPI').toUpperCase();
 
@@ -1183,26 +1355,39 @@ export default function LuxuryGoldAdminPanel() {
             <span class="item-total">AMT</span>
           </div>
           <div class="divider"></div>
-          ${items.map(it => {
-            const addOnsCost = Array.isArray(it.selected_addons) 
-              ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
-              : 0;
-            const singleItemPrice = it.is_complimentary ? 0 : (it.price + addOnsCost);
-            const lineTotal = singleItemPrice * it.quantity;
+          ${items
+            .map((it) => {
+              const addOnsCost = Array.isArray(it.selected_addons)
+                ? it.selected_addons.reduce(
+                    (sum: number, a: any) => sum + Number(a.price ?? 0),
+                    0,
+                  )
+                : 0;
+              const singleItemPrice = it.is_complimentary ? 0 : it.price + addOnsCost;
+              const lineTotal = singleItemPrice * it.quantity;
 
-            return `
+              return `
               <div style="margin-bottom: 3px;">
                 <div class="item-row">
                   <span class="item-name">${escapeHtml(it.name)} ${it.selected_weight_variant ? `(${escapeHtml(it.selected_weight_variant)})` : ''}</span>
                   <span class="item-qty">${Number(it.quantity)}</span>
                   <span class="item-total">${it.is_complimentary ? 'FREE' : `₹${lineTotal.toFixed(2)}`}</span>
                 </div>
-                ${Array.isArray(it.selected_addons) && it.selected_addons.length > 0 ? it.selected_addons.map((a: any) => `
-                  <div class="addon-line">+ ${escapeHtml(a.name)} (+₹${(Number(a.price) * it.quantity).toFixed(2)})</div>
-                `).join('') : ''}
+                ${
+                  Array.isArray(it.selected_addons) && it.selected_addons.length > 0
+                    ? it.selected_addons
+                        .map(
+                          (a: any) => `
+                  <div class="addon-line">+ ${escapeHtml(a.name)} (+₹${(Number(a.price ?? 0) * it.quantity).toFixed(2)})</div>
+                `,
+                        )
+                        .join('')
+                    : ''
+                }
               </div>
             `;
-          }).join('')}
+            })
+            .join('')}
           <div class="divider"></div>
           <div class="total-row">
             <span>NET PAYABLE (Zero GST):</span>
@@ -1228,22 +1413,40 @@ export default function LuxuryGoldAdminPanel() {
   };
 
   const copyToGoogleSheets = () => {
-    const headers = ['Date', 'Time', 'Table #', 'Table Name', 'Customer Name', 'Phone', 'Ordered Dishes & Addons', 'Bill Total', 'Payment Mode', 'Status'];
-    const rows = filteredSessions.map(s => {
+    const headers = [
+      'Date',
+      'Time',
+      'Table #',
+      'Table Name',
+      'Customer Name',
+      'Phone',
+      'Ordered Dishes & Addons',
+      'Bill Total',
+      'Payment Mode',
+      'Status',
+    ];
+    const rows = filteredSessions.map((s) => {
       const d = new Date(s.created_at);
-      const itemsList = getSessionOrderedItems(s.id).map(i => {
-        const extraNames = Array.isArray(i.selected_addons) && i.selected_addons.length > 0
-          ? ` (+ ${i.selected_addons.map(a => a.name).join(', ')})`
-          : '';
-        return `${i.quantity}x ${i.name}${extraNames}`;
-      }).join('; ');
+      const itemsList = getSessionOrderedItems(s.id)
+        .map((i) => {
+          const extraNames =
+            Array.isArray(i.selected_addons) && i.selected_addons.length > 0
+              ? ` (+ ${i.selected_addons.map((a: any) => a.name).join(', ')})`
+              : '';
+          return `${i.quantity}x ${i.name}${extraNames}`;
+        })
+        .join('; ');
 
-      const gross = Number(s.total_amount) || 0;
-      const matchingTable = tables.find(t => t.table_number === s.table_number);
+      const gross = Number(s.total_amount ?? 0);
+      const matchingTable = tables.find((t) => t.table_number === s.table_number);
 
       return [
         d.toLocaleDateString('en-IN'),
-        d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        d.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
         s.table_number,
         matchingTable?.table_name || `Table #${s.table_number}`,
         s.customer_name || 'Guest',
@@ -1251,12 +1454,12 @@ export default function LuxuryGoldAdminPanel() {
         `"${itemsList || 'None'}"`,
         gross,
         (s.payment_mode || 'Cash').toUpperCase(),
-        s.payment_status || s.status
+        s.payment_status || s.status,
       ];
     });
 
-    const tsvContent = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
-    navigator.clipboard.writeText(tsvContent);
+    const tsvContent = [headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n');
+    void navigator.clipboard.writeText(tsvContent);
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 3000);
   };
@@ -1268,11 +1471,13 @@ export default function LuxuryGoldAdminPanel() {
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-    
+
     return (
       <>
         <div className="grid grid-cols-7 gap-1 place-items-center mb-2 pb-1 border-b border-white/5 text-[10px] font-mono font-bold text-neutral-400">
-          {weekDays.map(w => <span key={w}>{w}</span>)}
+          {weekDays.map((w) => (
+            <span key={w}>{w}</span>
+          ))}
         </div>
         <div className="grid grid-cols-7 gap-1 place-items-center">
           {Array.from({ length: firstDayIndex }).map((_, i) => (
@@ -1286,13 +1491,17 @@ export default function LuxuryGoldAdminPanel() {
             return (
               <button
                 key={d}
-                onClick={() => { setSelectedDate(dateStr); setShowCalendar(false); }}
-                className={`h-8 w-8 rounded-xl text-xs font-bold font-mono transition-all flex items-center justify-center cursor-pointer ${
+                type="button"
+                onClick={() => {
+                  setSelectedDate(dateStr);
+                  setShowCalendar(false);
+                }}
+                className={`h-8 w-8 rounded-xl text-xs font-bold font-mono transition-colors flex items-center justify-center cursor-pointer ${
                   isSelected
-                    ? 'bg-[#D4AF37] text-black shadow-md font-black scale-105'
+                    ? 'bg-[#D4AF37] text-black shadow-md font-black'
                     : isToday
-                    ? 'border border-[#D4AF37] text-[#FCF6BA] bg-[#D4AF37]/20 font-bold'
-                    : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                      ? 'border border-[#D4AF37] text-[#FCF6BA] bg-[#D4AF37]/20 font-bold'
+                      : 'text-neutral-300 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 {d}
@@ -1312,7 +1521,7 @@ export default function LuxuryGoldAdminPanel() {
       weekday: 'long',
       day: 'numeric',
       month: 'short',
-      year: 'numeric'
+      year: 'numeric',
     });
   }, [selectedDate]);
 
@@ -1328,7 +1537,7 @@ export default function LuxuryGoldAdminPanel() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] font-sans pb-32 relative overflow-x-hidden antialiased">
+    <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] font-sans pb-32 relative overflow-x-clip antialiased">
       {/* Non-blocking Toast Banner */}
       <AnimatePresence>
         {toastMsg && (
@@ -1336,7 +1545,8 @@ export default function LuxuryGoldAdminPanel() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 right-6 z-[80] px-4 py-3 rounded-2xl bg-[#111115] border border-[#D4AF37] text-[#FCF6BA] font-mono text-xs font-bold shadow-2xl flex items-center gap-2"
+            transition={fluidSpring}
+            className="fixed top-20 right-6 z-[80] px-4 py-3 rounded-2xl bg-[#111115] border border-[#D4AF37] text-[#FCF6BA] font-mono text-xs font-bold shadow-2xl flex items-center gap-2 will-change-transform"
           >
             <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toastMsg}</span>
@@ -1363,10 +1573,12 @@ export default function LuxuryGoldAdminPanel() {
           <div className="flex items-center gap-2.5">
             {/* BIG FULL GOLDEN VaMC POS BUTTON WITH NEON GOLDEN LIGHT */}
             <motion.button
+              type="button"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.94 }}
+              transition={fluidSpring}
               onClick={() => setShowVaMCModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black text-sm font-mono font-black tracking-wider transition cursor-pointer shadow-[0_0_25px_rgba(212,175,55,0.65)] ring-1 ring-[#FCF6BA]/80 hover:shadow-[0_0_35px_rgba(252,246,186,0.9)]"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black text-sm font-mono font-black tracking-wider transition-shadow cursor-pointer shadow-[0_0_25px_rgba(212,175,55,0.65)] ring-1 ring-[#FCF6BA]/80 hover:shadow-[0_0_35px_rgba(252,246,186,0.9)]"
               title="Quick Bill POS (VaMC, Ice Cream, Dry Fruits)"
             >
               <Calculator className="w-4 h-4 text-black stroke-[2.5]" />
@@ -1374,22 +1586,26 @@ export default function LuxuryGoldAdminPanel() {
             </motion.button>
 
             <motion.button
+              type="button"
               whileTap={{ scale: 0.94 }}
+              transition={fluidSpring}
               onClick={() => {
                 setTempBrandName(shopName);
                 setTempTagline(tagline);
                 setIsNameModalOpen(true);
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition-colors cursor-pointer"
             >
               <Store className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Edit Brand</span>
             </motion.button>
 
             <motion.button
+              type="button"
               whileTap={{ scale: 0.94 }}
-              onClick={handleResetFloor}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition cursor-pointer"
+              transition={fluidSpring}
+              onClick={() => void handleResetFloor()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.1] bg-white/[0.03] hover:border-[#D4AF37]/40 text-[#FCF6BA] text-xs font-mono font-bold transition-colors cursor-pointer"
               title="Reset all tables to vacant"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -1397,18 +1613,24 @@ export default function LuxuryGoldAdminPanel() {
               <span>({activeSessions.length})</span>
             </motion.button>
 
-            <motion.button 
+            <motion.button
+              type="button"
               whileTap={{ scale: 0.92 }}
-              onClick={loadAdminData} 
+              transition={fluidSpring}
+              onClick={() => void loadAdminData()}
               className="p-2.5 rounded-xl border border-white/[0.1] bg-white/[0.03] text-[#FCF6BA] hover:border-[#D4AF37]/40 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`} />
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FCF6BA]' : ''}`}
+              />
             </motion.button>
 
-            <motion.button 
+            <motion.button
+              type="button"
               whileTap={{ scale: 0.92 }}
-              onClick={handleLogout} 
-              className="p-2.5 rounded-xl bg-white/[0.03] border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer" 
+              transition={fluidSpring}
+              onClick={() => void handleLogout()}
+              className="p-2.5 rounded-xl bg-white/[0.03] border border-rose-500/40 text-rose-300 hover:bg-rose-950/40 cursor-pointer"
               title="Logout"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -1420,27 +1642,27 @@ export default function LuxuryGoldAdminPanel() {
       {/* FLOATING ACTION DOCK */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 relative z-40">
         <div className="p-3 rounded-[28px] bg-gradient-to-b from-[#111114]/90 to-[#0a0a0d]/90 border border-white/[0.1] backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
-          
           <div className="flex items-center gap-2 overflow-x-auto custom-gold-scrollbar pb-1 lg:pb-0 w-full lg:w-auto">
             {[
               { id: 'history', label: '1. Order History', icon: Receipt },
               { id: 'security', label: '2. Admin Security', icon: SlidersHorizontal },
               { id: 'waiter', label: '3. Waiters & Staff', icon: UserCheck },
               { id: 'tables', label: '4. Tables CRUD', icon: LayoutGrid },
-            ].map(tab => {
+            ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeFloatingTab === tab.id;
               return (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => {
                     if (tab.id === 'security') return setIsSecurityOpen(true);
                     if (tab.id === 'waiter') return setIsWaiterModalOpen(true);
                     setActiveFloatingTab(isActive ? 'none' : (tab.id as any));
                   }}
-                  className={`px-4 py-2.5 rounded-[20px] text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 whitespace-nowrap transition cursor-pointer border shrink-0 ${
-                    isActive 
-                      ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black border-transparent font-black shadow-[0_0_20px_rgba(212,175,55,0.4)]' 
+                  className={`px-4 py-2.5 rounded-[20px] text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer border shrink-0 ${
+                    isActive
+                      ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black border-transparent font-black shadow-[0_0_20px_rgba(212,175,55,0.4)]'
                       : 'bg-white/[0.02] border-white/[0.08] text-neutral-300 hover:text-white hover:border-[#D4AF37]/40'
                   }`}
                 >
@@ -1453,9 +1675,11 @@ export default function LuxuryGoldAdminPanel() {
 
           <div className="relative flex items-center gap-2 shrink-0 ml-auto" ref={calRef}>
             <motion.button
+              type="button"
               whileTap={{ scale: 0.94 }}
-              onClick={() => setShowCalendar(prev => !prev)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-[20px] border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-black shadow-md cursor-pointer whitespace-nowrap transition"
+              transition={fluidSpring}
+              onClick={() => setShowCalendar((prev) => !prev)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-[20px] border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#FCF6BA] text-xs font-mono font-black shadow-md cursor-pointer whitespace-nowrap transition-colors"
             >
               <CalendarIcon className="w-4 h-4 text-[#D4AF37]" />
               <span>{formattedSelectedDateHeader}</span>
@@ -1468,42 +1692,51 @@ export default function LuxuryGoldAdminPanel() {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.94, y: 10 }}
                   transition={fluidSpring}
-                  className="absolute right-0 top-14 w-80 bg-[#0e0e12]/95 border border-[#D4AF37]/40 rounded-[28px] p-4 shadow-[0_12px_45px_rgba(0,0,0,0.85)] z-50 select-none backdrop-blur-3xl"
+                  className="absolute right-0 top-14 w-80 bg-[#0e0e12]/95 border border-[#D4AF37]/40 rounded-[28px] p-4 shadow-[0_12px_45px_rgba(0,0,0,0.85)] z-50 select-none backdrop-blur-3xl will-change-transform"
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3 font-mono">
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => setCalViewDate(new Date(calViewDate.getFullYear(), calViewDate.getMonth() - 1, 1))}
-                      className="p-1 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white"
+                      onClick={() =>
+                        setCalViewDate(
+                          new Date(calViewDate.getFullYear(), calViewDate.getMonth() - 1, 1),
+                        )
+                      }
+                      className="p-1 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white cursor-pointer"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <span className="text-xs font-black text-[#FCF6BA] uppercase tracking-wider">
-                      {calViewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                      {calViewDate.toLocaleString('default', {
+                        month: 'long',
+                        year: 'numeric',
+                      })}
                     </span>
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => setCalViewDate(new Date(calViewDate.getFullYear(), calViewDate.getMonth() + 1, 1))}
-                      className="p-1 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white"
+                      onClick={() =>
+                        setCalViewDate(
+                          new Date(calViewDate.getFullYear(), calViewDate.getMonth() + 1, 1),
+                        )
+                      }
+                      className="p-1 rounded-lg hover:bg-white/10 text-neutral-300 hover:text-white cursor-pointer"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <div>
-                    {renderCalendarDays()}
-                  </div>
+                  <div>{renderCalendarDays()}</div>
 
                   <div className="pt-3 mt-3 border-t border-white/10 flex justify-between items-center text-[11px] font-mono">
                     <span className="text-neutral-400">Jump to:</span>
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => { 
-                        setSelectedDate(getTodayStr()); 
-                        setCalViewDate(new Date()); 
-                        setShowCalendar(false); 
-                      }} 
-                      className="px-3 py-1 rounded-xl bg-[#D4AF37] text-black font-black uppercase tracking-wider text-[10px] hover:bg-[#c59b27]"
+                      onClick={() => {
+                        setSelectedDate(getTodayStr());
+                        setCalViewDate(new Date());
+                        setShowCalendar(false);
+                      }}
+                      className="px-3 py-1 rounded-xl bg-[#D4AF37] text-black font-black uppercase tracking-wider text-[10px] hover:bg-[#c59b27] cursor-pointer"
                     >
                       Today
                     </button>
@@ -1514,8 +1747,9 @@ export default function LuxuryGoldAdminPanel() {
 
             {activeFloatingTab !== 'none' && (
               <button
+                type="button"
                 onClick={() => setActiveFloatingTab('none')}
-                className="px-3 py-2 rounded-[18px] border border-white/10 bg-white/[0.04] text-neutral-400 hover:text-white text-xs font-mono flex items-center gap-1 shrink-0"
+                className="px-3 py-2 rounded-[18px] border border-white/10 bg-white/[0.04] text-neutral-400 hover:text-white text-xs font-mono flex items-center gap-1 shrink-0 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" /> Close
               </button>
@@ -1531,13 +1765,15 @@ export default function LuxuryGoldAdminPanel() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="max-w-7xl mx-auto px-4 sm:px-6 pt-4"
+            transition={fluidSpring}
+            className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 will-change-transform"
           >
             <div className="p-6 rounded-[32px] bg-gradient-to-b from-[#0e0e12]/95 to-[#07070a]/95 border border-[#D4AF37]/35 space-y-4 shadow-2xl backdrop-blur-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
                 <div>
                   <h3 className="text-base font-black text-white uppercase font-mono flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> Single Day Sales Ledger: {formattedSelectedDateHeader}
+                    <Receipt className="w-5 h-5 text-[#D4AF37]" /> Single Day Sales Ledger:{' '}
+                    {formattedSelectedDateHeader}
                   </h3>
                   <p className="text-xs text-neutral-400 font-mono mt-0.5">
                     Selected day settled orders, Cash vs UPI totals, and flat receipts.
@@ -1547,22 +1783,34 @@ export default function LuxuryGoldAdminPanel() {
                 <div className="flex items-center gap-3 text-xs font-mono flex-wrap">
                   <div className="p-3 rounded-2xl bg-white/[0.03] border border-amber-400/30">
                     <span className="text-neutral-400 block text-[10px]">CASH SALES</span>
-                    <span className="text-amber-300 font-bold text-sm">₹{totalCashRevenue.toFixed(2)}</span>
+                    <span className="text-amber-300 font-bold text-sm">
+                      ₹{totalCashRevenue.toFixed(2)}
+                    </span>
                   </div>
                   <div className="p-3 rounded-2xl bg-white/[0.03] border border-emerald-400/30">
                     <span className="text-neutral-400 block text-[10px]">UPI SALES</span>
-                    <span className="text-emerald-400 font-bold text-sm">₹{totalUpiRevenue.toFixed(2)}</span>
+                    <span className="text-emerald-400 font-bold text-sm">
+                      ₹{totalUpiRevenue.toFixed(2)}
+                    </span>
                   </div>
                   <div className="p-3 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/50">
                     <span className="text-neutral-400 block text-[10px]">TOTAL SALES</span>
-                    <span className="text-[#FCF6BA] font-black text-sm">₹{totalOverallRevenue.toFixed(2)}</span>
+                    <span className="text-[#FCF6BA] font-black text-sm">
+                      ₹{totalOverallRevenue.toFixed(2)}
+                    </span>
                   </div>
                   <motion.button
+                    type="button"
                     whileTap={{ scale: 0.94 }}
+                    transition={fluidSpring}
                     onClick={copyToGoogleSheets}
-                    className="flex items-center gap-1.5 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.04] text-xs font-mono font-bold hover:border-[#D4AF37]/40"
+                    className="flex items-center gap-1.5 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.04] text-xs font-mono font-bold hover:border-[#D4AF37]/40 cursor-pointer"
                   >
-                    {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <FileSpreadsheet className="w-3.5 h-3.5 text-[#D4AF37]" />}
+                    {copySuccess ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    )}
                     <span>{copySuccess ? 'Copied' : 'Export'}</span>
                   </motion.button>
                 </div>
@@ -1576,52 +1824,97 @@ export default function LuxuryGoldAdminPanel() {
                 ) : (
                   filteredSessions.map((sess) => {
                     const items = getSessionOrderedItems(sess.id);
-                    const matchingTable = tables.find(t => t.table_number === sess.table_number);
+                    const matchingTable = tables.find(
+                      (t) => t.table_number === sess.table_number,
+                    );
                     const isCash = sess.payment_mode === 'cash';
 
                     return (
-                      <div key={sess.id} className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.08] space-y-2 text-xs font-mono">
+                      <div
+                        key={sess.id}
+                        className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.08] space-y-2 text-xs font-mono"
+                      >
                         <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                          <span className="font-bold text-white">{matchingTable?.table_name || `Table #${sess.table_number}`}</span>
+                          <span className="font-bold text-white">
+                            {matchingTable?.table_name || `Table #${sess.table_number}`}
+                          </span>
                           <div className="flex items-center gap-1.5">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${
-                              isCash ? 'border-amber-500/40 text-amber-300 bg-amber-950/20' : 'border-emerald-500/40 text-emerald-300 bg-emerald-950/20'
-                            }`}>
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${
+                                isCash
+                                  ? 'border-amber-500/40 text-amber-300 bg-amber-950/20'
+                                  : 'border-emerald-500/40 text-emerald-300 bg-emerald-950/20'
+                              }`}
+                            >
                               {sess.payment_mode || 'Cash'}
                             </span>
-                            <button onClick={() => printThermalSlip(sess)} className="p-1 hover:text-[#D4AF37]">
+                            <button
+                              type="button"
+                              onClick={() => printThermalSlip(sess)}
+                              className="p-1 hover:text-[#D4AF37] cursor-pointer"
+                            >
                               <Printer className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
 
                         <div className="text-[11px] text-neutral-400">
-                          Guest: <strong className="text-white">{sess.customer_name || 'Guest'}</strong> ({sess.customer_phone || '-'})
+                          Guest:{' '}
+                          <strong className="text-white">
+                            {sess.customer_name || 'Guest'}
+                          </strong>{' '}
+                          ({sess.customer_phone || '-'})
                         </div>
 
                         <div className="space-y-1 text-[11px]">
                           {items.map((it, idx) => {
                             const addOnsCost = Array.isArray(it.selected_addons)
-                              ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
+                              ? it.selected_addons.reduce(
+                                  (sum: number, a: any) => sum + Number(a.price ?? 0),
+                                  0,
+                                )
                               : 0;
-                            const itemNetPrice = it.is_complimentary ? 0 : (it.price + addOnsCost) * it.quantity;
+                            const itemNetPrice = it.is_complimentary
+                              ? 0
+                              : (it.price + addOnsCost) * it.quantity;
 
                             return (
-                              <div key={idx} className="space-y-0.5 border-b border-white/5 pb-1 last:border-b-0">
+                              <div
+                                key={idx}
+                                className="space-y-0.5 border-b border-white/5 pb-1 last:border-b-0"
+                              >
                                 <div className="flex justify-between text-neutral-300 font-bold">
-                                  <span>{it.quantity}x {it.name} {it.selected_weight_variant ? `(${it.selected_weight_variant})` : ''}</span>
-                                  <span>{it.is_complimentary ? 'FREE' : `₹${itemNetPrice.toFixed(2)}`}</span>
+                                  <span>
+                                    {it.quantity}x {it.name}{' '}
+                                    {it.selected_weight_variant
+                                      ? `(${it.selected_weight_variant})`
+                                      : ''}
+                                  </span>
+                                  <span>
+                                    {it.is_complimentary
+                                      ? 'FREE'
+                                      : `₹${itemNetPrice.toFixed(2)}`}
+                                  </span>
                                 </div>
-                                {Array.isArray(it.selected_addons) && it.selected_addons.length > 0 && (
-                                  <div className="pl-3 space-y-0.5">
-                                    {it.selected_addons.map((a: any, aIdx: number) => (
-                                      <div key={aIdx} className="flex justify-between text-[10px] text-amber-300">
-                                        <span>+ {a.name}</span>
-                                        <span>+₹{(Number(a.price) * it.quantity).toFixed(2)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                                {Array.isArray(it.selected_addons) &&
+                                  it.selected_addons.length > 0 && (
+                                    <div className="pl-3 space-y-0.5">
+                                      {it.selected_addons.map((a: any, aIdx: number) => (
+                                        <div
+                                          key={aIdx}
+                                          className="flex justify-between text-[10px] text-amber-300"
+                                        >
+                                          <span>+ {a.name}</span>
+                                          <span>
+                                            +₹
+                                            {(
+                                              Number(a.price ?? 0) * it.quantity
+                                            ).toFixed(2)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                               </div>
                             );
                           })}
@@ -1629,7 +1922,9 @@ export default function LuxuryGoldAdminPanel() {
 
                         <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-white">
                           <span>Total Paid:</span>
-                          <span className="text-[#D4AF37]">₹{Number(sess.total_amount || 0).toFixed(2)}</span>
+                          <span className="text-[#D4AF37]">
+                            ₹{Number(sess.total_amount ?? 0).toFixed(2)}
+                          </span>
                         </div>
                       </div>
                     );
@@ -1646,7 +1941,8 @@ export default function LuxuryGoldAdminPanel() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="max-w-7xl mx-auto px-4 sm:px-6 pt-4"
+            transition={fluidSpring}
+            className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 will-change-transform"
           >
             <div className="p-6 rounded-[32px] bg-gradient-to-b from-[#0e0e12]/95 to-[#07070a]/95 border border-[#D4AF37]/35 space-y-4 shadow-2xl backdrop-blur-2xl">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -1659,32 +1955,51 @@ export default function LuxuryGoldAdminPanel() {
                   </p>
                 </div>
                 <motion.button
+                  type="button"
                   whileTap={{ scale: 0.94 }}
+                  transition={fluidSpring}
                   onClick={() => setShowAddTableModal(true)}
-                  className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5"
+                  className="px-4 py-2.5 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" /> Add Table
                 </motion.button>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {tables.map(t => {
-                  const isOccupied = activeSessions.some(s => s.table_number === t.table_number);
-                  const hasWaiterAlert = waiterCalls.some(c => c.table_number === t.table_number);
+                {tables.map((t) => {
+                  const isOccupied = activeSessions.some(
+                    (s) => s.table_number === t.table_number,
+                  );
+                  const hasWaiterAlert = waiterCalls.some(
+                    (c) => c.table_number === t.table_number,
+                  );
 
                   return (
-                    <div key={t.id || t.table_number} className={`p-4 rounded-[24px] bg-white/[0.02] border space-y-2 text-xs font-mono flex flex-col justify-between ${
-                      hasWaiterAlert ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-white/10'
-                    }`}>
+                    <div
+                      key={t.id || t.table_number}
+                      className={`p-4 rounded-[24px] bg-white/[0.02] border space-y-2 text-xs font-mono flex flex-col justify-between ${
+                        hasWaiterAlert
+                          ? 'border-amber-400 ring-2 ring-amber-400/30'
+                          : 'border-white/10'
+                      }`}
+                    >
                       <div>
                         <div className="flex justify-between items-center">
-                          <span className="text-base font-black text-white">#{t.table_number}</span>
-                          <span className={`w-2 h-2 rounded-full ${isOccupied ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                          <span className="text-base font-black text-white">
+                            #{t.table_number}
+                          </span>
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              isOccupied ? 'bg-rose-500' : 'bg-emerald-500'
+                            }`}
+                          />
                         </div>
                         <button
                           type="button"
                           onClick={() => {
-                            const finalName = t.table_name ? t.table_name.trim() : `Table-${t.table_number}`;
+                            const finalName = t.table_name
+                              ? t.table_name.trim()
+                              : `Table-${t.table_number}`;
                             router.push(`/table/${encodeURIComponent(finalName)}`);
                           }}
                           className="text-[11px] text-[#D4AF37] block mt-1 truncate hover:underline text-left cursor-pointer w-full"
@@ -1692,23 +2007,29 @@ export default function LuxuryGoldAdminPanel() {
                         >
                           {t.table_name || `Table #${t.table_number}`}
                         </button>
-                        <span className="text-[10px] text-neutral-500">{t.capacity || 4} Seats</span>
+                        <span className="text-[10px] text-neutral-500">
+                          {t.capacity ?? 4} Seats
+                        </span>
                       </div>
 
                       <div className="flex gap-1.5 pt-2 border-t border-white/10">
                         <button
+                          type="button"
                           onClick={() => {
                             setEditingTableObj(t);
-                            setTempCustomTableName(t.table_name || `Table-${t.table_number}`);
+                            setTempCustomTableName(
+                              t.table_name || `Table-${t.table_number}`,
+                            );
                             setShowEditTableNameModal(true);
                           }}
-                          className="flex-1 py-1 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-neutral-300 text-[10px]"
+                          className="flex-1 py-1 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-neutral-300 text-[10px] cursor-pointer"
                         >
                           Rename
                         </button>
                         <button
-                          onClick={() => handleDeleteTable(t.table_number, isOccupied)}
-                          className="p-1.5 rounded-xl bg-rose-950/30 text-rose-300 hover:bg-rose-950/50"
+                          type="button"
+                          onClick={() => void handleDeleteTable(t.table_number, isOccupied)}
+                          className="p-1.5 rounded-xl bg-rose-950/30 text-rose-300 hover:bg-rose-950/50 cursor-pointer"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -1726,8 +2047,9 @@ export default function LuxuryGoldAdminPanel() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
         <div className="flex items-center gap-3 border-b border-white/10 pb-3">
           <button
+            type="button"
             onClick={() => setActiveWorkspace('live_orders')}
-            className={`px-6 py-3 rounded-[24px] text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2 transition cursor-pointer ${
+            className={`px-6 py-3 rounded-[24px] text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer ${
               activeWorkspace === 'live_orders'
                 ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black shadow-[0_0_24px_rgba(212,175,55,0.4)]'
                 : 'text-neutral-400 hover:text-white'
@@ -1738,8 +2060,9 @@ export default function LuxuryGoldAdminPanel() {
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveWorkspace('menu_hub')}
-            className={`px-6 py-3 rounded-[24px] text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2 transition cursor-pointer ${
+            className={`px-6 py-3 rounded-[24px] text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer ${
               activeWorkspace === 'menu_hub'
                 ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black shadow-[0_0_24px_rgba(212,175,55,0.4)]'
                 : 'text-neutral-400 hover:text-white'
@@ -1765,44 +2088,64 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
               ) : (
                 activeSessions.map((sess) => {
-                  const isSelected = (selectedRunningTableNum || activeSessions[0]?.table_number) === sess.table_number;
-                  const matchingTbl = tables.find(t => t.table_number === sess.table_number);
-                  const finalAmt = Number(sess.total_amount || 0);
-                  const hasCallAlert = waiterCalls.some(c => c.table_number === sess.table_number);
+                  const isSelected =
+                    (selectedRunningTableNum || activeSessions[0]?.table_number) ===
+                    sess.table_number;
+                  const matchingTbl = tables.find(
+                    (t) => t.table_number === sess.table_number,
+                  );
+                  const finalAmt = Number(sess.total_amount ?? 0);
+                  const hasCallAlert = waiterCalls.some(
+                    (c) => c.table_number === sess.table_number,
+                  );
                   const latestBatch = latestBatchBySession[sess.id];
 
                   return (
-                    <div
+                    <motion.div
                       key={sess.id}
+                      layout="position"
+                      whileTap={{ scale: 0.985 }}
+                      transition={fluidSpring}
                       onClick={() => setSelectedRunningTableNum(sess.table_number)}
-                      className={`p-4 rounded-[24px] border text-xs font-mono transition cursor-pointer flex justify-between items-center ${
+                      className={`p-4 rounded-[24px] border text-xs font-mono transition-colors cursor-pointer flex justify-between items-center will-change-transform ${
                         hasCallAlert
                           ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-950/20'
                           : isSelected
-                          ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black border-transparent shadow-[0_4px_25px_rgba(212,175,55,0.35)]'
-                          : 'bg-gradient-to-b from-white/[0.03] to-white/[0.01] border-white/10 text-white hover:border-[#D4AF37]/40'
+                            ? 'bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black border-transparent shadow-[0_4px_25px_rgba(212,175,55,0.35)]'
+                            : 'bg-gradient-to-b from-white/[0.03] to-white/[0.01] border-white/10 text-white hover:border-[#D4AF37]/40'
                       }`}
                     >
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold block">{matchingTbl?.table_name || `Table #${sess.table_number}`}</span>
-                          {hasCallAlert && <Bell className="w-3.5 h-3.5 text-amber-400 animate-bounce" />}
+                          <span className="text-sm font-bold block">
+                            {matchingTbl?.table_name || `Table #${sess.table_number}`}
+                          </span>
+                          {hasCallAlert && (
+                            <Bell className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+                          )}
                         </div>
-                        <span className="text-[11px] opacity-80 block">{sess.customer_name || 'Guest'}</span>
+                        <span className="text-[11px] opacity-80 block">
+                          {sess.customer_name || 'Guest'}
+                        </span>
                         {latestBatch && (
-                          <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
-                            isSelected
-                              ? 'bg-black/80 text-[#FCF6BA]'
-                              : latestBatch.status === 'pending_waiter'
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
-                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
-                          }`}>
-                            #{latestBatch.order_pin || 'ORD'} • {latestBatch.status === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen'}
+                          <span
+                            className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                              isSelected
+                                ? 'bg-black/80 text-[#FCF6BA]'
+                                : latestBatch.status === 'pending_waiter'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                            }`}
+                          >
+                            #{latestBatch.order_pin || 'ORD'} •{' '}
+                            {latestBatch.status === 'pending_waiter'
+                              ? 'Pending Steward'
+                              : 'In Kitchen'}
                           </span>
                         )}
                       </div>
                       <span className="text-base font-black">₹{finalAmt.toFixed(2)}</span>
-                    </div>
+                    </motion.div>
                   );
                 })
               )}
@@ -1811,34 +2154,51 @@ export default function LuxuryGoldAdminPanel() {
             {/* Selected Table Live Desk */}
             <div className="md:col-span-8">
               {(() => {
-                const curSession = activeSessions.find(s => s.table_number === selectedRunningTableNum) || activeSessions[0];
+                const curSession =
+                  activeSessions.find(
+                    (s) => s.table_number === selectedRunningTableNum,
+                  ) || activeSessions[0];
                 if (!curSession) {
                   return (
                     <div className="p-12 rounded-[32px] bg-white/[0.02] border border-white/[0.08] text-center text-neutral-500 font-mono text-xs">
-                      Select an occupied table from the left to view dishes, change qty, or settle bill.
+                      Select an occupied table from the left to view dishes, change qty, or
+                      settle bill.
                     </div>
                   );
                 }
 
                 const items = getSessionItemsDetailed(curSession.id);
-                const grossTotal = Number(curSession.total_amount || 0);
-                const matchingTbl = tables.find(t => t.table_number === curSession.table_number);
+                const grossTotal = Number(curSession.total_amount ?? 0);
+                const matchingTbl = tables.find(
+                  (t) => t.table_number === curSession.table_number,
+                );
                 const latestBatch = latestBatchBySession[curSession.id];
 
                 // 10th Milestone Visit Reward
-                const cLoyalty = curSession.customer_phone ? loyaltyData[curSession.customer_phone] : null;
-                const visitCount = cLoyalty?.total_visits || 1;
-                const isMilestone = visitCount === 10 || (visitCount > 0 && visitCount % 10 === 0);
+                const cLoyalty = curSession.customer_phone
+                  ? loyaltyData[curSession.customer_phone]
+                  : null;
+                const visitCount = Number(cLoyalty?.successful_visits ?? 0);
+                const isMilestone =
+                  visitCount === 10 || (visitCount > 0 && visitCount % 10 === 0);
 
                 // Payment Mode Switch
                 const curMode = paymentMethods[curSession.id] || 'cash';
                 const handedInput = customerHandedAmounts[curSession.id] || '';
                 const handedNum = parseFloat(handedInput) || 0;
-                const balanceToReturn = handedNum >= grossTotal ? (handedNum - grossTotal).toFixed(2) : '0.00';
-                const remainingDue = handedNum < grossTotal ? (grossTotal - handedNum).toFixed(2) : '0.00';
+                const balanceToReturn =
+                  handedNum >= grossTotal ? (handedNum - grossTotal).toFixed(2) : '0.00';
+                const remainingDue =
+                  handedNum < grossTotal ? (grossTotal - handedNum).toFixed(2) : '0.00';
 
                 return (
-                  <div className="p-6 rounded-[32px] bg-gradient-to-b from-[#111115]/95 via-[#0b0b0e]/95 to-[#08080a]/95 border border-[#D4AF37]/35 backdrop-blur-3xl space-y-4 font-mono shadow-2xl">
+                  <motion.div
+                    key={curSession.id}
+                    initial={{ opacity: 0.85, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={fluidSpring}
+                    className="p-6 rounded-[32px] bg-gradient-to-b from-[#111115]/95 via-[#0b0b0e]/95 to-[#08080a]/95 border border-[#D4AF37]/35 backdrop-blur-3xl space-y-4 font-mono shadow-2xl will-change-transform"
+                  >
                     <div className="flex justify-between items-center border-b border-white/10 pb-3">
                       <div>
                         <div className="flex items-center gap-2">
@@ -1846,22 +2206,35 @@ export default function LuxuryGoldAdminPanel() {
                             {matchingTbl?.table_name || `Table #${curSession.table_number}`}
                           </span>
                           {latestBatch && (
-                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1 ${
-                              latestBatch.status === 'pending_waiter'
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
-                                : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
-                            }`}>
+                            <span
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1 ${
+                                latestBatch.status === 'pending_waiter'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+                                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
+                              }`}
+                            >
                               <Hash className="w-3 h-3" />
-                              {latestBatch.order_pin || 'ORD'} • {latestBatch.status === 'pending_waiter' ? 'Pending Steward' : 'In Kitchen'}
+                              {latestBatch.order_pin || 'ORD'} •{' '}
+                              {latestBatch.status === 'pending_waiter'
+                                ? 'Pending Steward'
+                                : 'In Kitchen'}
                             </span>
                           )}
                         </div>
                         <span className="text-xs text-neutral-400">
-                          Guest: <strong className="text-white">{curSession.customer_name || 'Guest'}</strong> ({curSession.customer_phone || '-'})
+                          Guest:{' '}
+                          <strong className="text-white">
+                            {curSession.customer_name || 'Guest'}
+                          </strong>{' '}
+                          ({curSession.customer_phone || '-'})
                         </span>
                       </div>
                       <span className="text-xs text-[#D4AF37] font-bold">
-                        Seated: {new Date(curSession.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        Seated:{' '}
+                        {new Date(curSession.created_at).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </span>
                     </div>
 
@@ -1869,35 +2242,67 @@ export default function LuxuryGoldAdminPanel() {
                       <div className="p-4 rounded-[22px] bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#AA771C] text-black font-black text-xs flex items-center justify-between shadow-lg">
                         <div className="flex items-center gap-2">
                           <Crown className="w-5 h-5" />
-                          <span>10TH MILESTONE VISIT! GUEST UNLOCKED COMPLIMENTARY REFRESHMENT</span>
+                          <span>
+                            10TH MILESTONE VISIT! GUEST UNLOCKED COMPLIMENTARY REFRESHMENT
+                          </span>
                         </div>
-                        <span className="bg-black text-[#FCF6BA] px-2.5 py-1 rounded-xl text-[10px]">LOYALTY</span>
+                        <span className="bg-black text-[#FCF6BA] px-2.5 py-1 rounded-xl text-[10px]">
+                          LOYALTY
+                        </span>
                       </div>
                     )}
 
                     {/* Ordered Items List with Add-ons Breakdown */}
                     <div className="space-y-2">
                       <span className="text-xs text-neutral-400 font-bold uppercase block">
-                        Ordered Dishes ({items.filter(i => i.item_status !== 'cancelled').length}):
+                        Ordered Dishes (
+                        {items.filter((i) => i.item_status !== 'cancelled').length}):
                       </span>
 
                       <div className="space-y-2 max-h-56 overflow-y-auto custom-gold-scrollbar p-3 rounded-[24px] bg-black/40 border border-white/5">
                         {items.map((it) => {
                           const isCancelled = it.item_status === 'cancelled';
-                          const dName = it.menu_items?.name_en || it.menu_items?.name || (it.cooking_notes?.replace(/VaMC Counter Item: (\[[A-Z]+\] )?/g, '') || 'Counter Item');
-                          const dPrice = Number(it.unit_price || it.menu_items?.price || 0);
+                          const dName =
+                            it.menu_items?.name_en ||
+                            it.menu_items?.name ||
+                            it.cooking_notes
+                              ?.replace(/VaMC Counter Item: (\[[A-Z]+\] )?/g, '')
+                              .trim() ||
+                            'Counter Item';
+                          const dPrice = Number(it.unit_price ?? it.menu_items?.price ?? 0);
                           const addOnsCost = Array.isArray(it.selected_addons)
-                            ? it.selected_addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0)
+                            ? it.selected_addons.reduce(
+                                (sum: number, a: any) => sum + Number(a.price ?? 0),
+                                0,
+                              )
                             : 0;
-                          const totalLineCost = it.is_complimentary ? 0 : (dPrice + addOnsCost) * it.quantity;
+                          const totalLineCost = it.is_complimentary
+                            ? 0
+                            : (dPrice + addOnsCost) * Number(it.quantity ?? 1);
 
                           return (
-                            <div key={it.id} className={`p-3 rounded-2xl border space-y-1.5 ${isCancelled ? 'bg-rose-950/20 border-rose-500/30' : 'bg-white/[0.02] border-white/10'}`}>
+                            <div
+                              key={it.id}
+                              className={`p-3 rounded-2xl border space-y-1.5 ${
+                                isCancelled
+                                  ? 'bg-rose-950/20 border-rose-500/30'
+                                  : 'bg-white/[0.02] border-white/10'
+                              }`}
+                            >
                               <div className="flex justify-between items-center">
                                 <div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`font-bold block ${isCancelled ? 'line-through text-rose-300' : 'text-white'}`}>
-                                      {it.quantity}x {dName} {it.selected_weight_variant ? `(${it.selected_weight_variant})` : ''}
+                                    <span
+                                      className={`font-bold block ${
+                                        isCancelled
+                                          ? 'line-through text-rose-300'
+                                          : 'text-white'
+                                      }`}
+                                    >
+                                      {it.quantity}x {dName}{' '}
+                                      {it.selected_weight_variant
+                                        ? `(${it.selected_weight_variant})`
+                                        : ''}
                                     </span>
                                     {it.is_complimentary && (
                                       <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold">
@@ -1906,7 +2311,9 @@ export default function LuxuryGoldAdminPanel() {
                                     )}
                                   </div>
                                   <span className="text-xs font-bold text-[#FCF6BA]">
-                                    {it.is_complimentary ? '₹0.00' : `₹${totalLineCost.toFixed(2)}`}
+                                    {it.is_complimentary
+                                      ? '₹0.00'
+                                      : `₹${totalLineCost.toFixed(2)}`}
                                   </span>
                                 </div>
 
@@ -1914,19 +2321,42 @@ export default function LuxuryGoldAdminPanel() {
                                   {!isCancelled ? (
                                     <>
                                       <button
-                                        onClick={() => handleUpdateItemQuantity(it.id, it.quantity, -1, curSession.id)}
+                                        type="button"
+                                        onClick={() =>
+                                          void handleUpdateItemQuantity(
+                                            it.id,
+                                            it.quantity,
+                                            -1,
+                                            curSession.id,
+                                          )
+                                        }
                                         className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer"
                                       >
                                         <Minus className="w-3.5 h-3.5" />
                                       </button>
                                       <button
-                                        onClick={() => handleUpdateItemQuantity(it.id, it.quantity, 1, curSession.id)}
+                                        type="button"
+                                        onClick={() =>
+                                          void handleUpdateItemQuantity(
+                                            it.id,
+                                            it.quantity,
+                                            1,
+                                            curSession.id,
+                                          )
+                                        }
                                         className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white cursor-pointer"
                                       >
                                         <Plus className="w-3.5 h-3.5" />
                                       </button>
                                       <button
-                                        onClick={() => handleCancelOrderItem(it.id, curSession.id, dName)}
+                                        type="button"
+                                        onClick={() =>
+                                          void handleCancelOrderItem(
+                                            it.id,
+                                            curSession.id,
+                                            dName,
+                                          )
+                                        }
                                         className="px-2.5 py-1 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 font-bold text-[10px] cursor-pointer"
                                       >
                                         Cancel
@@ -1941,24 +2371,34 @@ export default function LuxuryGoldAdminPanel() {
                               </div>
 
                               {/* Selected Add-ons Breakdown with Extra Price */}
-                              {Array.isArray(it.selected_addons) && it.selected_addons.length > 0 && (
-                                <div className="pl-3.5 space-y-1 border-l-2 border-[#D4AF37]/60 my-1 pt-0.5">
-                                  {it.selected_addons.map((a: any, aIdx: number) => (
-                                    <div key={aIdx} className="flex justify-between items-center text-[11px] font-mono text-[#D4AF37]">
-                                      <span className="font-bold">+ {a.name}</span>
-                                      <span className="font-black">+₹{(Number(a.price) * it.quantity).toFixed(2)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              {Array.isArray(it.selected_addons) &&
+                                it.selected_addons.length > 0 && (
+                                  <div className="pl-3.5 space-y-1 border-l-2 border-[#D4AF37]/60 my-1 pt-0.5">
+                                    {it.selected_addons.map((a: any, aIdx: number) => (
+                                      <div
+                                        key={aIdx}
+                                        className="flex justify-between items-center text-[11px] font-mono text-[#D4AF37]"
+                                      >
+                                        <span className="font-bold">+ {a.name}</span>
+                                        <span className="font-black">
+                                          +₹
+                                          {(
+                                            Number(a.price ?? 0) * Number(it.quantity ?? 1)
+                                          ).toFixed(2)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
 
                               {/* Customer Cooking Notes */}
-                              {it.cooking_notes && !it.cooking_notes.startsWith('VaMC Counter Item:') && (
-                                <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2.5 py-1 rounded-lg border border-amber-500/30 font-sans">
-                                  <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
-                                  <span>Note: {it.cooking_notes}</span>
-                                </div>
-                              )}
+                              {it.cooking_notes &&
+                                !it.cooking_notes.startsWith('VaMC Counter Item:') && (
+                                  <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-950/30 px-2.5 py-1 rounded-lg border border-amber-500/30 font-sans">
+                                    <MessageSquare className="w-3 h-3 text-amber-400 shrink-0" />
+                                    <span>Note: {it.cooking_notes}</span>
+                                  </div>
+                                )}
                             </div>
                           );
                         })}
@@ -1968,16 +2408,25 @@ export default function LuxuryGoldAdminPanel() {
                     {/* Total Bill & Payment Mode Switch */}
                     <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/10 space-y-3">
                       <div className="flex justify-between items-center text-sm font-bold">
-                        <span className="text-neutral-400">Total Flat Amount (Zero GST):</span>
-                        <span className="text-xl font-black text-[#D4AF37]">₹{grossTotal.toFixed(2)}</span>
+                        <span className="text-neutral-400">
+                          Total Flat Amount (Zero GST):
+                        </span>
+                        <span className="text-xl font-black text-[#D4AF37]">
+                          ₹{grossTotal.toFixed(2)}
+                        </span>
                       </div>
 
                       {/* Cash vs UPI Buttons */}
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
                         <button
                           type="button"
-                          onClick={() => setPaymentMethods({ ...paymentMethods, [curSession.id]: 'cash' })}
-                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition cursor-pointer ${
+                          onClick={() =>
+                            setPaymentMethods({
+                              ...paymentMethods,
+                              [curSession.id]: 'cash',
+                            })
+                          }
+                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition-colors cursor-pointer ${
                             curMode === 'cash'
                               ? 'bg-amber-400 text-black border-transparent shadow-md'
                               : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white'
@@ -1989,8 +2438,13 @@ export default function LuxuryGoldAdminPanel() {
 
                         <button
                           type="button"
-                          onClick={() => setPaymentMethods({ ...paymentMethods, [curSession.id]: 'upi' })}
-                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition cursor-pointer ${
+                          onClick={() =>
+                            setPaymentMethods({
+                              ...paymentMethods,
+                              [curSession.id]: 'upi',
+                            })
+                          }
+                          className={`py-3 rounded-[18px] text-xs font-black uppercase flex items-center justify-center gap-2 border transition-colors cursor-pointer ${
                             curMode === 'upi'
                               ? 'bg-emerald-400 text-black border-transparent shadow-md'
                               : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white'
@@ -2017,17 +2471,25 @@ export default function LuxuryGoldAdminPanel() {
                                 value={handedInput}
                                 onChange={(e) => {
                                   const val = e.target.value.replace(/[^0-9.]/g, '');
-                                  setCustomerHandedAmounts({ ...customerHandedAmounts, [curSession.id]: val });
+                                  setCustomerHandedAmounts({
+                                    ...customerHandedAmounts,
+                                    [curSession.id]: val,
+                                  });
                                 }}
                                 className="w-full bg-[#161619] border border-amber-400/50 rounded-xl px-3 py-2 text-white font-black text-base outline-none focus:border-amber-400"
                               />
 
                               <div className="flex gap-1.5 mt-2">
-                                {[100, 200, 500, 1000].map(amt => (
+                                {[100, 200, 500, 1000].map((amt) => (
                                   <button
                                     key={amt}
                                     type="button"
-                                    onClick={() => setCustomerHandedAmounts({ ...customerHandedAmounts, [curSession.id]: String(amt) })}
+                                    onClick={() =>
+                                      setCustomerHandedAmounts({
+                                        ...customerHandedAmounts,
+                                        [curSession.id]: String(amt),
+                                      })
+                                    }
                                     className="px-2 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-amber-200 text-[10px] font-bold border border-white/5 cursor-pointer"
                                   >
                                     ₹{amt}
@@ -2035,7 +2497,12 @@ export default function LuxuryGoldAdminPanel() {
                                 ))}
                                 <button
                                   type="button"
-                                  onClick={() => setCustomerHandedAmounts({ ...customerHandedAmounts, [curSession.id]: String(grossTotal) })}
+                                  onClick={() =>
+                                    setCustomerHandedAmounts({
+                                      ...customerHandedAmounts,
+                                      [curSession.id]: String(grossTotal),
+                                    })
+                                  }
                                   className="px-2 py-1 rounded-lg bg-white/[0.05] text-neutral-300 text-[10px] cursor-pointer"
                                 >
                                   Exact
@@ -2044,12 +2511,22 @@ export default function LuxuryGoldAdminPanel() {
                             </div>
 
                             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-right">
-                              <span className="text-[10px] uppercase text-neutral-400 block">Change to Return:</span>
-                              <span className={`text-xl font-black ${handedNum >= grossTotal && handedNum > 0 ? 'text-emerald-400' : 'text-neutral-500'}`}>
+                              <span className="text-[10px] uppercase text-neutral-400 block">
+                                Change to Return:
+                              </span>
+                              <span
+                                className={`text-xl font-black ${
+                                  handedNum >= grossTotal && handedNum > 0
+                                    ? 'text-emerald-400'
+                                    : 'text-neutral-500'
+                                }`}
+                              >
                                 ₹{balanceToReturn}
                               </span>
                               {handedNum > 0 && handedNum < grossTotal && (
-                                <span className="text-[10px] text-rose-400 block mt-0.5">Still Short: ₹{remainingDue}</span>
+                                <span className="text-[10px] text-rose-400 block mt-0.5">
+                                  Still Short: ₹{remainingDue}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -2060,19 +2537,35 @@ export default function LuxuryGoldAdminPanel() {
                     {/* Settle Action Buttons */}
                     <div className="flex gap-2 pt-1 flex-wrap sm:flex-nowrap">
                       <motion.button
+                        type="button"
                         whileTap={{ scale: 0.95 }}
+                        transition={fluidSpring}
                         disabled={loading}
-                        onClick={() => handleSettleOrder(curSession.id, curSession.table_number, curMode)}
+                        onClick={() =>
+                          void handleSettleOrder(
+                            curSession.id,
+                            curSession.table_number,
+                            curMode,
+                          )
+                        }
                         className={`flex-1 py-3.5 rounded-[20px] font-black uppercase text-xs shadow-lg cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 ${
-                          curMode === 'cash' ? 'bg-amber-400 text-black' : 'bg-emerald-400 text-black'
+                          curMode === 'cash'
+                            ? 'bg-amber-400 text-black'
+                            : 'bg-emerald-400 text-black'
                         }`}
                       >
                         <CheckCircle className="w-4 h-4" />
-                        <span>{loading ? 'Settling...' : `Settle Bill via ${curMode.toUpperCase()}`}</span>
+                        <span>
+                          {loading
+                            ? 'Settling...'
+                            : `Settle Bill via ${curMode.toUpperCase()}`}
+                        </span>
                       </motion.button>
 
                       <motion.button
+                        type="button"
                         whileTap={{ scale: 0.95 }}
+                        transition={fluidSpring}
                         onClick={() => printKitchenOrderTicket(curSession)}
                         className="px-4 py-3.5 rounded-[20px] border border-amber-400/40 bg-amber-400/10 text-amber-200 font-bold text-xs uppercase flex items-center gap-1.5 hover:bg-amber-400/20 cursor-pointer"
                         title="Print Kitchen Order Ticket (Dishes & Add-ons)"
@@ -2082,7 +2575,9 @@ export default function LuxuryGoldAdminPanel() {
                       </motion.button>
 
                       <motion.button
+                        type="button"
                         whileTap={{ scale: 0.95 }}
+                        transition={fluidSpring}
                         onClick={() => printThermalSlip(curSession)}
                         className="px-4 py-3.5 rounded-[20px] border border-white/10 bg-white/[0.05] text-white font-bold text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                       >
@@ -2090,7 +2585,7 @@ export default function LuxuryGoldAdminPanel() {
                         <span>Receipt</span>
                       </motion.button>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })()}
             </div>
@@ -2105,15 +2600,16 @@ export default function LuxuryGoldAdminPanel() {
                 { id: 'items', label: '1. Dishes & Retail', icon: UtensilsCrossed },
                 { id: 'addons', label: '2. Add-ons Master (Full CRUD)', icon: Sparkles },
                 { id: 'combos', label: '3. Smart Combos', icon: PackagePlus },
-                { id: 'promos', label: '4. Slider Banners', icon: ImageIcon }
-              ].map(sub => {
+                { id: 'promos', label: '4. Slider Banners', icon: ImageIcon },
+              ].map((sub) => {
                 const Icon = sub.icon;
                 const isCur = menuHubTab === sub.id;
                 return (
                   <button
                     key={sub.id}
+                    type="button"
                     onClick={() => setMenuHubTab(sub.id as any)}
-                    className={`px-5 py-2.5 rounded-[20px] text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+                    className={`px-5 py-2.5 rounded-[20px] text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer ${
                       isCur
                         ? 'bg-[#D4AF37] text-black font-black shadow-md'
                         : 'bg-white/[0.02] border border-white/10 text-neutral-400 hover:text-white'
@@ -2131,9 +2627,17 @@ export default function LuxuryGoldAdminPanel() {
               <div className="space-y-5">
                 <div className="p-5 rounded-[28px] bg-gradient-to-b from-[#111115]/90 to-[#09090c]/90 border border-white/10 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-mono font-bold text-white uppercase">Categories ({categories.length})</span>
+                    <span className="text-xs font-mono font-bold text-white uppercase">
+                      Categories ({categories.length})
+                    </span>
                     <button
-                      onClick={() => { setEditingCategory(null); setCategoryName(''); setCategoryType('dine_in'); setShowCategoryModal(true); }}
+                      type="button"
+                      onClick={() => {
+                        setEditingCategory(null);
+                        setCategoryName('');
+                        setCategoryType('dine_in');
+                        setShowCategoryModal(true);
+                      }}
                       className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-black font-bold text-xs flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3 stroke-[3]" /> Add Category
@@ -2142,31 +2646,53 @@ export default function LuxuryGoldAdminPanel() {
 
                   <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-2">
                     <button
+                      type="button"
                       onClick={() => setSelectedCatId('all')}
                       className={`px-4 py-2 rounded-2xl text-xs font-mono font-bold whitespace-nowrap border cursor-pointer ${
-                        selectedCatId === 'all' ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/10'
+                        selectedCatId === 'all'
+                          ? 'bg-[#D4AF37] text-black border-transparent'
+                          : 'bg-white/[0.03] text-neutral-400 border-white/10'
                       }`}
                     >
                       All Items ({menuItems.length})
                     </button>
-                    {categories.map(c => (
-                      <div key={c.id} className="flex items-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 py-1.5 gap-1.5 shrink-0 text-xs font-mono">
-                        <button onClick={() => setSelectedCatId(c.id)} className={`cursor-pointer ${selectedCatId === c.id ? 'text-[#D4AF37] font-bold' : 'text-neutral-300'}`}>
-                          {c.name_en || c.name} {c.category_type === 'retail' ? '🛍️' : ''}
+                    {categories.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 py-1.5 gap-1.5 shrink-0 text-xs font-mono"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCatId(c.id)}
+                          className={`cursor-pointer ${
+                            selectedCatId === c.id
+                              ? 'text-[#D4AF37] font-bold'
+                              : 'text-neutral-300'
+                          }`}
+                        >
+                          {c.name_en || c.name}{' '}
+                          {c.category_type === 'retail' ? '🛍️' : ''}
                         </button>
-                        <button 
+                        <button
+                          type="button"
                           onClick={() => {
                             setEditingCategory(c);
                             setCategoryName(c.name_en || c.name);
                             setCategoryType(c.category_type || 'dine_in');
                             setShowCategoryModal(true);
-                          }} 
+                          }}
                           className="text-neutral-400 hover:text-white ml-1 p-0.5 cursor-pointer"
                           title="Edit Category Name"
                         >
                           <Edit3 className="w-3 h-3 text-[#D4AF37]" />
                         </button>
-                        <button onClick={() => handleDeleteCategory(c.id, c.name_en || c.name)} className="text-rose-400 hover:text-rose-300 p-0.5 cursor-pointer">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleDeleteCategory(c.id, c.name_en || c.name)
+                          }
+                          className="text-rose-400 hover:text-rose-300 p-0.5 cursor-pointer"
+                        >
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -2178,19 +2704,24 @@ export default function LuxuryGoldAdminPanel() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-mono font-bold text-neutral-400 uppercase">
-                      Menu Dishes & Products ({selectedCatId === 'all' ? menuItems.length : menuItems.filter(m => m.category_id === selectedCatId).length})
+                      Menu Dishes & Products (
+                      {selectedCatId === 'all'
+                        ? menuItems.length
+                        : menuItems.filter((m) => m.category_id === selectedCatId).length}
+                      )
                     </span>
                     <button
-                      onClick={() => { 
-                        setEditingItem(null); 
-                        setItemName(''); 
-                        setItemPrice(''); 
-                        setItemImageUrl(''); 
+                      type="button"
+                      onClick={() => {
+                        setEditingItem(null);
+                        setItemName('');
+                        setItemPrice('');
+                        setItemImageUrl('');
                         setItemHasAddons(false);
                         setItemAddonIds([]);
                         setItemSuggestedIds([]);
                         setItemIsRetail(false);
-                        setShowItemModal(true); 
+                        setShowItemModal(true);
                       }}
                       className="px-4 py-2 rounded-2xl bg-[#D4AF37] text-black font-black text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                     >
@@ -2199,11 +2730,21 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {(selectedCatId === 'all' ? menuItems : menuItems.filter(m => m.category_id === selectedCatId)).map(item => (
-                      <div key={item.id} className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex items-center justify-between gap-3 font-mono text-xs">
+                    {(selectedCatId === 'all'
+                      ? menuItems
+                      : menuItems.filter((m) => m.category_id === selectedCatId)
+                    ).map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 flex items-center justify-between gap-3 font-mono text-xs"
+                      >
                         <div className="flex items-center gap-2.5 truncate">
                           {item.image_url ? (
-                            <img src={item.image_url} alt={item.name_en} className="w-12 h-12 rounded-xl object-cover border border-white/10 shrink-0" />
+                            <img
+                              src={item.image_url}
+                              alt={item.name_en}
+                              className="w-12 h-12 rounded-xl object-cover border border-white/10 shrink-0"
+                            />
                           ) : (
                             <div className="w-12 h-12 rounded-xl bg-neutral-900 border border-white/5 flex items-center justify-center shrink-0 text-neutral-600">
                               <UtensilsCrossed className="w-5 h-5" />
@@ -2211,12 +2752,22 @@ export default function LuxuryGoldAdminPanel() {
                           )}
                           <div className="truncate">
                             <div className="flex items-center gap-1">
-                              <span className="font-bold text-white truncate">{item.name_en || item.name}</span>
-                              {item.is_retail_item && <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1 rounded">RETAIL</span>}
+                              <span className="font-bold text-white truncate">
+                                {item.name_en || item.name}
+                              </span>
+                              {item.is_retail_item && (
+                                <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1 rounded">
+                                  RETAIL
+                                </span>
+                              )}
                             </div>
-                            <span className="text-[#D4AF37] font-bold text-xs">₹{Number(item.price).toFixed(2)}</span>
+                            <span className="text-[#D4AF37] font-bold text-xs">
+                              ₹{Number(item.price ?? 0).toFixed(2)}
+                            </span>
                             {item.has_addons && (
-                              <span className="text-[9px] text-neutral-400 block">+ {item.addon_ids?.length || 0} Add-ons</span>
+                              <span className="text-[9px] text-neutral-400 block">
+                                + {item.addon_ids?.length || 0} Add-ons
+                              </span>
                             )}
                           </div>
                         </div>
@@ -2224,21 +2775,26 @@ export default function LuxuryGoldAdminPanel() {
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={() => handleToggleStock(item.id, item.is_available)}
-                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase border transition cursor-pointer ${
-                              item.is_available 
-                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25' 
+                            onClick={() =>
+                              void handleToggleStock(item.id, item.is_available)
+                            }
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase border transition-colors cursor-pointer ${
+                              item.is_available
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25'
                                 : 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
                             }`}
                           >
                             {item.is_available ? 'In Stock' : 'Out'}
                           </button>
-                          <button 
+                          <button
+                            type="button"
                             onClick={() => {
                               setEditingItem(item);
                               setItemName(item.name_en || item.name || '');
-                              setItemPrice(String(item.price || ''));
-                              setItemDescription(item.description_en || item.description || '');
+                              setItemPrice(String(item.price ?? ''));
+                              setItemDescription(
+                                item.description_en || item.description || '',
+                              );
                               setItemCategoryId(item.category_id);
                               setItemFoodType(item.food_type || 'veg');
                               setItemImageUrl(item.image_url || '');
@@ -2246,18 +2802,28 @@ export default function LuxuryGoldAdminPanel() {
                               setItemAddonIds(item.addon_ids || []);
                               setItemSuggestedIds(item.suggested_item_ids || []);
                               setItemIsRetail(Boolean(item.is_retail_item));
-                              setItemWeightVariants(item.weight_variants?.length > 0 ? item.weight_variants : [
-                                { size: '250g', price: 0 },
-                                { size: '500g', price: 0 },
-                                { size: '1kg', price: 0 }
-                              ]);
+                              setItemWeightVariants(
+                                item.weight_variants?.length > 0
+                                  ? item.weight_variants
+                                  : [
+                                      { size: '250g', price: 0 },
+                                      { size: '500g', price: 0 },
+                                      { size: '1kg', price: 0 },
+                                    ],
+                              );
                               setShowItemModal(true);
-                            }} 
+                            }}
                             className="p-1 text-neutral-300 hover:text-white cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleDeleteItem(item.id, item.name_en || item.name)} className="p-1 text-rose-400 cursor-pointer">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleDeleteItem(item.id, item.name_en || item.name)
+                            }
+                            className="p-1 text-rose-400 cursor-pointer"
+                          >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -2273,10 +2839,15 @@ export default function LuxuryGoldAdminPanel() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="text-sm font-black text-white uppercase font-mono">Add-ons Master CRUD ({addons.length})</h4>
-                    <p className="text-xs text-neutral-400 font-mono">Add, Edit Name & Price, Toggle Floor Stock, or Delete Add-ons.</p>
+                    <h4 className="text-sm font-black text-white uppercase font-mono">
+                      Add-ons Master CRUD ({addons.length})
+                    </h4>
+                    <p className="text-xs text-neutral-400 font-mono">
+                      Add, Edit Name & Price, Toggle Floor Stock, or Delete Add-ons.
+                    </p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => {
                       setEditingAddon(null);
                       setAddonName('');
@@ -2293,31 +2864,45 @@ export default function LuxuryGoldAdminPanel() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 font-mono text-xs">
                   {addons.length === 0 ? (
                     <div className="col-span-full py-12 text-center text-neutral-500 font-mono text-xs">
-                      No add-ons created yet. Click "+ Add New Addon" to create.
+                      No add-ons created yet. Click &ldquo;+ Add New Addon&rdquo; to
+                      create.
                     </div>
                   ) : (
-                    addons.map(a => (
-                      <div key={a.id} className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center shadow-lg hover:border-[#D4AF37]/50 transition">
+                    addons.map((a) => (
+                      <div
+                        key={a.id}
+                        className="p-4 rounded-[22px] bg-white/[0.02] border border-white/10 flex justify-between items-center shadow-lg hover:border-[#D4AF37]/50 transition-colors"
+                      >
                         <div>
-                          <span className="font-bold text-white text-sm block">{a.name}</span>
-                          <span className="text-[#D4AF37] font-black text-sm mt-0.5 block">+₹{Number(a.price).toFixed(2)}</span>
-                          <span className="text-[10px] text-neutral-500 uppercase block mt-0.5">[{a.category || 'general'}]</span>
+                          <span className="font-bold text-white text-sm block">
+                            {a.name}
+                          </span>
+                          <span className="text-[#D4AF37] font-black text-sm mt-0.5 block">
+                            +₹{Number(a.price ?? 0).toFixed(2)}
+                          </span>
+                          <span className="text-[10px] text-neutral-500 uppercase block mt-0.5">
+                            [{a.category || 'general'}]
+                          </span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => handleToggleAddon(a.id, a.is_available)}
+                            type="button"
+                            onClick={() => void handleToggleAddon(a.id, a.is_available)}
                             className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase border cursor-pointer ${
-                              a.is_available ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                              a.is_available
+                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
                             }`}
                           >
                             {a.is_available ? 'Active' : 'Off'}
                           </button>
                           <button
+                            type="button"
                             onClick={() => {
                               setEditingAddon(a);
                               setAddonName(a.name || '');
-                              setAddonPrice(String(a.price || ''));
+                              setAddonPrice(String(a.price ?? ''));
                               setAddonCategory(a.category || 'general');
                               setShowAddonModal(true);
                             }}
@@ -2327,7 +2912,8 @@ export default function LuxuryGoldAdminPanel() {
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteAddon(a.id, a.name)}
+                            type="button"
+                            onClick={() => void handleDeleteAddon(a.id, a.name)}
                             className="p-1.5 rounded-lg bg-rose-950/30 text-rose-300 hover:bg-rose-950/50 cursor-pointer"
                             title="Delete Addon"
                           >
@@ -2346,10 +2932,15 @@ export default function LuxuryGoldAdminPanel() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="text-sm font-black text-white uppercase font-mono">Dynamic Combo Deals ({combos.length})</h4>
-                    <p className="text-xs text-neutral-400 font-mono">Select multiple dishes to auto-sum and publish offer prices.</p>
+                    <h4 className="text-sm font-black text-white uppercase font-mono">
+                      Dynamic Combo Deals ({combos.length})
+                    </h4>
+                    <p className="text-xs text-neutral-400 font-mono">
+                      Select multiple dishes to auto-sum and publish offer prices.
+                    </p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => {
                       setEditingCombo(null);
                       setComboName('');
@@ -2365,26 +2956,50 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {combos.map(combo => (
-                    <div key={combo.id} className="p-5 rounded-[28px] bg-white/[0.02] border border-white/10 space-y-2.5 font-mono text-xs">
+                  {combos.map((combo) => (
+                    <div
+                      key={combo.id}
+                      className="p-5 rounded-[28px] bg-white/[0.02] border border-white/10 space-y-2.5 font-mono text-xs"
+                    >
                       {combo.image_url && (
                         <div className="h-32 rounded-2xl overflow-hidden mb-2 bg-neutral-900 border border-white/10">
-                          <img src={combo.image_url} alt={combo.name} className="w-full h-full object-cover" />
+                          <img
+                            src={combo.image_url}
+                            alt={combo.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                       )}
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-white text-sm block">{combo.name || combo.name_en}</span>
-                        <button onClick={() => handleDeleteCombo(combo.id, combo.name || combo.name_en)} className="text-rose-400 cursor-pointer">
+                        <span className="font-bold text-white text-sm block">
+                          {combo.name || combo.name_en}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleDeleteCombo(
+                              combo.id,
+                              combo.name || combo.name_en,
+                            )
+                          }
+                          className="text-rose-400 cursor-pointer"
+                        >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
-                      <p className="text-[11px] text-neutral-400">{combo.description || 'Includes selected dishes.'}</p>
+                      <p className="text-[11px] text-neutral-400">
+                        {combo.description || 'Includes selected dishes.'}
+                      </p>
 
                       <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-                        <span className="text-[#D4AF37] font-black text-base">₹{Number(combo.price).toFixed(2)}</span>
-                        {combo.original_price > combo.price && (
-                          <span className="line-through text-neutral-500 text-xs">₹{Number(combo.original_price).toFixed(2)}</span>
+                        <span className="text-[#D4AF37] font-black text-base">
+                          ₹{Number(combo.price ?? 0).toFixed(2)}
+                        </span>
+                        {Number(combo.original_price ?? 0) > Number(combo.price ?? 0) && (
+                          <span className="line-through text-neutral-500 text-xs">
+                            ₹{Number(combo.original_price).toFixed(2)}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -2398,14 +3013,20 @@ export default function LuxuryGoldAdminPanel() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="text-sm font-black text-white uppercase font-mono">Menu Promotion Banners ({banners.length})</h4>
-                    <p className="text-xs text-neutral-400 font-mono">Customer QR menu page top carousel slides.</p>
+                    <h4 className="text-sm font-black text-white uppercase font-mono">
+                      Menu Promotion Banners ({banners.length})
+                    </h4>
+                    <p className="text-xs text-neutral-400 font-mono">
+                      Customer QR menu page top carousel slides.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="p-5 rounded-[28px] bg-white/[0.02] border border-white/10 space-y-3 font-mono text-xs">
-                    <span className="font-bold text-white block uppercase">Deploy New Slide</span>
+                    <span className="font-bold text-white block uppercase">
+                      Deploy New Slide
+                    </span>
                     <form onSubmit={handleSaveBanner} className="space-y-3">
                       <input
                         type="text"
@@ -2416,13 +3037,16 @@ export default function LuxuryGoldAdminPanel() {
                         className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
                       />
 
-                      <input 
-                        type="file" 
+                      <input
+                        type="file"
                         accept="image/*"
                         ref={bannerFileRef}
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (file) compressAndUploadImage(file, (b64) => setNewBannerImageUrl(b64));
+                          if (file)
+                            compressAndUploadImage(file, (b64) =>
+                              setNewBannerImageUrl(b64),
+                            );
                         }}
                         className="hidden"
                       />
@@ -2433,30 +3057,53 @@ export default function LuxuryGoldAdminPanel() {
                         className="w-full py-2.5 rounded-xl border border-dashed border-white/20 text-neutral-300 hover:border-[#D4AF37] flex items-center justify-center gap-2 text-xs cursor-pointer"
                       >
                         <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
-                        <span>{newBannerImageUrl ? 'Change Selected PC Photo' : 'Choose PC Photo (Up to 3MB)'}</span>
+                        <span>
+                          {newBannerImageUrl
+                            ? 'Change Selected PC Photo'
+                            : 'Choose PC Photo (Up to 3MB)'}
+                        </span>
                       </button>
 
                       {newBannerImageUrl && (
                         <div className="h-24 rounded-xl overflow-hidden border border-white/10">
-                          <img src={newBannerImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                          <img
+                            src={newBannerImageUrl}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                       )}
 
-                      <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer"
+                      >
                         Publish Slide
                       </button>
                     </form>
                   </div>
 
                   <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {banners.map(b => (
-                      <div key={b.id} className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 space-y-2 font-mono text-xs">
+                    {banners.map((b) => (
+                      <div
+                        key={b.id}
+                        className="p-4 rounded-[24px] bg-white/[0.02] border border-white/10 space-y-2 font-mono text-xs"
+                      >
                         <div className="h-32 rounded-2xl overflow-hidden bg-neutral-900 border border-white/5">
-                          <img src={b.image_url} alt={b.title} className="w-full h-full object-cover" />
+                          <img
+                            src={b.image_url}
+                            alt={b.title}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="font-bold text-white truncate">{b.title}</span>
-                          <button onClick={() => handleDeleteBanner(b.id)} className="text-rose-400 cursor-pointer">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteBanner(b.id)}
+                            className="text-rose-400 cursor-pointer"
+                          >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -2476,11 +3123,12 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showVaMCModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 font-mono">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+              transition={fluidSpring}
+              className="w-full max-w-4xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden will-change-transform"
             >
               {/* Modal Header */}
               <div className="flex flex-col gap-3 border-b border-white/10 pb-3">
@@ -2490,21 +3138,31 @@ export default function LuxuryGoldAdminPanel() {
                       <Calculator className="w-5 h-5" />
                     </div>
                     <div>
-                      <h2 className="text-base font-black text-white uppercase tracking-wider">VaMC Multi-Customer POS (C+)</h2>
-                      <span className="text-[10px] text-neutral-400">Tap item to +1 quantity. Unified billing for General, Ice Cream & Dry Fruits.</span>
+                      <h2 className="text-base font-black text-white uppercase tracking-wider">
+                        VaMC Multi-Customer POS (C+)
+                      </h2>
+                      <span className="text-[10px] text-neutral-400">
+                        Tap item to +1 quantity. Unified billing for General, Ice Cream & Dry
+                        Fruits.
+                      </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
                       onClick={() => setShowVaMCCrudModal(true)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer hover:bg-amber-300 transition"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase cursor-pointer hover:bg-amber-300 transition-colors"
                     >
                       <Settings className="w-3.5 h-3.5" />
                       <span>Manage Menu Items</span>
                     </button>
 
-                    <button onClick={() => setShowVaMCModal(false)} className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-neutral-400 cursor-pointer transition">
+                    <button
+                      type="button"
+                      onClick={() => setShowVaMCModal(false)}
+                      className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-neutral-400 cursor-pointer transition-colors"
+                    >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -2518,23 +3176,30 @@ export default function LuxuryGoldAdminPanel() {
                       <div
                         key={tab.id}
                         onClick={() => setActiveVamcTabId(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-t-xl border-t border-x cursor-pointer transition select-none ${
-                          isActive 
-                            ? 'bg-[#18181c] border-[#D4AF37] text-white font-black shadow-lg' 
+                        className={`flex items-center gap-2 px-4 py-2 rounded-t-xl border-t border-x cursor-pointer transition-colors select-none ${
+                          isActive
+                            ? 'bg-[#18181c] border-[#D4AF37] text-white font-black shadow-lg'
                             : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:text-white hover:bg-white/[0.05]'
                         }`}
                       >
-                        <span>{tab.name} ({tab.cart.reduce((s, i) => s + i.quantity, 0)})</span>
+                        <span>
+                          {tab.name} (
+                          {tab.cart.reduce(
+                            (s: number, i: any) => s + Number(i.quantity ?? 0),
+                            0,
+                          )}
+                          )
+                        </span>
                         {vamcTabs.length > 1 && (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const nextTabs = vamcTabs.filter(t => t.id !== tab.id);
+                              const nextTabs = vamcTabs.filter((t) => t.id !== tab.id);
                               setVamcTabs(nextTabs);
                               if (isActive) setActiveVamcTabId(nextTabs[0].id);
                             }}
-                            className="p-0.5 hover:text-rose-400 transition"
+                            className="p-0.5 hover:text-rose-400 transition-colors"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -2548,10 +3213,21 @@ export default function LuxuryGoldAdminPanel() {
                     onClick={() => {
                       vamcTabCounter.current += 1;
                       const nextId = `C${vamcTabCounter.current}`;
-                      setVamcTabs([...vamcTabs, { id: nextId, name: `Customer ${nextId}`, cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
+                      setVamcTabs([
+                        ...vamcTabs,
+                        {
+                          id: nextId,
+                          name: `Customer ${nextId}`,
+                          cart: [],
+                          customerName: '',
+                          customerPhone: '',
+                          paymentMode: 'cash',
+                          customerHanded: '',
+                        },
+                      ]);
                       setActiveVamcTabId(nextId);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37] text-[#FCF6BA] font-black text-xs hover:bg-[#D4AF37]/30 cursor-pointer flex items-center gap-1 shrink-0 transition ml-2"
+                    className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37] text-[#FCF6BA] font-black text-xs hover:bg-[#D4AF37]/30 cursor-pointer flex items-center gap-1 shrink-0 transition-colors ml-2"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>C+</span>
@@ -2561,24 +3237,31 @@ export default function LuxuryGoldAdminPanel() {
 
               {/* Active Tab Content */}
               {(() => {
-                const currentTab = vamcTabs.find(t => t.id === activeVamcTabId) || vamcTabs[0];
-                const updateCurrentTab = (updates: any) => setVamcTabs(prev => prev.map(t => t.id === currentTab.id ? { ...t, ...updates } : t));
-                const tabCart = currentTab.cart;
-                const cartTotal = tabCart.reduce((s, i) => s + (i.cartPrice * i.quantity), 0);
-                
-                let displayItems = [];
+                const currentTab =
+                  vamcTabs.find((t) => t.id === activeVamcTabId) || vamcTabs[0];
+                const updateCurrentTab = (updates: any) =>
+                  setVamcTabs((prev) =>
+                    prev.map((t) => (t.id === currentTab.id ? { ...t, ...updates } : t)),
+                  );
+                const tabCart: any[] = currentTab.cart;
+                const cartTotal = tabCart.reduce(
+                  (s, i) => s + Number(i.cartPrice ?? 0) * Number(i.quantity ?? 0),
+                  0,
+                );
+
+                let displayItems: any[] = [];
                 if (posCategory === 'main') displayItems = vamcCounterItems;
                 if (posCategory === 'ice_cream') displayItems = iceItems;
                 if (posCategory === 'df') displayItems = dfItems;
 
-                displayItems = displayItems.filter(m => (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase()));
+                displayItems = displayItems.filter((m) =>
+                  (m.name || '').toLowerCase().includes(vamcSearch.toLowerCase()),
+                );
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-4 overflow-hidden flex-1 relative">
-                    
                     {/* LEFT: Item Selection with 3 Categories */}
                     <div className="md:col-span-7 flex flex-col space-y-3 overflow-hidden z-10">
-                      
                       {/* Search Bar */}
                       <div className="relative">
                         <Search className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -2587,62 +3270,118 @@ export default function LuxuryGoldAdminPanel() {
                           placeholder="Search items..."
                           value={vamcSearch}
                           onChange={(e) => setVamcSearch(e.target.value)}
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37] transition"
+                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-[#D4AF37] transition-colors"
                         />
                       </div>
 
                       {/* Category Filters */}
                       <div className="flex gap-2 overflow-x-auto custom-gold-scrollbar pb-1">
-                        <button onClick={() => setPosCategory('main')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'main' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPosCategory('main')}
+                          className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-colors border ${
+                            posCategory === 'main'
+                              ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]'
+                              : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'
+                          }`}
+                        >
                           🛒 General
                         </button>
-                        <button onClick={() => setPosCategory('ice_cream')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'ice_cream' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPosCategory('ice_cream')}
+                          className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-colors border ${
+                            posCategory === 'ice_cream'
+                              ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]'
+                              : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'
+                          }`}
+                        >
                           🍦 Ice Creams
                         </button>
-                        <button onClick={() => setPosCategory('df')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition border ${posCategory === 'df' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPosCategory('df')}
+                          className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-colors border ${
+                            posCategory === 'df'
+                              ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]'
+                              : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'
+                          }`}
+                        >
                           🥜 Dry Fruits
                         </button>
                       </div>
 
-                      {/* Grid Items (Clean Luxury Gold Selection — No Red -1) */}
+                      {/* Grid Items */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto custom-gold-scrollbar pr-1 flex-1">
-                        {displayItems.map(item => {
-                          const itemPrice = posCategory === 'main' ? item.price : item.selling_price;
-                          const inCartItem = tabCart.find(ci => ci.id === item.id && ci.itemType === posCategory);
+                        {displayItems.map((item) => {
+                          const itemPrice =
+                            posCategory === 'main' ? item.price : item.selling_price;
+                          const inCartItem = tabCart.find(
+                            (ci) => ci.id === item.id && ci.itemType === posCategory,
+                          );
                           const isSelected = Boolean(inCartItem);
-                          
+
                           return (
                             <motion.div
-                              whileTap={{ scale: 0.96 }}
                               key={item.id}
+                              whileTap={{ scale: 0.96 }}
+                              transition={fluidSpring}
                               onClick={() => {
                                 const newCart = inCartItem
-                                  ? tabCart.map(ci => (ci.id === item.id && ci.itemType === posCategory) ? { ...ci, quantity: ci.quantity + 1 } : ci)
-                                  : [...tabCart, { ...item, quantity: 1, cartPrice: itemPrice, itemType: posCategory }];
+                                  ? tabCart.map((ci) =>
+                                      ci.id === item.id && ci.itemType === posCategory
+                                        ? { ...ci, quantity: ci.quantity + 1 }
+                                        : ci,
+                                    )
+                                  : [
+                                      ...tabCart,
+                                      {
+                                        ...item,
+                                        quantity: 1,
+                                        cartPrice: itemPrice,
+                                        itemType: posCategory,
+                                      },
+                                    ];
                                 updateCurrentTab({ cart: newCart });
                               }}
-                              className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between select-none ${
-                                isSelected 
-                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-[0_0_16px_rgba(212,175,55,0.25)]' 
+                              className={`p-3 rounded-2xl border cursor-pointer transition-colors flex flex-col justify-between select-none will-change-transform ${
+                                isSelected
+                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-[0_0_16px_rgba(212,175,55,0.25)]'
                                   : 'bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/[0.04]'
                               }`}
                             >
                               <div>
                                 <div className="flex justify-between items-center gap-1">
-                                  <span className="text-xs font-bold text-white block line-clamp-1">{item.name}</span>
+                                  <span className="text-xs font-bold text-white block line-clamp-1">
+                                    {item.name}
+                                  </span>
                                   {isSelected && (
                                     <span className="px-2 py-0.5 rounded-md bg-[#D4AF37] text-black font-black text-[10px] shrink-0 shadow-sm">
                                       {inCartItem.quantity}x
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1.5">₹{Number(itemPrice).toFixed(2)}</span>
+                                <span className="text-[11px] font-black text-[#D4AF37] block mt-1.5">
+                                  ₹{Number(itemPrice ?? 0).toFixed(2)}
+                                </span>
                                 {posCategory !== 'main' && (
-                                  <span className={`text-[9px] font-bold block mt-0.5 ${item.stock_quantity > 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>Stock: {item.stock_quantity}</span>
+                                  <span
+                                    className={`text-[9px] font-bold block mt-0.5 ${
+                                      Number(item.stock_quantity ?? 0) > 0
+                                        ? 'text-emerald-400/80'
+                                        : 'text-rose-400/80'
+                                    }`}
+                                  >
+                                    Stock: {item.stock_quantity ?? 0}
+                                  </span>
                                 )}
                               </div>
                               <div className="flex items-center justify-end mt-2">
-                                <span className={`text-[9px] font-bold uppercase ${isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'}`}>
+                                <span
+                                  className={`text-[9px] font-bold uppercase ${
+                                    isSelected ? 'text-[#FCF6BA]' : 'text-neutral-500'
+                                  }`}
+                                >
                                   {isSelected ? '✓ +1 More' : '+1 Add'}
                                 </span>
                               </div>
@@ -2650,7 +3389,9 @@ export default function LuxuryGoldAdminPanel() {
                           );
                         })}
                         {displayItems.length === 0 && (
-                          <div className="col-span-full py-6 text-center text-neutral-500 text-xs">No items found in this category.</div>
+                          <div className="col-span-full py-6 text-center text-neutral-500 text-xs">
+                            No items found in this category.
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2659,38 +3400,76 @@ export default function LuxuryGoldAdminPanel() {
                     <div className="md:col-span-5 bg-white/[0.02] border border-white/10 rounded-3xl p-5 flex flex-col justify-between space-y-4 relative overflow-hidden z-10 shadow-lg">
                       <div className="relative z-10 flex flex-col h-full">
                         <div>
-                           <div className="flex justify-between items-center border-b border-white/10 pb-2.5 mb-3">
-                              <h3 className="text-xs font-black text-[#FCF6BA] uppercase flex items-center gap-1.5 tracking-wide">
-                                <Receipt className="w-4 h-4" /> Bill Cart ({currentTab.name})
-                              </h3>
-                              <span className="text-[10px] text-neutral-400 font-bold bg-white/5 px-2 py-0.5 rounded-md">{tabCart.length} Items</span>
-                           </div>
-                          
+                          <div className="flex justify-between items-center border-b border-white/10 pb-2.5 mb-3">
+                            <h3 className="text-xs font-black text-[#FCF6BA] uppercase flex items-center gap-1.5 tracking-wide">
+                              <Receipt className="w-4 h-4" /> Bill Cart ({currentTab.name})
+                            </h3>
+                            <span className="text-[10px] text-neutral-400 font-bold bg-white/5 px-2 py-0.5 rounded-md">
+                              {tabCart.length} Items
+                            </span>
+                          </div>
+
                           <div className="space-y-2.5 max-h-40 overflow-y-auto custom-gold-scrollbar pr-1">
                             {tabCart.length === 0 ? (
-                              <div className="text-center py-6 text-neutral-500 text-xs font-bold">No items selected. Tap blocks on left.</div>
+                              <div className="text-center py-6 text-neutral-500 text-xs font-bold">
+                                No items selected. Tap blocks on left.
+                              </div>
                             ) : (
                               tabCart.map((ci, idx) => (
-                                <div key={`${ci.itemType}-${ci.id}`} className="flex justify-between items-center text-xs border-b border-white/5 pb-2.5">
+                                <div
+                                  key={`${ci.itemType}-${ci.id}`}
+                                  className="flex justify-between items-center text-xs border-b border-white/5 pb-2.5"
+                                >
                                   <div className="truncate pr-2">
                                     <span className="text-white font-bold block truncate">
-                                      {ci.name} 
+                                      {ci.name}
                                       <span className="text-[8px] uppercase ml-1 px-1 rounded bg-white/10 text-neutral-400">
-                                        {ci.itemType === 'main' ? 'GEN' : ci.itemType === 'ice_cream' ? 'ICE' : 'DF'}
+                                        {ci.itemType === 'main'
+                                          ? 'GEN'
+                                          : ci.itemType === 'ice_cream'
+                                            ? 'ICE'
+                                            : 'DF'}
                                       </span>
                                     </span>
-                                    <span className="text-[10px] text-[#D4AF37] font-black tracking-wide">₹{Number(ci.cartPrice).toFixed(2)} x {ci.quantity}</span>
+                                    <span className="text-[10px] text-[#D4AF37] font-black tracking-wide">
+                                      ₹{Number(ci.cartPrice ?? 0).toFixed(2)} x{' '}
+                                      {ci.quantity}
+                                    </span>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0 bg-white/5 rounded-lg p-1 border border-white/10">
-                                    <button onClick={() => {
-                                      const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item).filter(item => item.quantity > 0);
-                                      updateCurrentTab({ cart: newCart });
-                                    }} className="p-1 rounded hover:bg-white/10 text-white cursor-pointer transition"><Minus className="w-3 h-3" /></button>
-                                    <span className="px-1 text-white font-black w-4 text-center">{ci.quantity}</span>
-                                    <button onClick={() => {
-                                      const newCart = tabCart.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
-                                      updateCurrentTab({ cart: newCart });
-                                    }} className="p-1 rounded hover:bg-white/10 text-white cursor-pointer transition"><Plus className="w-3 h-3" /></button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newCart = tabCart
+                                          .map((item, i) =>
+                                            i === idx
+                                              ? { ...item, quantity: item.quantity - 1 }
+                                              : item,
+                                          )
+                                          .filter((item) => item.quantity > 0);
+                                        updateCurrentTab({ cart: newCart });
+                                      }}
+                                      className="p-1 rounded hover:bg-white/10 text-white cursor-pointer transition-colors"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="px-1 text-white font-black w-4 text-center">
+                                      {ci.quantity}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newCart = tabCart.map((item, i) =>
+                                          i === idx
+                                            ? { ...item, quantity: item.quantity + 1 }
+                                            : item,
+                                        );
+                                        updateCurrentTab({ cart: newCart });
+                                      }}
+                                      className="p-1 rounded hover:bg-white/10 text-white cursor-pointer transition-colors"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
                                   </div>
                                 </div>
                               ))
@@ -2703,24 +3482,32 @@ export default function LuxuryGoldAdminPanel() {
                             type="text"
                             placeholder="Customer Name (Optional)"
                             value={currentTab.customerName}
-                            onChange={(e) => updateCurrentTab({ customerName: e.target.value })}
-                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37] transition"
+                            onChange={(e) =>
+                              updateCurrentTab({ customerName: e.target.value })
+                            }
+                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#D4AF37] transition-colors"
                           />
                           <input
                             type="tel"
                             maxLength={10}
                             placeholder="Phone Number (Optional)"
                             value={currentTab.customerPhone}
-                            onChange={(e) => updateCurrentTab({ customerPhone: e.target.value.replace(/\D/g, '') })}
-                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none font-mono focus:border-[#D4AF37] transition"
+                            onChange={(e) =>
+                              updateCurrentTab({
+                                customerPhone: e.target.value.replace(/\D/g, ''),
+                              })
+                            }
+                            className="w-full bg-[#161619] border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none font-mono focus:border-[#D4AF37] transition-colors"
                           />
 
                           <div className="grid grid-cols-2 gap-2.5 pt-2">
                             <button
                               type="button"
                               onClick={() => updateCurrentTab({ paymentMode: 'cash' })}
-                              className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                                currentTab.paymentMode === 'cash' ? 'bg-amber-400 text-black border-transparent shadow-md' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'
+                              className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-colors ${
+                                currentTab.paymentMode === 'cash'
+                                  ? 'bg-amber-400 text-black border-transparent shadow-md'
+                                  : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'
                               }`}
                             >
                               <Banknote className="w-4 h-4" /> Cash
@@ -2728,8 +3515,10 @@ export default function LuxuryGoldAdminPanel() {
                             <button
                               type="button"
                               onClick={() => updateCurrentTab({ paymentMode: 'upi' })}
-                              className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                                currentTab.paymentMode === 'upi' ? 'bg-emerald-400 text-black border-transparent shadow-md' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'
+                              className={`py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-colors ${
+                                currentTab.paymentMode === 'upi'
+                                  ? 'bg-emerald-400 text-black border-transparent shadow-md'
+                                  : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'
                               }`}
                             >
                               <Smartphone className="w-4 h-4" /> PhonePe / Paid
@@ -2739,22 +3528,32 @@ export default function LuxuryGoldAdminPanel() {
                           {currentTab.paymentMode === 'cash' && (
                             <div className="p-3.5 rounded-xl bg-black/40 border border-amber-400/30 space-y-2.5 mt-2 shadow-inner">
                               <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 font-bold">₹</span>
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 font-bold">
+                                  ₹
+                                </span>
                                 <input
                                   type="number"
-                                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                  onWheel={(e) =>
+                                    (e.target as HTMLInputElement).blur()
+                                  }
                                   placeholder="Customer Handed Cash"
                                   value={currentTab.customerHanded}
-                                  onChange={(e) => updateCurrentTab({ customerHanded: e.target.value })}
+                                  onChange={(e) =>
+                                    updateCurrentTab({ customerHanded: e.target.value })
+                                  }
                                   className="w-full bg-transparent rounded-lg pl-7 pr-3 py-1.5 text-white font-bold outline-none border-b border-white/10 focus:border-amber-400 transition-colors"
                                 />
                               </div>
                               <div className="flex gap-1.5">
-                                {[100, 200, 500].map(amt => (
+                                {[100, 200, 500].map((amt) => (
                                   <button
                                     key={amt}
                                     type="button"
-                                    onClick={() => updateCurrentTab({ customerHanded: String(amt) })}
+                                    onClick={() =>
+                                      updateCurrentTab({
+                                        customerHanded: String(amt),
+                                      })
+                                    }
                                     className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-amber-200 text-[10px] font-bold cursor-pointer"
                                   >
                                     ₹{amt}
@@ -2762,16 +3561,29 @@ export default function LuxuryGoldAdminPanel() {
                                 ))}
                                 <button
                                   type="button"
-                                  onClick={() => updateCurrentTab({ customerHanded: String(cartTotal) })}
+                                  onClick={() =>
+                                    updateCurrentTab({
+                                      customerHanded: String(cartTotal),
+                                    })
+                                  }
                                   className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-neutral-300 text-[10px] cursor-pointer"
                                 >
                                   Exact
                                 </button>
                               </div>
                               <div className="flex justify-between items-center text-[11px] pt-1 px-1">
-                                <span className="text-neutral-400 font-bold">Change to return:</span>
+                                <span className="text-neutral-400 font-bold">
+                                  Change to return:
+                                </span>
                                 <span className="text-emerald-400 font-black text-sm">
-                                  ₹{((parseFloat(currentTab.customerHanded) || 0) >= cartTotal ? ((parseFloat(currentTab.customerHanded) || 0) - cartTotal).toFixed(2) : '0.00')}
+                                  ₹
+                                  {(parseFloat(currentTab.customerHanded) || 0) >=
+                                  cartTotal
+                                    ? (
+                                        (parseFloat(currentTab.customerHanded) || 0) -
+                                        cartTotal
+                                      ).toFixed(2)
+                                    : '0.00'}
                                 </span>
                               </div>
                             </div>
@@ -2781,11 +3593,14 @@ export default function LuxuryGoldAdminPanel() {
                         <div className="pt-4 mt-4 border-t border-white/10 space-y-3">
                           <div className="flex justify-between items-center text-sm font-black text-white px-1">
                             <span>Total Bill:</span>
-                            <span className="text-[#D4AF37] text-xl tracking-wide">₹{cartTotal.toFixed(2)}</span>
+                            <span className="text-[#D4AF37] text-xl tracking-wide">
+                              ₹{cartTotal.toFixed(2)}
+                            </span>
                           </div>
-                          
+
                           {/* FAST OPTIMISTIC + ATOMIC CHECKOUT ENGINE */}
                           <button
+                            type="button"
                             disabled={loading || tabCart.length === 0}
                             onClick={async () => {
                               if (loading || tabCart.length === 0) return;
@@ -2793,82 +3608,143 @@ export default function LuxuryGoldAdminPanel() {
                               const cartSnapshot = [...tabCart];
                               const tabSnapshot = { ...currentTab };
 
-                              // 1. Optimistic local stock deduction for instant UI feedback
-                              setIceItems(prev => prev.map(i => {
-                                const sold = cartSnapshot.find(c => c.itemType === 'ice_cream' && c.id === i.id);
-                                return sold ? { ...i, stock_quantity: Math.max(0, (i.stock_quantity || 0) - sold.quantity) } : i;
-                              }));
-                              setDfItems(prev => prev.map(d => {
-                                const sold = cartSnapshot.find(c => c.itemType === 'df' && c.id === d.id);
-                                return sold ? { ...d, stock_quantity: Math.max(0, (d.stock_quantity || 0) - sold.quantity) } : d;
-                              }));
+                              setIceItems((prev) =>
+                                prev.map((i) => {
+                                  const sold = cartSnapshot.find(
+                                    (c) => c.itemType === 'ice_cream' && c.id === i.id,
+                                  );
+                                  return sold
+                                    ? {
+                                        ...i,
+                                        stock_quantity: Math.max(
+                                          0,
+                                          Number(i.stock_quantity ?? 0) -
+                                            Number(sold.quantity ?? 0),
+                                        ),
+                                      }
+                                    : i;
+                                }),
+                              );
+                              setDfItems((prev) =>
+                                prev.map((d) => {
+                                  const sold = cartSnapshot.find(
+                                    (c) => c.itemType === 'df' && c.id === d.id,
+                                  );
+                                  return sold
+                                    ? {
+                                        ...d,
+                                        stock_quantity: Math.max(
+                                          0,
+                                          Number(d.stock_quantity ?? 0) -
+                                            Number(sold.quantity ?? 0),
+                                        ),
+                                      }
+                                    : d;
+                                }),
+                              );
 
                               setLoading(true);
                               try {
-                                const { data: sess, error: sErr } = await supabase.from('table_sessions').insert({
-                                  table_number: 0,
-                                  customer_name: tabSnapshot.customerName.trim() || `${tabSnapshot.name} Counter`,
-                                  customer_phone: tabSnapshot.customerPhone.trim() || '0000000000',
-                                  subtotal: total,
-                                  total_amount: total,
-                                  final_payable: total,
-                                  status: 'completed',
-                                  payment_status: 'paid',
-                                  payment_mode: tabSnapshot.paymentMode
-                                }).select().single();
+                                const { data: sess, error: sErr } = await supabase
+                                  .from('table_sessions')
+                                  .insert({
+                                    table_number: 0,
+                                    customer_name:
+                                      tabSnapshot.customerName.trim() ||
+                                      `${tabSnapshot.name} Counter`,
+                                    customer_phone:
+                                      tabSnapshot.customerPhone.trim() || '0000000000',
+                                    subtotal: total,
+                                    total_amount: total,
+                                    final_payable: total,
+                                    status: 'completed',
+                                    payment_status: 'paid',
+                                    payment_mode: tabSnapshot.paymentMode,
+                                  })
+                                  .select()
+                                  .single();
                                 if (sErr) throw sErr;
 
-                                const itemsPayload = cartSnapshot.map(ci => ({
+                                const itemsPayload = cartSnapshot.map((ci) => ({
                                   session_id: sess.id,
-                                  menu_item_id: null, 
+                                  menu_item_id: null,
                                   quantity: ci.quantity,
                                   unit_price: ci.cartPrice,
                                   item_status: 'served',
-                                  cooking_notes: `VaMC Counter Item: ${ci.name}`
+                                  cooking_notes: `VaMC Counter Item: ${ci.name}`,
                                 }));
 
                                 await Promise.all([
-                                  supabase.from('order_items').insert(itemsPayload).then(({ error }) => { if (error) throw error; }),
+                                  supabase
+                                    .from('order_items')
+                                    .insert(itemsPayload)
+                                    .then(({ error }) => {
+                                      if (error) throw error;
+                                    }),
                                   ...cartSnapshot
-                                    .filter(item => item.itemType === 'ice_cream' || item.itemType === 'df')
-                                    .map(item =>
-                                      supabase.rpc('adjust_inventory_stock', {
-                                        p_table_name: item.itemType === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items',
-                                        p_item_id: item.id,
-                                        p_delta: -item.quantity
-                                      })
+                                    .filter(
+                                      (item) =>
+                                        item.itemType === 'ice_cream' ||
+                                        item.itemType === 'df',
                                     )
+                                    .map((item) =>
+                                      supabase.rpc('adjust_inventory_stock', {
+                                        p_table_name:
+                                          item.itemType === 'ice_cream'
+                                            ? 'ice_cream_menu_items'
+                                            : 'df_menu_items',
+                                        p_item_id: item.id,
+                                        p_delta: -item.quantity,
+                                      }),
+                                    ),
                                 ]);
 
-                                showToast(`Sale Complete! ₹${total.toFixed(2)} (${tabSnapshot.paymentMode.toUpperCase()})`);
-                                
-                                const nextTabs = vamcTabs.filter(t => t.id !== tabSnapshot.id);
+                                showToast(
+                                  `Sale Complete! ₹${total.toFixed(2)} (${tabSnapshot.paymentMode.toUpperCase()})`,
+                                );
+
+                                const nextTabs = vamcTabs.filter(
+                                  (t) => t.id !== tabSnapshot.id,
+                                );
                                 if (nextTabs.length === 0) {
                                   vamcTabCounter.current += 1;
                                   const freshId = `C${vamcTabCounter.current}`;
-                                  setVamcTabs([{ id: freshId, name: `Customer ${freshId}`, cart: [], customerName: '', customerPhone: '', paymentMode: 'cash', customerHanded: '' }]);
+                                  setVamcTabs([
+                                    {
+                                      id: freshId,
+                                      name: `Customer ${freshId}`,
+                                      cart: [],
+                                      customerName: '',
+                                      customerPhone: '',
+                                      paymentMode: 'cash',
+                                      customerHanded: '',
+                                    },
+                                  ]);
                                   setActiveVamcTabId(freshId);
                                 } else {
                                   setVamcTabs(nextTabs);
                                   setActiveVamcTabId(nextTabs[0].id);
                                 }
 
-                                loadLiveOrdersAndSessions(selectedDateRef.current);
+                                void loadLiveOrdersAndSessions(
+                                  selectedDateRef.current,
+                                );
                               } catch (err: any) {
-                                loadCounterAndInventoryData();
+                                void loadCounterAndInventoryData();
                                 alert('Error: ' + err.message);
                               } finally {
                                 setLoading(false);
                               }
                             }}
-                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(212,175,55,0.45)] cursor-pointer hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black font-black uppercase text-xs shadow-[0_0_20px_rgba(212,175,55,0.45)] cursor-pointer hover:brightness-105 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {loading ? 'Processing...' : `Complete Sale (${currentTab.name})`}
+                            {loading
+                              ? 'Processing...'
+                              : `Complete Sale (${currentTab.name})`}
                           </button>
                         </div>
                       </div>
                     </div>
-
                   </div>
                 );
               })()}
@@ -2883,80 +3759,180 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showVaMCCrudModal && (
           <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-3xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+              transition={fluidSpring}
+              className="w-full max-w-3xl bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[32px] p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden will-change-transform"
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-3">
-                <h3 className="text-sm font-black text-white uppercase flex items-center gap-2"><Settings className="w-4 h-4 text-[#D4AF37]"/> Manage Menu Items</h3>
-                <button onClick={() => setShowVaMCCrudModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+                <h3 className="text-sm font-black text-white uppercase flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-[#D4AF37]" /> Manage Menu Items
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowVaMCCrudModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
               {/* CRUD Tabs */}
               <div className="flex gap-2 border-b border-white/10 pb-3">
-                 <button onClick={() => { setCrudCategory('main'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition border ${crudCategory === 'main' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
-                    General Items
-                 </button>
-                 <button onClick={() => { setCrudCategory('ice_cream'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition border ${crudCategory === 'ice_cream' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
-                    Ice Creams
-                 </button>
-                 <button onClick={() => { setCrudCategory('df'); setEditingCrudItem(null); setCrudItemName(''); setCrudItemPrice(''); }} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition border ${crudCategory === 'df' ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]' : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'}`}>
-                    Dry Fruits
-                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCrudCategory('main');
+                    setEditingCrudItem(null);
+                    setCrudItemName('');
+                    setCrudItemPrice('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-colors border ${
+                    crudCategory === 'main'
+                      ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]'
+                      : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'
+                  }`}
+                >
+                  General Items
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCrudCategory('ice_cream');
+                    setEditingCrudItem(null);
+                    setCrudItemName('');
+                    setCrudItemPrice('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-colors border ${
+                    crudCategory === 'ice_cream'
+                      ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]'
+                      : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'
+                  }`}
+                >
+                  Ice Creams
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCrudCategory('df');
+                    setEditingCrudItem(null);
+                    setCrudItemName('');
+                    setCrudItemPrice('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-colors border ${
+                    crudCategory === 'df'
+                      ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#FCF6BA]'
+                      : 'bg-white/[0.02] border-white/10 text-neutral-400 hover:border-[#D4AF37]/50'
+                  }`}
+                >
+                  Dry Fruits
+                </button>
               </div>
 
               {/* Unified Add / Edit Form */}
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const cleanName = crudItemName.trim();
-                const pr = parseFloat(crudItemPrice);
-                if (!cleanName || isNaN(pr) || pr <= 0) { return alert('Valid Name & Price ivvandi.'); }
-                
-                setLoading(true);
-                try {
-                  if (crudCategory === 'main') {
-                    if (editingCrudItem) {
-                      const { error } = await supabase.from('vamc_menu_items').update({ name: cleanName, price: pr }).eq('id', editingCrudItem.id);
-                      if (error) throw error;
-                    } else {
-                      const { error } = await supabase.from('vamc_menu_items').insert({ name: cleanName, price: pr });
-                      if (error) throw error;
-                    }
-                  } else {
-                    const targetTable = crudCategory === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items';
-                    if (editingCrudItem) {
-                      const { error } = await supabase.from(targetTable).update({ name: cleanName, selling_price: pr, cost_price: pr }).eq('id', editingCrudItem.id);
-                      if (error) throw error;
-                    } else {
-                      const { error } = await supabase.from(targetTable).insert({ name: cleanName, selling_price: pr, cost_price: pr, stock_quantity: 0 });
-                      if (error) throw error;
-                    }
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const cleanName = crudItemName.trim();
+                  const pr = parseFloat(crudItemPrice);
+                  if (!cleanName || isNaN(pr) || pr <= 0) {
+                    return alert('Valid Name & Price ivvandi.');
                   }
-                  
-                  setCrudItemName(''); setCrudItemPrice(''); setEditingCrudItem(null);
-                  loadCounterAndInventoryData();
-                } catch (err: any) { alert('Error: ' + err.message); } 
-                finally { setLoading(false); }
-              }} className="space-y-3 py-3 border-b border-white/10">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                    <div className="sm:col-span-5">
-                        <label className="text-[10px] text-neutral-400 block mb-1 font-bold">Item Name</label>
-                        <input type="text" required placeholder="Item Name" value={crudItemName} onChange={(e) => setCrudItemName(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37] text-xs transition" />
-                    </div>
 
-                    <div className="sm:col-span-3">
-                        <label className="text-[10px] text-neutral-400 block mb-1 font-bold">Price ₹</label>
-                        <input type="number" onWheel={(e) => (e.target as HTMLInputElement).blur()} required min="1" step="0.01" placeholder="₹ Price" value={crudItemPrice} onChange={(e) => setCrudItemPrice(e.target.value)} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-[#D4AF37] outline-none focus:border-[#D4AF37] text-xs font-bold transition" />
-                    </div>
+                  setLoading(true);
+                  try {
+                    if (crudCategory === 'main') {
+                      if (editingCrudItem) {
+                        const { error } = await supabase
+                          .from('vamc_menu_items')
+                          .update({ name: cleanName, price: pr })
+                          .eq('id', editingCrudItem.id);
+                        if (error) throw error;
+                      } else {
+                        const { error } = await supabase
+                          .from('vamc_menu_items')
+                          .insert({ name: cleanName, price: pr });
+                        if (error) throw error;
+                      }
+                    } else {
+                      const targetTable =
+                        crudCategory === 'ice_cream'
+                          ? 'ice_cream_menu_items'
+                          : 'df_menu_items';
+                      if (editingCrudItem) {
+                        const { error } = await supabase
+                          .from(targetTable)
+                          .update({ name: cleanName, selling_price: pr })
+                          .eq('id', editingCrudItem.id);
+                        if (error) throw error;
+                      } else {
+                        const { error } = await supabase
+                          .from(targetTable)
+                          .insert({
+                            name: cleanName,
+                            selling_price: pr,
+                            stock_quantity: 0,
+                          });
+                        if (error) throw error;
+                      }
+                    }
 
-                    <div className="sm:col-span-4 flex items-end">
-                      <button type="submit" disabled={loading} className="w-full py-2 h-[34px] rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-[#c59b27] transition">
-                        {editingCrudItem ? 'Update' : '+ Add Item'}
-                      </button>
-                    </div>
+                    setCrudItemName('');
+                    setCrudItemPrice('');
+                    setEditingCrudItem(null);
+                    void loadCounterAndInventoryData();
+                  } catch (err: any) {
+                    alert('Error: ' + err.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="space-y-3 py-3 border-b border-white/10"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                  <div className="sm:col-span-5">
+                    <label className="text-[10px] text-neutral-400 block mb-1 font-bold">
+                      Item Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Item Name"
+                      value={crudItemName}
+                      onChange={(e) => setCrudItemName(e.target.value)}
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-[#D4AF37] text-xs transition-colors"
+                    />
                   </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="text-[10px] text-neutral-400 block mb-1 font-bold">
+                      Price ₹
+                    </label>
+                    <input
+                      type="number"
+                      onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                      required
+                      min="1"
+                      step="0.01"
+                      placeholder="₹ Price"
+                      value={crudItemPrice}
+                      onChange={(e) => setCrudItemPrice(e.target.value)}
+                      className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-[#D4AF37] outline-none focus:border-[#D4AF37] text-xs font-bold transition-colors"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4 flex items-end">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full py-2 h-[34px] rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-[#c59b27] transition-colors"
+                    >
+                      {editingCrudItem ? 'Update' : '+ Add Item'}
+                    </button>
+                  </div>
+                </div>
               </form>
 
               {/* Search Bar */}
@@ -2967,57 +3943,112 @@ export default function LuxuryGoldAdminPanel() {
                   placeholder="Search in list..."
                   value={vamcCrudSearch}
                   onChange={(e) => setVamcCrudSearch(e.target.value)}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37] transition"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white outline-none focus:border-[#D4AF37] transition-colors"
                 />
               </div>
 
               {/* Items List based on Category */}
               <div className="space-y-2 overflow-y-auto custom-gold-scrollbar pr-1 flex-1 mt-3">
                 {(() => {
-                   let listData = [];
-                   if (crudCategory === 'main') listData = vamcCounterItems;
-                   if (crudCategory === 'ice_cream') listData = iceItems;
-                   if (crudCategory === 'df') listData = dfItems;
-                   
-                   listData = listData.filter(item => (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase()));
+                  let listData: any[] = [];
+                  if (crudCategory === 'main') listData = vamcCounterItems;
+                  if (crudCategory === 'ice_cream') listData = iceItems;
+                  if (crudCategory === 'df') listData = dfItems;
 
-                   if (listData.length === 0) return <div className="text-center py-8 text-neutral-500 text-xs">No items found.</div>;
+                  listData = listData.filter((item) =>
+                    (item.name || '').toLowerCase().includes(vamcCrudSearch.toLowerCase()),
+                  );
 
-                   return listData.map(item => (
-                    <div key={item.id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs hover:border-[#D4AF37]/50 transition">
+                  if (listData.length === 0)
+                    return (
+                      <div className="text-center py-8 text-neutral-500 text-xs">
+                        No items found.
+                      </div>
+                    );
+
+                  return listData.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 flex justify-between items-center text-xs hover:border-[#D4AF37]/50 transition-colors"
+                    >
                       <div>
                         <span className="font-bold text-white block">{item.name}</span>
                         {crudCategory === 'main' ? (
-                          <span className="text-[#D4AF37] font-black">₹{Number(item.price).toFixed(2)}</span>
+                          <span className="text-[#D4AF37] font-black">
+                            ₹{Number(item.price ?? 0).toFixed(2)}
+                          </span>
                         ) : (
                           <div className="flex gap-2 text-[10px] mt-1 items-center">
-                            <span className="text-[#D4AF37] font-black">₹{Number(item.selling_price).toFixed(2)}</span>
-                            <span className={`font-bold ml-2 px-1.5 rounded ${item.stock_quantity > 0 ? 'bg-emerald-900/30 text-emerald-400' : 'bg-rose-900/30 text-rose-400'}`}>Stock: {item.stock_quantity}</span>
+                            <span className="text-[#D4AF37] font-black">
+                              ₹{Number(item.selling_price ?? 0).toFixed(2)}
+                            </span>
+                            <span
+                              className={`font-bold ml-2 px-1.5 rounded ${
+                                Number(item.stock_quantity ?? 0) > 0
+                                  ? 'bg-emerald-900/30 text-emerald-400'
+                                  : 'bg-rose-900/30 text-rose-400'
+                              }`}
+                            >
+                              Stock: {item.stock_quantity ?? 0}
+                            </span>
                           </div>
                         )}
                       </div>
                       <div className="flex gap-1.5 items-center">
                         {crudCategory !== 'main' && (
-                           <button onClick={() => { setSelectedInvItem(item); setPurchaseType(crudCategory); setPurchaseQty(''); setShowPurchaseModal(true); }} className="px-2 py-1.5 rounded-lg bg-white/5 text-white font-bold hover:bg-white/10 transition cursor-pointer">
-                              + Stock
-                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedInvItem(item);
+                              setPurchaseType(crudCategory);
+                              setPurchaseQty('');
+                              setShowPurchaseModal(true);
+                            }}
+                            className="px-2 py-1.5 rounded-lg bg-white/5 text-white font-bold hover:bg-white/10 transition-colors cursor-pointer"
+                          >
+                            + Stock
+                          </button>
                         )}
-                        <button onClick={() => { 
-                          setEditingCrudItem(item); setCrudItemName(item.name); 
-                          if(crudCategory === 'main') setCrudItemPrice(String(item.price));
-                          else { setCrudItemPrice(String(item.selling_price)); }
-                        }} className="p-1.5 rounded-lg bg-white/5 text-[#D4AF37] hover:bg-white/10 cursor-pointer transition"><Edit3 className="w-3.5 h-3.5" /></button>
-                        
-                        <button onClick={async () => {
-                          if (!confirm(`"${item.name}" delete cheyala?`)) return;
-                          const tName = crudCategory === 'main' ? 'vamc_menu_items' : (crudCategory === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items');
-                          const { error } = await supabase.from(tName).delete().eq('id', item.id);
-                          if (error) return alert('Delete error: ' + error.message);
-                          loadCounterAndInventoryData();
-                        }} className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 cursor-pointer transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCrudItem(item);
+                            setCrudItemName(item.name);
+                            if (crudCategory === 'main')
+                              setCrudItemPrice(String(item.price ?? ''));
+                            else {
+                              setCrudItemPrice(String(item.selling_price ?? ''));
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 text-[#D4AF37] hover:bg-white/10 cursor-pointer transition-colors"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`"${item.name}" delete cheyala?`)) return;
+                            const tName =
+                              crudCategory === 'main'
+                                ? 'vamc_menu_items'
+                                : crudCategory === 'ice_cream'
+                                  ? 'ice_cream_menu_items'
+                                  : 'df_menu_items';
+                            const { error } = await supabase
+                              .from(tName)
+                              .delete()
+                              .eq('id', item.id);
+                            if (error) return alert('Delete error: ' + error.message);
+                            void loadCounterAndInventoryData();
+                          }}
+                          className="p-1.5 rounded-lg bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-                   ));
+                  ));
                 })()}
               </div>
             </motion.div>
@@ -3029,60 +4060,94 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showPurchaseModal && selectedInvItem && (
           <div className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 font-mono">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[28px] p-6 shadow-2xl flex flex-col"
+              transition={fluidSpring}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/60 rounded-[28px] p-6 shadow-2xl flex flex-col will-change-transform"
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
                 <div>
                   <h3 className="text-sm font-black text-white uppercase">Add Bulk Stock</h3>
-                  <span className="text-[10px] text-[#D4AF37] block font-bold tracking-wide">{selectedInvItem.name}</span>
+                  <span className="text-[10px] text-[#D4AF37] block font-bold tracking-wide">
+                    {selectedInvItem.name}
+                  </span>
                 </div>
-                <button onClick={() => setShowPurchaseModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+                <button
+                  type="button"
+                  onClick={() => setShowPurchaseModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const qty = parseInt(purchaseQty);
-                if (isNaN(qty) || qty <= 0) return alert('Invalid entry');
-                
-                const cost = qty * Number(selectedInvItem.selling_price);
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const qty = parseInt(purchaseQty, 10);
+                  if (isNaN(qty) || qty <= 0) return alert('Invalid entry');
 
-                setLoading(true);
-                try {
-                  const pTable = purchaseType === 'ice_cream' ? 'ice_cream_purchases' : 'df_purchases';
-                  const mTable = purchaseType === 'ice_cream' ? 'ice_cream_menu_items' : 'df_menu_items';
-                  
-                  const { error: pErr } = await supabase.from(pTable).insert({
-                    item_id: selectedInvItem.id,
-                    quantity_added: qty,
-                    total_investment: cost
-                  });
-                  if (pErr) throw pErr;
+                  const cost = qty * Number(selectedInvItem.selling_price ?? 0);
 
-                  const { error: sErr } = await supabase.rpc('adjust_inventory_stock', {
-                    p_table_name: mTable,
-                    p_item_id: selectedInvItem.id,
-                    p_delta: qty
-                  });
-                  if (sErr) throw sErr;
-                  
-                  setShowPurchaseModal(false);
-                  loadCounterAndInventoryData();
-                } catch (err: any) { alert('Error: ' + err.message); } 
-                finally { setLoading(false); }
-              }} className="space-y-4">
-                
+                  setLoading(true);
+                  try {
+                    const pTable =
+                      purchaseType === 'ice_cream'
+                        ? 'ice_cream_purchases'
+                        : 'df_purchases';
+                    const mTable =
+                      purchaseType === 'ice_cream'
+                        ? 'ice_cream_menu_items'
+                        : 'df_menu_items';
+
+                    const { error: pErr } = await supabase.from(pTable).insert({
+                      item_id: selectedInvItem.id,
+                      quantity_added: qty,
+                      total_investment: cost,
+                    });
+                    if (pErr) throw pErr;
+
+                    const { error: sErr } = await supabase.rpc('adjust_inventory_stock', {
+                      p_table_name: mTable,
+                      p_item_id: selectedInvItem.id,
+                      p_delta: qty,
+                    });
+                    if (sErr) throw sErr;
+
+                    setShowPurchaseModal(false);
+                    void loadCounterAndInventoryData();
+                  } catch (err: any) {
+                    alert('Error: ' + err.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="space-y-4"
+              >
                 <div>
-                  <label className="text-[10px] text-neutral-400 font-bold block mb-1">Quantity Adding (e.g. 50 items)</label>
-                  <input type="number" onWheel={(e) => (e.target as HTMLInputElement).blur()} required min="1" value={purchaseQty} onChange={(e) => {
-                    setPurchaseQty(e.target.value);
-                  }} className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold focus:border-[#D4AF37] transition" />
+                  <label className="text-[10px] text-neutral-400 font-bold block mb-1">
+                    Quantity Adding (e.g. 50 items)
+                  </label>
+                  <input
+                    type="number"
+                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                    required
+                    min="1"
+                    value={purchaseQty}
+                    onChange={(e) => {
+                      setPurchaseQty(e.target.value);
+                    }}
+                    className="w-full bg-[#161619] border border-white/10 rounded-xl px-3 py-2 text-white outline-none font-bold focus:border-[#D4AF37] transition-colors"
+                  />
                 </div>
-                
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-[#c59b27] transition-all mt-2">
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs cursor-pointer shadow-md hover:bg-[#c59b27] transition-colors mt-2"
+                >
                   Confirm & Update Stock
                 </button>
               </form>
@@ -3095,12 +4160,22 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showAddonModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-[#D4AF37]/50 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <span className="text-sm font-black text-white uppercase">
                   {editingAddon ? 'Edit Add-on' : 'Create New Add-on'}
                 </span>
-                <button onClick={() => setShowAddonModal(false)} className="text-neutral-400 hover:text-white cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setShowAddonModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -3150,15 +4225,19 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
                 </div>
 
-                <button 
-                  type="submit" 
-                  disabled={loading} 
+                <button
+                  type="submit"
+                  disabled={loading}
                   className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs shadow-md mt-2 cursor-pointer hover:brightness-110"
                 >
-                  {loading ? 'Saving...' : (editingAddon ? 'Update Add-on' : 'Save Add-on')}
+                  {loading
+                    ? 'Saving...'
+                    : editingAddon
+                      ? 'Update Add-on'
+                      : 'Save Add-on'}
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3167,15 +4246,31 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showItemModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">{editingItem ? 'Edit Dish / Product' : 'Add Dish / Product'}</span>
-                <button onClick={() => setShowItemModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  {editingItem ? 'Edit Dish / Product' : 'Add Dish / Product'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowItemModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               <form onSubmit={handleSaveItem} className="space-y-3.5">
                 <div>
-                  <label className="text-neutral-400 block mb-1">Item / Product Name *</label>
+                  <label className="text-neutral-400 block mb-1">
+                    Item / Product Name *
+                  </label>
                   <input
                     type="text"
                     required
@@ -3202,7 +4297,9 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
 
                   <div>
-                    <label className="text-neutral-400 block mb-1">Food / Item Type</label>
+                    <label className="text-neutral-400 block mb-1">
+                      Food / Item Type
+                    </label>
                     <select
                       value={itemFoodType}
                       onChange={(e) => setItemFoodType(e.target.value as any)}
@@ -3223,10 +4320,13 @@ export default function LuxuryGoldAdminPanel() {
                         type="button"
                         onClick={() => setItemCategoryId(c.id)}
                         className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap border cursor-pointer ${
-                          itemCategoryId === c.id ? 'bg-[#D4AF37] text-black border-transparent' : 'bg-white/[0.03] text-neutral-400 border-white/5'
+                          itemCategoryId === c.id
+                            ? 'bg-[#D4AF37] text-black border-transparent'
+                            : 'bg-white/[0.03] text-neutral-400 border-white/5'
                         }`}
                       >
-                        {c.name_en || c.name} {c.category_type === 'retail' ? '🛍️' : ''}
+                        {c.name_en || c.name}{' '}
+                        {c.category_type === 'retail' ? '🛍️' : ''}
                       </button>
                     ))}
                   </div>
@@ -3242,16 +4342,20 @@ export default function LuxuryGoldAdminPanel() {
                         onChange={(e) => setItemHasAddons(e.target.checked)}
                         className="w-4 h-4 accent-[#D4AF37]"
                       />
-                      <span className="font-bold text-white">Enable Add-ons (e.g. Ice Cream, Dry Fruits)</span>
+                      <span className="font-bold text-white">
+                        Enable Add-ons (e.g. Ice Cream, Dry Fruits)
+                      </span>
                     </label>
                     <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
                   </div>
 
                   {itemHasAddons && (
                     <div className="pt-2 border-t border-white/5 space-y-1">
-                      <span className="text-[10px] text-neutral-400 block">Select Add-ons applicable for this item:</span>
+                      <span className="text-[10px] text-neutral-400 block">
+                        Select Add-ons applicable for this item:
+                      </span>
                       <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto custom-gold-scrollbar p-1">
-                        {addons.map(a => {
+                        {addons.map((a) => {
                           const isSel = itemAddonIds.includes(Number(a.id));
                           return (
                             <button
@@ -3259,15 +4363,22 @@ export default function LuxuryGoldAdminPanel() {
                               type="button"
                               onClick={() => {
                                 const aId = Number(a.id);
-                                if (isSel) setItemAddonIds(itemAddonIds.filter(id => id !== aId));
+                                if (isSel)
+                                  setItemAddonIds(
+                                    itemAddonIds.filter((id) => id !== aId),
+                                  );
                                 else setItemAddonIds([...itemAddonIds, aId]);
                               }}
                               className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center cursor-pointer ${
-                                isSel ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white' : 'bg-white/[0.02] border-white/5 text-neutral-400'
+                                isSel
+                                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-white'
+                                  : 'bg-white/[0.02] border-white/5 text-neutral-400'
                               }`}
                             >
                               <span className="truncate">{a.name}</span>
-                              <span className="font-bold text-[#D4AF37]">₹{Number(a.price).toFixed(0)}</span>
+                              <span className="font-bold text-[#D4AF37]">
+                                ₹{Number(a.price ?? 0).toFixed(0)}
+                              </span>
                             </button>
                           );
                         })}
@@ -3287,25 +4398,34 @@ export default function LuxuryGoldAdminPanel() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-gold-scrollbar p-1">
-                    {menuItems.filter(m => m.id !== editingItem?.id).map(m => {
-                      const isSel = itemSuggestedIds.includes(m.id);
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            if (isSel) setItemSuggestedIds(itemSuggestedIds.filter(id => id !== m.id));
-                            else setItemSuggestedIds([...itemSuggestedIds, m.id]);
-                          }}
-                          className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center cursor-pointer ${
-                            isSel ? 'bg-amber-400/20 border-amber-400 text-white' : 'bg-white/[0.02] border-white/5 text-neutral-400'
-                          }`}
-                        >
-                          <span className="truncate">{m.name_en || m.name}</span>
-                          <span className="font-bold text-amber-300">₹{Number(m.price).toFixed(0)}</span>
-                        </button>
-                      );
-                    })}
+                    {menuItems
+                      .filter((m) => m.id !== editingItem?.id)
+                      .map((m) => {
+                        const isSel = itemSuggestedIds.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSel)
+                                setItemSuggestedIds(
+                                  itemSuggestedIds.filter((id) => id !== m.id),
+                                );
+                              else setItemSuggestedIds([...itemSuggestedIds, m.id]);
+                            }}
+                            className={`p-2 rounded-xl text-[10px] text-left border flex justify-between items-center cursor-pointer ${
+                              isSel
+                                ? 'bg-amber-400/20 border-amber-400 text-white'
+                                : 'bg-white/[0.02] border-white/5 text-neutral-400'
+                            }`}
+                          >
+                            <span className="truncate">{m.name_en || m.name}</span>
+                            <span className="font-bold text-amber-300">
+                              ₹{Number(m.price ?? 0).toFixed(0)}
+                            </span>
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
 
@@ -3328,7 +4448,9 @@ export default function LuxuryGoldAdminPanel() {
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
                       {itemWeightVariants.map((v, vIdx) => (
                         <div key={v.size}>
-                          <label className="text-[10px] text-neutral-400 block mb-0.5">{v.size} Price (₹)</label>
+                          <label className="text-[10px] text-neutral-400 block mb-0.5">
+                            {v.size} Price (₹)
+                          </label>
                           <input
                             type="number"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
@@ -3351,13 +4473,14 @@ export default function LuxuryGoldAdminPanel() {
                 {/* Photo Upload */}
                 <div>
                   <label className="text-neutral-400 block mb-1">Photo (Up to 3MB)</label>
-                  <input 
-                    type="file" 
+                  <input
+                    type="file"
                     accept="image/*"
                     ref={itemFileRef}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) compressAndUploadImage(file, (b64) => setItemImageUrl(b64));
+                      if (file)
+                        compressAndUploadImage(file, (b64) => setItemImageUrl(b64));
                     }}
                     className="hidden"
                   />
@@ -3371,16 +4494,24 @@ export default function LuxuryGoldAdminPanel() {
                   </button>
                   {itemImageUrl && (
                     <div className="h-20 w-24 rounded-xl overflow-hidden border border-white/10 mt-2">
-                      <img src={itemImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <img
+                        src={itemImageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                   )}
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs mt-2 cursor-pointer">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black uppercase text-xs mt-2 cursor-pointer"
+                >
                   {editingItem ? 'Update Dish / Product' : 'Publish Dish / Product'}
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3389,10 +4520,24 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showComboModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-lg bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl max-h-[92vh] overflow-y-auto custom-gold-scrollbar will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">{editingCombo ? 'Edit Combo' : 'Smart Combo Creator'}</span>
-                <button onClick={() => setShowComboModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  {editingCombo ? 'Edit Combo' : 'Smart Combo Creator'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowComboModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               <form onSubmit={handleSaveCombo} className="space-y-3.5">
@@ -3410,26 +4555,38 @@ export default function LuxuryGoldAdminPanel() {
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-neutral-400 block">Select Dishes to Include *</label>
-                    <span className="text-[#D4AF37] font-bold">Sum: ₹{comboSumActualPrice.toFixed(2)}</span>
+                    <label className="text-neutral-400 block">
+                      Select Dishes to Include *
+                    </label>
+                    <span className="text-[#D4AF37] font-bold">
+                      Sum: ₹{comboSumActualPrice.toFixed(2)}
+                    </span>
                   </div>
 
                   <div className="max-h-40 overflow-y-auto custom-gold-scrollbar border border-white/10 rounded-xl p-2 space-y-1 bg-white/[0.02]">
-                    {menuItems.map(m => {
+                    {menuItems.map((m) => {
                       const isChecked = selectedComboItemIds.includes(m.id);
                       return (
                         <div
                           key={m.id}
                           onClick={() => {
-                            if (isChecked) setSelectedComboItemIds(selectedComboItemIds.filter(id => id !== m.id));
-                            else setSelectedComboItemIds([...selectedComboItemIds, m.id]);
+                            if (isChecked)
+                              setSelectedComboItemIds(
+                                selectedComboItemIds.filter((id) => id !== m.id),
+                              );
+                            else
+                              setSelectedComboItemIds([...selectedComboItemIds, m.id]);
                           }}
-                          className={`p-2 rounded-lg flex justify-between items-center cursor-pointer transition ${
-                            isChecked ? 'bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-white' : 'hover:bg-white/[0.04] text-neutral-400'
+                          className={`p-2 rounded-lg flex justify-between items-center cursor-pointer transition-colors ${
+                            isChecked
+                              ? 'bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-white'
+                              : 'hover:bg-white/[0.04] text-neutral-400'
                           }`}
                         >
                           <span className="truncate">{m.name_en || m.name}</span>
-                          <span className="font-bold text-[#D4AF37]">₹{Number(m.price).toFixed(2)}</span>
+                          <span className="font-bold text-[#D4AF37]">
+                            ₹{Number(m.price ?? 0).toFixed(2)}
+                          </span>
                         </div>
                       );
                     })}
@@ -3438,14 +4595,18 @@ export default function LuxuryGoldAdminPanel() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-neutral-400 block mb-1">Actual Combined Total</label>
+                    <label className="text-neutral-400 block mb-1">
+                      Actual Combined Total
+                    </label>
                     <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-neutral-300 font-bold">
                       ₹{comboSumActualPrice.toFixed(2)}
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-emerald-400 block mb-1 font-bold">Offer / Combo Price (₹) *</label>
+                    <label className="text-emerald-400 block mb-1 font-bold">
+                      Offer / Combo Price (₹) *
+                    </label>
                     <input
                       type="number"
                       onWheel={(e) => (e.target as HTMLInputElement).blur()}
@@ -3460,14 +4621,17 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
 
                 <div>
-                  <label className="text-neutral-400 block mb-1">Combo Photo (Up to 3MB)</label>
-                  <input 
-                    type="file" 
+                  <label className="text-neutral-400 block mb-1">
+                    Combo Photo (Up to 3MB)
+                  </label>
+                  <input
+                    type="file"
                     accept="image/*"
                     ref={comboFileRef}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) compressAndUploadImage(file, (b64) => setComboImageUrl(b64));
+                      if (file)
+                        compressAndUploadImage(file, (b64) => setComboImageUrl(b64));
                     }}
                     className="hidden"
                   />
@@ -3481,16 +4645,24 @@ export default function LuxuryGoldAdminPanel() {
                   </button>
                   {comboImageUrl && (
                     <div className="h-20 w-24 rounded-xl overflow-hidden border border-white/10 mt-2">
-                      <img src={comboImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <img
+                        src={comboImageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                   )}
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer"
+                >
                   Publish Combo
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3499,10 +4671,24 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showCategoryModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">{editingCategory ? 'Edit Category' : 'New Category'}</span>
-                <button onClick={() => setShowCategoryModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  {editingCategory ? 'Edit Category' : 'New Category'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               <form onSubmit={handleSaveCategory} className="space-y-3">
@@ -3530,11 +4716,15 @@ export default function LuxuryGoldAdminPanel() {
                   </select>
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer"
+                >
                   {editingCategory ? 'Update Category' : 'Save Category'}
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3543,10 +4733,24 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showAddTableModal && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">Add Dining Table</span>
-                <button onClick={() => setShowAddTableModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  Add Dining Table
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddTableModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               <form onSubmit={handleAddTable} className="space-y-3">
@@ -3565,7 +4769,9 @@ export default function LuxuryGoldAdminPanel() {
                 </div>
 
                 <div>
-                  <label className="text-neutral-400 block mb-1">Dedicated Name (Optional)</label>
+                  <label className="text-neutral-400 block mb-1">
+                    Dedicated Name (Optional)
+                  </label>
                   <input
                     type="text"
                     placeholder="e.g. Royal VIP-1"
@@ -3575,11 +4781,15 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer"
+                >
                   Deploy Table
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3588,15 +4798,31 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {showEditTableNameModal && editingTableObj && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">Rename Table #{editingTableObj.table_number}</span>
-                <button onClick={() => setShowEditTableNameModal(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  Rename Table #{editingTableObj.table_number}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowEditTableNameModal(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               <form onSubmit={handleUpdateTableName} className="space-y-3">
                 <div>
-                  <label className="text-neutral-400 block mb-1">Custom Table Name *</label>
+                  <label className="text-neutral-400 block mb-1">
+                    Custom Table Name *
+                  </label>
                   <input
                     type="text"
                     required
@@ -3606,11 +4832,15 @@ export default function LuxuryGoldAdminPanel() {
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer"
+                >
                   Update Name
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -3619,20 +4849,41 @@ export default function LuxuryGoldAdminPanel() {
       <AnimatePresence>
         {isNameModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={fluidSpring}
+              className="w-full max-w-sm bg-[#0d0d0f] border border-white/15 rounded-[28px] p-6 space-y-4 font-mono text-xs shadow-2xl will-change-transform"
+            >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <span className="text-sm font-black text-white uppercase">Edit Restaurant Title</span>
-                <button onClick={() => setIsNameModalOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+                <span className="text-sm font-black text-white uppercase">
+                  Edit Restaurant Title
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsNameModalOpen(false)}
+                  className="text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const { error } = await supabase.from('restaurant_settings').upsert({ id: 1, restaurant_name: tempBrandName.trim().toUpperCase(), tagline: tempTagline.trim() });
-                if (error) return alert('Error: ' + error.message);
-                setShopName(tempBrandName.trim().toUpperCase());
-                setTagline(tempTagline.trim());
-                setIsNameModalOpen(false);
-              }} className="space-y-3">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const { error } = await supabase.from('restaurant_settings').upsert({
+                    id: 1,
+                    restaurant_name: tempBrandName.trim().toUpperCase(),
+                    tagline: tempTagline.trim(),
+                  });
+                  if (error) return alert('Error: ' + error.message);
+                  setShopName(tempBrandName.trim().toUpperCase());
+                  setTagline(tempTagline.trim());
+                  setIsNameModalOpen(false);
+                }}
+                className="space-y-3"
+              >
                 <div>
                   <label className="text-neutral-400 block mb-1">Restaurant Name</label>
                   <input
@@ -3652,18 +4903,27 @@ export default function LuxuryGoldAdminPanel() {
                     className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white outline-none"
                   />
                 </div>
-                <button type="submit" className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-black font-black uppercase mt-2 cursor-pointer"
+                >
                   Save Changes
                 </button>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
 
       {/* Security & Waiter Modals */}
-      <AdminSecurityModal isOpen={isSecurityOpen} onClose={() => setIsSecurityOpen(false)} />
-      <WaiterSecurityModal isOpen={isWaiterModalOpen} onClose={() => setIsWaiterModalOpen(false)} />
+      <AdminSecurityModal
+        isOpen={isSecurityOpen}
+        onClose={() => setIsSecurityOpen(false)}
+      />
+      <WaiterSecurityModal
+        isOpen={isWaiterModalOpen}
+        onClose={() => setIsWaiterModalOpen(false)}
+      />
     </div>
   );
 }
