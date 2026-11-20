@@ -18,6 +18,8 @@ import {
 const MAX_BODY_SIZE = 8192;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+const ACCOUNT_COLUMNS =
+  'id, role, identifier, password_hash, name, is_active, session_version, failed_attempts, locked_until';
 
 function jsonResponse(
   data: Record<string, unknown>,
@@ -67,7 +69,6 @@ export async function POST(request: NextRequest) {
       return buildLogoutResponse(secure);
     }
 
-    // Fail closed if server secrets are missing
     const secret = getSessionSecret();
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -90,7 +91,8 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ error: 'Invalid login details.' }, 400);
     }
 
-    const identifier = rawIdentifier.trim().toLowerCase();
+    const trimmedIdentifier = rawIdentifier.trim();
+    const identifier = trimmedIdentifier.toLowerCase();
     const password = rawPassword.trim();
 
     if (
@@ -107,7 +109,18 @@ export async function POST(request: NextRequest) {
     const ip = getClientIp(request);
     const rateKey = `login:${targetRole}:${ip}:${identifier}`;
 
-    const rateCheck = await checkRateLimit(rateKey, 10, 300);
+    // Run rate-limit check and primary account lookup in parallel
+    const [rateCheck, primaryLookup] = await Promise.all([
+      checkRateLimit(rateKey, 10, 300),
+      supabaseAdmin
+        .from('staff_accounts')
+        .select(ACCOUNT_COLUMNS)
+        .eq('role', targetRole)
+        .eq('identifier', identifier)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
     if (!rateCheck.allowed) {
       return jsonResponse(
         {
@@ -119,24 +132,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Query ONE matching account (by identifier first, fallback to case-insensitive name for waiter)
-    let { data: account, error: queryError } = await supabaseAdmin
-      .from('staff_accounts')
-      .select(
-        'id, role, identifier, password_hash, name, is_active, session_version, failed_attempts, locked_until',
-      )
-      .eq('role', targetRole)
-      .eq('identifier', identifier)
-      .limit(1)
-      .maybeSingle();
+    let account = primaryLookup.data;
+    let queryError = primaryLookup.error;
 
+    // Fallback to case-insensitive name match for waiter login
     if (!queryError && !account && targetRole === 'waiter') {
-      const escapedName = identifier.replace(/[%_\\]/g, '\\$&');
+      const escapedName = trimmedIdentifier.replace(/[%_\\]/g, '\\$&');
       const byName = await supabaseAdmin
         .from('staff_accounts')
-        .select(
-          'id, role, identifier, password_hash, name, is_active, session_version, failed_attempts, locked_until',
-        )
+        .select(ACCOUNT_COLUMNS)
         .eq('role', targetRole)
         .ilike('name', escapedName)
         .limit(1)
@@ -217,17 +221,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Successful login: clear failure counters and rate limit
-    await supabaseAdmin
-      .from('staff_accounts')
-      .update({
-        failed_attempts: 0,
-        locked_until: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', account.id);
+    const hadFailures =
+      Number(account.failed_attempts ?? 0) > 0 || Boolean(account.locked_until);
 
-    await resetRateLimit(rateKey);
+    // Clear lock/failure counters and rate limit in parallel
+    await Promise.all([
+      hadFailures
+        ? supabaseAdmin
+            .from('staff_accounts')
+            .update({
+              failed_attempts: 0,
+              locked_until: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', account.id)
+        : Promise.resolve(),
+      resetRateLimit(rateKey),
+    ]);
 
     const sessionIdentifier = String(account.identifier || identifier)
       .trim()
