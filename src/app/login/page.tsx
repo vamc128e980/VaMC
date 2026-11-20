@@ -35,6 +35,12 @@ function LoginContent() {
   useEffect(() => {
     router.prefetch('/admin');
     router.prefetch('/waiter');
+    // Warm up the serverless auth route while the user types credentials
+    void fetch('/api/auth/login/verify', {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+    }).catch(() => {});
   }, [router]);
 
   useEffect(() => {
@@ -114,8 +120,7 @@ function LoginContent() {
       }
 
       const nextPath = targetRole === 'admin' ? '/admin' : '/waiter';
-      router.push(nextPath);
-      router.refresh();
+      router.replace(nextPath);
     } catch (error) {
       setErrorMsg(
         error instanceof Error
@@ -131,7 +136,7 @@ function LoginContent() {
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.25 }}
+        transition={{ duration: 0.2 }}
         className="w-full max-w-sm rounded-[32px] bg-gradient-to-b from-[#111115] via-[#0b0b0e] to-[#070709] border border-[#D4AF37]/40 p-6 sm:p-8 shadow-[0_12px_45px_rgba(0,0,0,0.85)] space-y-5"
       >
         <div className="text-center space-y-1.5">
