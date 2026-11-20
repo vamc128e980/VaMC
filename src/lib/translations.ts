@@ -86,6 +86,3 @@ export function getLocalizedName(
   if (lang === 'hi' && item.name_hi) return item.name_hi;
   return item.name_en;
 }
-```[cite: 10]
-
-Push this and share the next build screenshot if another error pops up!
