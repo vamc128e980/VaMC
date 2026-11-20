@@ -82,27 +82,25 @@ export function verifyPasswordScrypt(
   }
 
   const parts = trimmedStored.split(':');
-  if (parts.length === 3 && parts[0] === 'scrypt') {
-    const [, salt, expectedHex] = parts;
-    if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
-      return false;
-    }
-
-    const expectedKey = Buffer.from(expectedHex, 'hex');
-    if (expectedKey.length === 0) {
-      return false;
-    }
-
-    const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
-    return (
-      derivedKey.length === expectedKey.length &&
-      timingSafeEqual(derivedKey, expectedKey)
-    );
+  if (parts.length !== 3 || parts[0] !== 'scrypt') {
+    return false;
   }
 
-  const a = Buffer.from(cleanPass, 'utf8');
-  const b = Buffer.from(trimmedStored, 'utf8');
-  return a.length === b.length && timingSafeEqual(a, b);
+  const [, salt, expectedHex] = parts;
+  if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
+    return false;
+  }
+
+  const expectedKey = Buffer.from(expectedHex, 'hex');
+  if (expectedKey.length === 0) {
+    return false;
+  }
+
+  const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
+  return (
+    derivedKey.length === expectedKey.length &&
+    timingSafeEqual(derivedKey, expectedKey)
+  );
 }
 
 export function createSessionToken(
@@ -400,3 +398,9 @@ export async function resetRateLimit(rateKey: string): Promise<void> {
   const supabaseAdmin = getSupabaseAdmin();
   await supabaseAdmin.from('rate_limits').delete().eq('rate_key', rateKey);
 }
+```[cite: 8]
+
+### Note on Hashing `staff_accounts` Passwords
+Because this codebase uses Node's `crypto.scryptSync(password, salt, 64)` (`N=16384, r=8, p=1` in hex), plain SQL doesn't compute Node `scrypt` hashes directly. You can run a tiny one-time Node snippet locally or in your environment to print the two `scrypt:<salt>:<hex>` strings for your admin and waiter passwords and update `staff_accounts` (`password_hash` and `failed_attempts = 0, locked_until = null`) in SQL—without printing the raw passwords in any logs or commits.
+
+Next, would you like to check `src/lib/supabase.ts` / `src/lib/supabase-server.ts` or move on to `/api/orders`, `/api/settle`, or `/api/inventory`?
