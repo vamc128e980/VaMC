@@ -24,6 +24,8 @@ interface SessionPayload {
   v: number;
 }
 
+let cachedCspHeader: string | null = null;
+
 function getSessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET?.trim();
   if (!secret || secret.length < 32) {
@@ -199,7 +201,11 @@ async function verifySessionVersion(
   }
 }
 
-function buildCspHeader(): string {
+function getCspHeader(): string {
+  if (cachedCspHeader) {
+    return cachedCspHeader;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
   let supabaseOrigin = '';
   let supabaseWsOrigin = '';
@@ -215,15 +221,11 @@ function buildCspHeader(): string {
     supabaseWsOrigin = '';
   }
 
-  const connectSources = [
-    "'self'",
-    supabaseOrigin,
-    supabaseWsOrigin,
-  ]
+  const connectSources = ["'self'", supabaseOrigin, supabaseWsOrigin]
     .filter(Boolean)
     .join(' ');
 
-  return [
+  cachedCspHeader = [
     "default-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -237,6 +239,8 @@ function buildCspHeader(): string {
     "worker-src 'self' blob:",
     'upgrade-insecure-requests',
   ].join('; ');
+
+  return cachedCspHeader;
 }
 
 function applySecurityHeaders(
@@ -251,7 +255,7 @@ function applySecurityHeaders(
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=()',
   );
-  response.headers.set('Content-Security-Policy', buildCspHeader());
+  response.headers.set('Content-Security-Policy', getCspHeader());
 
   if (isProtectedRoute) {
     response.headers.set(
@@ -312,41 +316,39 @@ export async function middleware(request: NextRequest) {
   const isWaiterRoute =
     pathname === '/waiter' || pathname.startsWith('/waiter/');
   const isLoginRoute = pathname === '/login';
-  const isProtected = isAdminRoute || isWaiterRoute || isLoginRoute;
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  let session: SessionPayload | null = null;
 
-  if (token && isProtected) {
+  if (isAdminRoute || isWaiterRoute) {
+    let session: SessionPayload | null = null;
+    if (token) {
+      const cryptoSession = await verifySessionCrypto(token);
+      if (cryptoSession && (await verifySessionVersion(cryptoSession))) {
+        session = cryptoSession;
+      }
+    }
+
+    const isAdmin = session?.role === 'admin';
+    const isWaiter = session?.role === 'waiter';
+
+    if (isAdminRoute && !isAdmin) {
+      return redirectToLogin(request, 'admin', secure);
+    }
+
+    if (isWaiterRoute && !isWaiter && !isAdmin) {
+      return redirectToLogin(request, 'waiter', secure);
+    }
+
+    const response = NextResponse.next();
+    return applySecurityHeaders(response, secure, true);
+  }
+
+  if (isLoginRoute && token && !searchParams.get('role')) {
     const cryptoSession = await verifySessionCrypto(token);
-    if (cryptoSession && (await verifySessionVersion(cryptoSession))) {
-      session = cryptoSession;
-    }
-  }
-
-  const isAdmin = session?.role === 'admin';
-  const isWaiter = session?.role === 'waiter';
-
-  if (isAdminRoute && !isAdmin) {
-    return redirectToLogin(request, 'admin', secure);
-  }
-
-  if (isWaiterRoute && !isWaiter && !isAdmin) {
-    return redirectToLogin(request, 'waiter', secure);
-  }
-
-  if (isLoginRoute && !searchParams.get('role')) {
-    if (isAdmin) {
+    if (cryptoSession) {
+      const target = cryptoSession.role === 'admin' ? '/admin' : '/waiter';
       return applySecurityHeaders(
-        NextResponse.redirect(new URL('/admin', request.url)),
-        secure,
-        true,
-      );
-    }
-
-    if (isWaiter) {
-      return applySecurityHeaders(
-        NextResponse.redirect(new URL('/waiter', request.url)),
+        NextResponse.redirect(new URL(target, request.url)),
         secure,
         true,
       );
@@ -354,11 +356,14 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-  if (token && isProtected && !session) {
-    clearAuthCookies(response, secure);
+  if (token && isLoginRoute) {
+    const valid = await verifySessionCrypto(token);
+    if (!valid) {
+      clearAuthCookies(response, secure);
+    }
   }
 
-  return applySecurityHeaders(response, secure, isProtected);
+  return applySecurityHeaders(response, secure, isLoginRoute);
 }
 
 export const config = {
@@ -366,3 +371,6 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2)$).*)',
   ],
 };
+```[cite: 7]
+
+GitHub lo idi commit chesi deploy chesinaka login speed ela undo choodu — inka emaina slowness unte exact ga ekkada lag avuthundo (login button click to `/admin` render varaku) cheppu!
