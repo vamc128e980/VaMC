@@ -19,7 +19,9 @@ function jsonNoStore(data: Record<string, unknown>, status = 200): NextResponse 
 
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, ['admin']);
-  if (!auth.ok) return auth.response;
+  if (auth.ok === false) {
+    return auth.response;
+  }
 
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
@@ -37,7 +39,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const auth = await requireRole(request, ['admin']);
-  if (!auth.ok) return auth.response;
+  if (auth.ok === false) {
+    return auth.response;
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -94,7 +98,9 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const auth = await requireRole(request, ['admin']);
-  if (!auth.ok) return auth.response;
+  if (auth.ok === false) {
+    return auth.response;
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -178,7 +184,6 @@ export async function PATCH(request: NextRequest) {
     return res;
   }
 
-  // Waiter update
   const waiterId = Number(body.id);
   if (!Number.isInteger(waiterId) || waiterId <= 0) {
     return jsonNoStore({ error: 'Valid waiter ID is required.' }, 400);
@@ -256,7 +261,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireRole(request, ['admin']);
-  if (!auth.ok) return auth.response;
+  if (auth.ok === false) {
+    return auth.response;
+  }
 
   const { searchParams } = new URL(request.url);
   const idParam = searchParams.get('id');
