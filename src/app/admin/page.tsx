@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import { subscribeCoalescedChannel } from '@/lib/realtime';
 import AdminSecurityModal from '@/components/AdminSecurityModal';
 import WaiterSecurityModal from '@/components/WaiterSecurityModal';
 import { useRouter } from 'next/navigation';
@@ -437,80 +438,31 @@ export default function LuxuryGoldAdminPanel() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const channel = supabase
-      .channel('admin-realtime-sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'table_sessions' },
-        () => {
-          void loadLiveOrdersAndSessions(selectedDateRef.current);
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'order_batches' },
-        () => {
-          void loadLiveOrdersAndSessions(selectedDateRef.current);
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'order_items' },
-        () => {
-          void loadLiveOrdersAndSessions(selectedDateRef.current);
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'restaurant_tables' },
-        () => {
-          void loadLiveOrdersAndSessions(selectedDateRef.current);
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'waiter_calls' },
-        () => {
-          void loadLiveOrdersAndSessions(selectedDateRef.current);
-        },
-      )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => {
-        void loadMenuCatalog();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_addons' }, () => {
-        void loadMenuCatalog();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
-        void loadMenuCatalog();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'combos' }, () => {
-        void loadMenuCatalog();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promo_banners' }, () => {
-        void loadMenuCatalog();
-      })
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'vamc_menu_items' },
-        () => {
-          void loadCounterAndInventoryData();
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'ice_cream_menu_items' },
-        () => {
-          void loadCounterAndInventoryData();
-        },
-      )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'df_menu_items' }, () => {
-        void loadCounterAndInventoryData();
-      })
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
+    const refreshLiveOrders = () => {
+      void loadLiveOrdersAndSessions(selectedDateRef.current);
     };
+    const refreshMenuCatalog = () => {
+      void loadMenuCatalog();
+    };
+    const refreshCounterInventory = () => {
+      void loadCounterAndInventoryData();
+    };
+
+    return subscribeCoalescedChannel('admin-realtime-sync', [
+      { table: 'table_sessions', onEvent: refreshLiveOrders },
+      { table: 'order_batches', onEvent: refreshLiveOrders },
+      { table: 'order_items', onEvent: refreshLiveOrders },
+      { table: 'restaurant_tables', onEvent: refreshLiveOrders },
+      { table: 'waiter_calls', onEvent: refreshLiveOrders },
+      { table: 'menu_items', onEvent: refreshMenuCatalog },
+      { table: 'menu_addons', onEvent: refreshMenuCatalog },
+      { table: 'categories', onEvent: refreshMenuCatalog },
+      { table: 'combos', onEvent: refreshMenuCatalog },
+      { table: 'promo_banners', onEvent: refreshMenuCatalog },
+      { table: 'vamc_menu_items', onEvent: refreshCounterInventory },
+      { table: 'ice_cream_menu_items', onEvent: refreshCounterInventory },
+      { table: 'df_menu_items', onEvent: refreshCounterInventory },
+    ]);
   }, [
     isAuthenticated,
     loadLiveOrdersAndSessions,
@@ -1354,7 +1306,7 @@ export default function LuxuryGoldAdminPanel() {
             <span class="item-qty">QTY</span>
             <span class="item-total">AMT</span>
           </div>
-          <div class="divider"></div>
+          <div className="divider"></div>
           ${items
             .map((it) => {
               const addOnsCost = Array.isArray(it.selected_addons)
