@@ -71,6 +71,9 @@ export default function RestaurantLandingPage() {
     window.location.href = '/login?role=admin';
   };
 
+  const primaryTableName = tables[0]?.table_name || 'Parasurama';
+  const primaryTableNumber = tables[0]?.table_number || 1;
+
   return (
     <div className="min-h-screen w-full bg-[#050505] text-[#FCF6BA] font-sans antialiased relative overflow-hidden flex flex-col justify-between p-4 sm:p-8 selection:bg-[#D4AF37] selection:text-black">
       
@@ -97,26 +100,26 @@ export default function RestaurantLandingPage() {
         </div>
 
         {/* Dedicated Portal Action Blocks in Header */}
-        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-          {/* Waiter Portal Button */}
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          {/* Waiter Portal Button - Full Silver Neon Light */}
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.95 }}
             transition={fluidSpring}
             onClick={handleWaiterClick}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/10 text-[#FCF6BA] text-xs font-mono font-bold transition shadow-md cursor-pointer backdrop-blur-md"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-[#F8FAFC] bg-gradient-to-r from-[#FFFFFF] via-[#E2E8F0] to-[#CBD5E1] text-[#09090B] text-xs font-mono font-black uppercase transition shadow-[0_0_22px_rgba(226,232,240,0.55),inset_0_0_10px_rgba(255,255,255,0.85)] hover:shadow-[0_0_32px_rgba(248,250,252,0.85)] cursor-pointer"
           >
-            <ChefHat className="w-4 h-4 text-[#D4AF37]" />
+            <ChefHat className="w-4 h-4 text-[#09090B] stroke-[2.5]" />
             <span>Waiter Floor</span>
           </motion.button>
 
-          {/* Admin Command Portal Button */}
+          {/* Admin Command Portal Button - Full Gold Neon Light */}
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.95 }}
             transition={fluidSpring}
             onClick={handleAdminClick}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#FCF6BA] via-[#D4AF37] to-[#C59B27] text-black text-xs font-mono font-black uppercase transition shadow-[0_2px_15px_rgba(212,175,55,0.3)] cursor-pointer"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-[#FEF08A] bg-gradient-to-r from-[#FEF9C3] via-[#FACC15] to-[#EAB308] text-black text-xs font-mono font-black uppercase transition shadow-[0_0_25px_rgba(250,204,21,0.6),inset_0_0_10px_rgba(254,249,195,0.85)] hover:shadow-[0_0_36px_rgba(250,204,21,0.9)] cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
             <span>Admin Portal</span>
@@ -159,11 +162,11 @@ export default function RestaurantLandingPage() {
           <motion.button
             whileTap={{ scale: 0.96 }}
             transition={fluidSpring}
-            onClick={() => router.push('/table/1')}
+            onClick={() => router.push(`/table/${encodeURIComponent(primaryTableName)}`)}
             className="w-full sm:w-auto px-6 py-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#D4AF37]/40 text-neutral-300 hover:text-white font-bold text-xs uppercase flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
           >
             <QrCode className="w-4 h-4 text-[#D4AF37]" />
-            <span>Quick Demo (Table #1)</span>
+            <span>Quick Demo ({primaryTableName} #{primaryTableNumber})</span>
           </motion.button>
         </div>
       </main>
@@ -204,19 +207,22 @@ export default function RestaurantLandingPage() {
                 <div className="py-12 text-center text-xs text-neutral-500">Loading floor tables...</div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  {tables.map((t) => (
-                    <motion.button
-                      key={t.table_number}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => router.push(`/table/${t.table_number}`)}
-                      className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 hover:border-[#D4AF37] hover:bg-[#D4AF37]/10 flex flex-col items-center justify-center gap-1 transition text-left cursor-pointer"
-                    >
-                      <span className="text-sm font-black text-white">#{t.table_number}</span>
-                      <span className="text-[10px] text-[#D4AF37] truncate max-w-full">
-                        {t.table_name || `Table-${t.table_number}`}
-                      </span>
-                    </motion.button>
-                  ))}
+                  {tables.map((t) => {
+                    const routeSlug = t.table_name || `Table-${t.table_number}`;
+                    return (
+                      <motion.button
+                        key={t.table_number}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => router.push(`/table/${encodeURIComponent(routeSlug)}`)}
+                        className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 hover:border-[#D4AF37] hover:bg-[#D4AF37]/10 flex flex-col items-center justify-center gap-1 transition text-left cursor-pointer"
+                      >
+                        <span className="text-sm font-black text-white">#{t.table_number}</span>
+                        <span className="text-[10px] text-[#D4AF37] truncate max-w-full">
+                          {routeSlug}
+                        </span>
+                      </motion.button>
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
