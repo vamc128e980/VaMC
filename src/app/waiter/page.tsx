@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import { subscribeCoalescedChannel } from '@/lib/realtime';
 import {
   Bell,
   CheckCircle2,
@@ -310,79 +311,41 @@ export default function WaiterPanel() {
     if (!isAuthenticated) return;
     void loadWaiterData();
 
-    const channel = supabase
-      .channel('waiter-realtime-sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'table_sessions' },
-        () => {
-          void loadFloorState();
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'restaurant_tables' },
-        () => {
-          void loadFloorState();
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'order_batches' },
-        () => {
+    const refreshFloor = () => {
+      void loadFloorState();
+    };
+    const refreshMenu = () => {
+      void loadMenuAndAddons();
+    };
+
+    return subscribeCoalescedChannel('waiter-realtime-sync', [
+      { table: 'table_sessions', onEvent: refreshFloor },
+      { table: 'restaurant_tables', onEvent: refreshFloor },
+      {
+        table: 'order_batches',
+        event: 'INSERT',
+        onEvent: () => {
           triggerHaptic(25);
           playChimeTone();
           void loadFloorState();
         },
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'order_batches' },
-        () => {
-          void loadFloorState();
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'order_items' },
-        () => {
-          void loadFloorState();
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'waiter_calls' },
-        () => {
+      },
+      { table: 'order_batches', event: 'UPDATE', onEvent: refreshFloor },
+      { table: 'order_items', onEvent: refreshFloor },
+      {
+        table: 'waiter_calls',
+        event: 'INSERT',
+        onEvent: () => {
           triggerHaptic(50);
           playChimeTone();
           void loadFloorState();
         },
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'waiter_calls' },
-        () => {
-          void loadFloorState();
-        },
-      )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => {
-        void loadMenuAndAddons();
-      })
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'menu_addons' },
-        () => {
-          void loadMenuAndAddons();
-        },
-      )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
-        void loadMenuAndAddons();
-      })
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+      },
+      { table: 'waiter_calls', event: 'UPDATE', onEvent: refreshFloor },
+      { table: 'menu_items', onEvent: refreshMenu },
+      { table: 'menu_addons', onEvent: refreshMenu },
+      { table: 'categories', onEvent: refreshMenu },
+    ]);
   }, [isAuthenticated, loadWaiterData, loadFloorState, loadMenuAndAddons, playChimeTone]);
 
   // SECURE LOGOUT FUNCTION SYNCED WITH /api/auth/login/verify
