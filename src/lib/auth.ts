@@ -82,25 +82,27 @@ export function verifyPasswordScrypt(
   }
 
   const parts = trimmedStored.split(':');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') {
-    return false;
+  if (parts.length === 3 && parts[0] === 'scrypt') {
+    const [, salt, expectedHex] = parts;
+    if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
+      return false;
+    }
+
+    const expectedKey = Buffer.from(expectedHex, 'hex');
+    if (expectedKey.length === 0) {
+      return false;
+    }
+
+    const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
+    return (
+      derivedKey.length === expectedKey.length &&
+      timingSafeEqual(derivedKey, expectedKey)
+    );
   }
 
-  const [, salt, expectedHex] = parts;
-  if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
-    return false;
-  }
-
-  const expectedKey = Buffer.from(expectedHex, 'hex');
-  if (expectedKey.length === 0) {
-    return false;
-  }
-
-  const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
-  return (
-    derivedKey.length === expectedKey.length &&
-    timingSafeEqual(derivedKey, expectedKey)
-  );
+  const a = Buffer.from(cleanPass, 'utf8');
+  const b = Buffer.from(trimmedStored, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export function createSessionToken(
