@@ -3,17 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 const SESSION_COOKIE = 'session_token';
 const ROLE_COOKIE = 'staff_role';
 
-const FALLBACK_SESSION_SECRET =
-  'vamc-vujwala-simha-session-secret-key-2026-secure-hmac-sha256';
-
-const SESSION_SECRET =
-  process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32
-    ? process.env.SESSION_SECRET
-    : FALLBACK_SESSION_SECRET;
-
 const SESSION_ISSUER = 'vamc';
 const SESSION_AUDIENCE = 'vamc-web';
-const SESSION_VERSION = 1;
+const SESSION_SCHEMA_VERSION = 1;
 
 const MAX_TOKEN_LENGTH = 4096;
 const MAX_SESSION_AGE = 24 * 60 * 60;
@@ -24,11 +16,20 @@ type UserRole = 'admin' | 'waiter';
 interface SessionPayload {
   sub: string;
   role: UserRole;
+  sv: number;
   iat: number;
   exp: number;
   iss: string;
   aud: string;
   v: number;
+}
+
+function getSessionSecret(): string | null {
+  const secret = process.env.SESSION_SECRET?.trim();
+  if (!secret || secret.length < 32) {
+    return null;
+  }
+  return secret;
 }
 
 function isHttpsRequest(request: NextRequest): boolean {
@@ -39,38 +40,37 @@ function isHttpsRequest(request: NextRequest): boolean {
   return request.nextUrl.protocol === 'https:';
 }
 
-function decodeBase64Url(value: string): Uint8Array {
+function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new Error('Invalid base64url');
   }
 
-  const base64 = value
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const padded = base64.padEnd(
-    Math.ceil(base64.length / 4) * 4,
-    '=',
-  );
-
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
   const binary = atob(padded);
 
-  return Uint8Array.from(
-    binary,
-    (character) => character.charCodeAt(0),
-  );
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
-async function verifySession(
+function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
+  const encoded = new TextEncoder().encode(value);
+  const buffer = new ArrayBuffer(encoded.byteLength);
+  const copy = new Uint8Array(buffer);
+  copy.set(encoded);
+  return copy;
+}
+
+async function verifySessionCrypto(
   token?: string,
 ): Promise<SessionPayload | null> {
   try {
-    if (
-      !token ||
-      token.length > MAX_TOKEN_LENGTH ||
-      !SESSION_SECRET ||
-      SESSION_SECRET.length < 32
-    ) {
+    const secret = getSessionSecret();
+    if (!secret || !token || token.length > MAX_TOKEN_LENGTH) {
       return null;
     }
 
@@ -97,11 +97,13 @@ async function verifySession(
       payload.sub.length === 0 ||
       payload.sub.length > 256 ||
       !['admin', 'waiter'].includes(payload.role) ||
+      !Number.isSafeInteger(payload.sv) ||
+      payload.sv < 1 ||
       !Number.isSafeInteger(payload.iat) ||
       !Number.isSafeInteger(payload.exp) ||
       payload.iss !== SESSION_ISSUER ||
       payload.aud !== SESSION_AUDIENCE ||
-      payload.v !== SESSION_VERSION
+      payload.v !== SESSION_SCHEMA_VERSION
     ) {
       return null;
     }
@@ -119,11 +121,8 @@ async function verifySession(
 
     const key = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(SESSION_SECRET),
-      {
-        name: 'HMAC',
-        hash: 'SHA-256',
-      },
+      encodeUtf8(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['verify'],
     );
@@ -132,7 +131,7 @@ async function verifySession(
       'HMAC',
       key,
       signatureBytes,
-      new TextEncoder().encode(encodedPayload),
+      encodeUtf8(encodedPayload),
     );
 
     return valid ? payload : null;
@@ -141,24 +140,125 @@ async function verifySession(
   }
 }
 
+async function verifySessionVersion(
+  payload: SessionPayload,
+): Promise<boolean> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!supabaseUrl || !serviceKey) {
+    return false;
+  }
+
+  try {
+    const queryUrl = new URL('/rest/v1/staff_accounts', supabaseUrl);
+    queryUrl.searchParams.set(
+      'select',
+      'session_version,is_active,locked_until',
+    );
+    queryUrl.searchParams.set('identifier', `eq.${payload.sub}`);
+    queryUrl.searchParams.set('role', `eq.${payload.role}`);
+    queryUrl.searchParams.set('limit', '1');
+
+    const res = await fetch(queryUrl.toString(), {
+      method: 'GET',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      return false;
+    }
+
+    const rows = (await res.json()) as Array<{
+      session_version?: number;
+      is_active?: boolean;
+      locked_until?: string | null;
+    }>;
+
+    const account = rows?.[0];
+    if (!account || account.is_active === false) {
+      return false;
+    }
+
+    if (
+      account.locked_until &&
+      new Date(account.locked_until).getTime() > Date.now()
+    ) {
+      return false;
+    }
+
+    const dbVersion = Number(account.session_version ?? 1);
+    return dbVersion === payload.sv;
+  } catch {
+    return false;
+  }
+}
+
+function buildCspHeader(): string {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
+  let supabaseOrigin = '';
+  let supabaseWsOrigin = '';
+
+  try {
+    if (supabaseUrl) {
+      const parsed = new URL(supabaseUrl);
+      supabaseOrigin = parsed.origin;
+      supabaseWsOrigin = parsed.origin.replace(/^http/, 'ws');
+    }
+  } catch {
+    supabaseOrigin = '';
+    supabaseWsOrigin = '';
+  }
+
+  const connectSources = [
+    "'self'",
+    supabaseOrigin,
+    supabaseWsOrigin,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+    "object-src 'none'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: https: ${supabaseOrigin}`.trim(),
+    "font-src 'self' data:",
+    `connect-src ${connectSources}`,
+    "worker-src 'self' blob:",
+    'upgrade-insecure-requests',
+  ].join('; ');
+}
+
 function applySecurityHeaders(
   response: NextResponse,
   secure: boolean,
+  isProtectedRoute: boolean,
 ): NextResponse {
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-  response.headers.set(
-    'Referrer-Policy',
-    'strict-origin-when-cross-origin',
-  );
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set(
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=()',
   );
-  response.headers.set(
-    'Cache-Control',
-    'private, no-store, no-cache, must-revalidate',
-  );
+  response.headers.set('Content-Security-Policy', buildCspHeader());
+
+  if (isProtectedRoute) {
+    response.headers.set(
+      'Cache-Control',
+      'private, no-store, no-cache, must-revalidate',
+    );
+  }
 
   if (secure) {
     response.headers.set(
@@ -170,10 +270,7 @@ function applySecurityHeaders(
   return response;
 }
 
-function clearAuthCookies(
-  response: NextResponse,
-  secure: boolean,
-) {
+function clearAuthCookies(response: NextResponse, secure: boolean): void {
   response.cookies.set(SESSION_COOKIE, '', {
     httpOnly: true,
     secure,
@@ -203,7 +300,7 @@ function redirectToLogin(
 
   const response = NextResponse.redirect(loginUrl);
   clearAuthCookies(response, secure);
-  return applySecurityHeaders(response, secure);
+  return applySecurityHeaders(response, secure, true);
 }
 
 export async function middleware(request: NextRequest) {
@@ -215,9 +312,17 @@ export async function middleware(request: NextRequest) {
   const isWaiterRoute =
     pathname === '/waiter' || pathname.startsWith('/waiter/');
   const isLoginRoute = pathname === '/login';
+  const isProtected = isAdminRoute || isWaiterRoute || isLoginRoute;
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = await verifySession(token);
+  let session: SessionPayload | null = null;
+
+  if (token && isProtected) {
+    const cryptoSession = await verifySessionCrypto(token);
+    if (cryptoSession && (await verifySessionVersion(cryptoSession))) {
+      session = cryptoSession;
+    }
+  }
 
   const isAdmin = session?.role === 'admin';
   const isWaiter = session?.role === 'waiter';
@@ -235,6 +340,7 @@ export async function middleware(request: NextRequest) {
       return applySecurityHeaders(
         NextResponse.redirect(new URL('/admin', request.url)),
         secure,
+        true,
       );
     }
 
@@ -242,19 +348,21 @@ export async function middleware(request: NextRequest) {
       return applySecurityHeaders(
         NextResponse.redirect(new URL('/waiter', request.url)),
         secure,
+        true,
       );
     }
   }
 
-  return applySecurityHeaders(NextResponse.next(), secure);
+  const response = NextResponse.next();
+  if (token && isProtected && !session) {
+    clearAuthCookies(response, secure);
+  }
+
+  return applySecurityHeaders(response, secure, isProtected);
 }
 
 export const config = {
   matcher: [
-    '/admin',
-    '/admin/:path*',
-    '/waiter',
-    '/waiter/:path*',
-    '/login',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2)$).*)',
   ],
 };
