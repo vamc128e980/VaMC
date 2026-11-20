@@ -4,7 +4,7 @@ import { requireRole } from '@/lib/auth';
 import { counterSaleSchema } from '@/lib/validation';
 
 async function createCounterSale(input: {
-  payment_mode: 'cash' | 'upi' | 'card';
+  payment_mode?: 'cash' | 'upi' | 'card';
   customer_name?: string | null;
   customer_phone?: string | null;
   items: Array<{
@@ -17,6 +17,7 @@ async function createCounterSale(input: {
   }>;
 }) {
   const supabaseAdmin = getSupabaseAdmin();
+  const paymentMode = input.payment_mode ?? 'cash';
 
   const totalAmount = Number(
     input.items
@@ -30,7 +31,7 @@ async function createCounterSale(input: {
       table_number: 0,
       status: 'completed',
       payment_status: 'paid',
-      payment_mode: input.payment_mode,
+      payment_mode: paymentMode,
       customer_name: input.customer_name?.trim() || null,
       customer_phone: input.customer_phone?.trim() || null,
       total_amount: totalAmount,
