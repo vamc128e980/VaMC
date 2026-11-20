@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-server';
 import { requireRole } from '@/lib/auth';
 import { counterSaleSchema } from '@/lib/validation';
 
-export async function createCounterSale(input: {
+async function createCounterSale(input: {
   payment_mode: 'cash' | 'upi' | 'card';
   customer_name?: string | null;
   customer_phone?: string | null;
