@@ -970,8 +970,8 @@ export default function LuxuryGoldAdminPanel() {
     }
   };
 
-  const comboSumActualPrice = useMemo(() => {
-    return selectedComboItemIds.reduce((sum, id) => {
+  const comboSumActualPrice = useMemo<number>(() => {
+    return selectedComboItemIds.reduce<number>((sum, id) => {
       const dish = menuItems.find((m) => m.id === id);
       return sum + (dish ? Number(dish.price ?? 0) : 0);
     }, 0);
