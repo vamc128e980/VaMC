@@ -15,7 +15,7 @@ export const SESSION_ISSUER = 'vamc';
 export const SESSION_AUDIENCE = 'vamc-web';
 export const SESSION_SCHEMA_VERSION = 1;
 
-export const SESSION_DURATION = 24 * 60 * 60; // 24 hours
+export const SESSION_DURATION = 24 * 60 * 60;
 export const CLOCK_TOLERANCE = 60;
 export const MAX_TOKEN_LENGTH = 4096;
 
@@ -82,25 +82,27 @@ export function verifyPasswordScrypt(
   }
 
   const parts = trimmedStored.split(':');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') {
-    return false;
+  if (parts.length === 3 && parts[0] === 'scrypt') {
+    const [, salt, expectedHex] = parts;
+    if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
+      return false;
+    }
+
+    const expectedKey = Buffer.from(expectedHex, 'hex');
+    if (expectedKey.length === 0) {
+      return false;
+    }
+
+    const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
+    return (
+      derivedKey.length === expectedKey.length &&
+      timingSafeEqual(derivedKey, expectedKey)
+    );
   }
 
-  const [, salt, expectedHex] = parts;
-  if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
-    return false;
-  }
-
-  const expectedKey = Buffer.from(expectedHex, 'hex');
-  if (expectedKey.length === 0) {
-    return false;
-  }
-
-  const derivedKey = scryptSync(cleanPass, salt, expectedKey.length);
-  return (
-    derivedKey.length === expectedKey.length &&
-    timingSafeEqual(derivedKey, expectedKey)
-  );
+  const a = Buffer.from(cleanPass, 'utf8');
+  const b = Buffer.from(trimmedStored, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export function createSessionToken(
@@ -410,3 +412,6 @@ export async function resetRateLimit(rateKey: string): Promise<void> {
   const supabaseAdmin = getSupabaseAdmin();
   await supabaseAdmin.from('rate_limits').delete().eq('rate_key', rateKey);
 }
+```[cite: 4, 8]
+
+Commit chesi login work ayyinda leda cheppu bro.
