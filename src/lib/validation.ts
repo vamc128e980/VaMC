@@ -4,15 +4,22 @@ export function escapeIlikePattern(raw: string): string {
   return raw.replace(/[%_\\]/g, '\\$&');
 }
 
+const menuItemIdSchema = z
+  .union([
+    z.string().trim().min(1).max(128),
+    z.number().int().positive(),
+  ])
+  .transform((val) => String(val));
+
 export const orderItemInputSchema = z.object({
-  menu_item_id: z.string().uuid(),
+  menu_item_id: menuItemIdSchema,
   quantity: z.number().int().min(1).max(50),
   cooking_notes: z.string().max(240).optional().nullable(),
 });
 
 export const placeOrderSchema = z.object({
   table_number: z.number().int().min(1).max(500),
-  session_id: z.string().uuid().optional().nullable(),
+  session_id: z.string().trim().min(1).max(128).optional().nullable(),
   source: z.enum(['qr', 'waiter']).optional().default('qr'),
   customer_name: z.string().trim().max(120).optional().nullable(),
   customer_phone: z.string().trim().max(32).optional().nullable(),
@@ -20,7 +27,7 @@ export const placeOrderSchema = z.object({
 });
 
 export const settleSessionSchema = z.object({
-  session_id: z.string().uuid(),
+  session_id: z.string().trim().min(1).max(128),
   payment_mode: z.enum(['cash', 'upi', 'card']),
   customer_phone: z.string().trim().max(32).optional().nullable(),
   customer_name: z.string().trim().max(120).optional().nullable(),
@@ -28,7 +35,7 @@ export const settleSessionSchema = z.object({
 
 export const claimRewardSchema = z.object({
   phone: z.string().trim().min(6).max(32),
-  session_id: z.string().uuid().optional().nullable(),
+  session_id: z.string().trim().min(1).max(128).optional().nullable(),
 });
 
 export const inventoryAdjustmentSchema = z.object({
@@ -42,7 +49,7 @@ export const inventoryAdjustmentSchema = z.object({
 
 export const floorResetSchema = z.object({
   table_number: z.number().int().min(1).max(500).optional(),
-  session_id: z.string().uuid().optional(),
+  session_id: z.string().trim().min(1).max(128).optional(),
 });
 
 export const counterSaleSchema = z.object({
