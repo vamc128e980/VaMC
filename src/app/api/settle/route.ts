@@ -28,11 +28,16 @@ export async function POST(request: NextRequest) {
     .eq('id', session_id)
     .maybeSingle();
 
-  if (sessionErr || !session) {
+  if (sessionErr) {
+    return NextResponse.json(
+      { error: sessionErr.message || 'Failed to load session.' },
+      { status: 500 },
+    );
+  }
+  if (!session) {
     return NextResponse.json({ error: 'Session not found.' }, { status: 404 });
   }
 
-  // Idempotent return if already settled
   if (session.status === 'completed' && session.payment_status === 'paid') {
     return NextResponse.json({
       success: true,
@@ -41,14 +46,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Compute authoritative total from non-complimentary order_items
   const { data: items, error: itemsErr } = await supabaseAdmin
     .from('order_items')
     .select('quantity, unit_price, is_complimentary')
     .eq('session_id', session_id);
 
   if (itemsErr) {
-    return NextResponse.json({ error: 'Failed to calculate session bill.' }, { status: 500 });
+    return NextResponse.json(
+      { error: itemsErr.message || 'Failed to calculate session bill.' },
+      { status: 500 },
+    );
   }
 
   const computedTotal = (items ?? []).reduce((sum, row) => {
@@ -78,10 +85,12 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (updateErr) {
-    return NextResponse.json({ error: 'Failed to settle session.' }, { status: 500 });
+    return NextResponse.json(
+      { error: updateErr.message || 'Failed to settle session.' },
+      { status: 500 },
+    );
   }
 
-  // Update customer_loyalty using real columns (successful_visits, last_visit_date, rewards_claimed)
   if (phone) {
     const todayIso = new Date().toISOString().slice(0, 10);
     const { data: existingLoyalty } = await supabaseAdmin
